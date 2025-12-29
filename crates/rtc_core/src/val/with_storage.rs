@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use inkwell::values::{BasicValue, BasicValueEnum, InstructionValue};
+use inkwell::values::{BasicValue, BasicValueEnum};
 
 use crate::{
     codegen::FnCodegen,
@@ -16,7 +16,7 @@ where
 {
     pub fn new_with_storage(cx: &'lt FnCodegen<'static>, val: BasicValueEnum<'static>) -> Self {
         let ptr = cx.build_alloca(val);
-        let _: InstructionValue<'_> = unsafe {
+        let ret = unsafe {
             cx.with_builder(|b| b.build_store(ptr, val))
                 .expect("Unable to build store")
         };
@@ -31,7 +31,7 @@ where
         let ptr = self.val.into_pointer_value();
         let pointee_ty = self.to_underlying_ty();
         // SAFETY: This alloca only ever stored our own value
-        let val = unsafe { self.cx().load(pointee_ty, ptr) };
+        let val = unsafe { self.cx().load(pointee_ty, ptr, Some(T::ALIGN), None) };
         if let Some(ins) = val.as_instruction_value() {
             ins.set_alignment(T::ALIGN)
                 .expect("Unable to set alignment");

@@ -10,7 +10,7 @@ use inkwell::{
     builder::{Builder, BuilderError},
     context::ContextRef,
     types::BasicType,
-    values::{BasicValue, BasicValueEnum, FunctionValue, PointerValue},
+    values::{BasicValue, BasicValueEnum, FunctionValue, InstructionValue, PointerValue},
 };
 
 use crate::codegen::context::create_context;
@@ -95,47 +95,113 @@ impl<'ctx> FnCodegen<'ctx> {
         f(builder)
     }
     /// # Safety:
-    /// It must be valid to load a type `pointee_ty` through `ptr`
-    /// as-if a *const T
-    pub(crate) unsafe fn try_load(
+    /// Giving access to the builder/instructions lets you emit very unsound code.
+    /// Calling this function safely is only possible if F/OnIns doesn't cause
+    /// the builder to emit unsafe code.
+    pub(crate) unsafe fn create_value<
+        F: FnOnce(Builder<'ctx>) -> U,
+        OnIns: FnOnce(InstructionValue<'ctx>),
+        U: BasicValue<'ctx>,
+    >(
         &self,
-        pointee_ty: impl BasicType<'ctx>,
-        ptr: PointerValue<'ctx>,
-    ) -> Result<BasicValueEnum<'ctx>, BuilderError> {
-        // SAFETY: It's valid to emit a load
-        unsafe { self.with_builder(|b| b.build_load(pointee_ty, ptr, "try_ld")) }
+        f: F,
+        on_ins: OnIns,
+    ) -> U {
+        // SAFETY: User promised!
+        let val = unsafe { self.with_builder(f) };
+        if let Some(ins) = val.as_instruction_value() {
+            on_ins(ins);
+        }
+        val
     }
     /// # Safety:
     /// It must be valid to load a type `pointee_ty` through `ptr`
     /// as-if a *const T
-    pub(crate) unsafe fn load(
+    pub(crate) unsafe fn try_load<'a>(
         &self,
         pointee_ty: impl BasicType<'ctx>,
         ptr: PointerValue<'ctx>,
-    ) -> BasicValueEnum<'ctx> {
+        align: Option<u32>,
+        for_ins: Option<&dyn Fn(InstructionValue<'a>)>,
+    ) -> Result<BasicValueEnum<'ctx>, BuilderError>
+    where
+        'ctx: 'a,
+    {
+        // SAFETY: It's valid to emit a load
+        unsafe { self.with_builder(move |b| b.build_load(pointee_ty, ptr, "try_ld")) }.map(|v| {
+            if let Some(ins) = v.as_instruction_value() {
+                if let Some(align) = align {
+                    ins.set_alignment(align)
+                        .expect("Cannot set load alignment!");
+                }
+                if let Some(for_ins) = for_ins {
+                    for_ins(ins)
+                }
+            }
+            v
+        })
+    }
+    /// # Safety:
+    /// It must be valid to load a type `pointee_ty` through `ptr`
+    /// as-if a *const T
+    pub(crate) unsafe fn load<'a>(
+        &self,
+        pointee_ty: impl BasicType<'ctx>,
+        ptr: PointerValue<'ctx>,
+        align: Option<u32>,
+        for_ins: Option<&dyn Fn(InstructionValue<'a>)>,
+    ) -> BasicValueEnum<'ctx>
+    where
+        'ctx: 'a,
+    {
         unsafe {
             // SAFETY: Identical precondition.
-            self.try_load(pointee_ty, ptr)
+            self.try_load(pointee_ty, ptr, align, for_ins)
                 .expect("Unable to generate load")
         }
     }
     /// # Safety:
     /// It must be valid to write a value `value` through `ptr`
     /// as-if a *mut T
-    pub(crate) unsafe fn try_store(
+    pub(crate) unsafe fn try_store<'a>(
         &self,
         ptr: PointerValue<'ctx>,
         value: impl BasicValue<'ctx>,
-    ) -> Result<(), BuilderError> {
+        align: Option<u32>,
+        for_ins: Option<&dyn Fn(InstructionValue<'a>)>,
+    ) -> Result<(), BuilderError>
+    where
+        'ctx: 'a,
+    {
         // SAFETY: It's valid to emit a store
-        unsafe { self.with_builder(|b| b.build_store(ptr, value)).map(|_| ()) }
+        let ret = unsafe { self.with_builder(|b| b.build_store(ptr, value)) };
+
+        ret.map(|i| {
+            if let Some(align) = align {
+                i.set_alignment(align);
+            }
+            if let Some(for_ins) = for_ins {
+                for_ins(i);
+            }
+        })
     }
     /// # Safety:
     /// It must be valid to write a value `value` through `ptr`
     /// as-if a *mut T
-    pub(crate) unsafe fn store(&self, ptr: PointerValue<'ctx>, value: impl BasicValue<'ctx>) {
+    pub(crate) unsafe fn store<'a>(
+        &self,
+        ptr: PointerValue<'ctx>,
+        value: impl BasicValue<'ctx>,
+        align: Option<u32>,
+        for_ins: Option<&dyn Fn(InstructionValue<'a>)>,
+    ) where
+        'ctx: 'a,
+    {
         // SAFETY: identical precondition.
-        unsafe { self.try_store(ptr, value).expect("Cannot generate store") }
+        unsafe {
+            self.try_store(ptr, value, align, for_ins)
+                .expect("Cannot generate store")
+        }
     }
     pub(crate) fn build_alloca(&self, value: BasicValueEnum<'ctx>) -> PointerValue<'ctx> {
         // SAFETY: Unconditionally safe to create allocas

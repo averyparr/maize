@@ -5,13 +5,14 @@ use std::{
 
 use inkwell::{
     AddressSpace,
+    attributes::{Attribute, AttributeLoc},
     context::ContextRef,
     types::PointerType,
     values::{BasicValue, PointerValue},
 };
 
 use crate::{
-    ty::{FromCtx, Ty},
+    ty::{FnCodegen, FromCtx, Ty},
     val::{Holds, Val},
 };
 
@@ -90,19 +91,19 @@ addrspace_ptr!(Shared, Shared);
 
 macro_rules! derive_ptr_type {
     ($name: ident$(, $lt: tt)?) => {
-        impl<$($lt,)?T> PtrTy for $name<$($lt,)?T> {
+        impl<$($lt,)?T> PtrTy for $name<$($lt,)?T> where T: Ty {
             fn new_in(ctx: ContextRef<'static>, addrspace: AddressSpace) -> Self {
                 Self(ctx, addrspace, PhantomData)
             }
         }
 
-        impl<$($lt,)?T> FromCtx for $name<$($lt,)?T> {
+        impl<$($lt,)?T> FromCtx for $name<$($lt,)?T> where T: Ty {
             fn new(ctx: ContextRef<'static>) -> Self {
-                Self(ctx, AddressSpace::default(), PhantomData)
+                Self::new_in(ctx, AddressSpace::default())
             }
         }
 
-        impl<$($lt,)?T> Ty for $name<$($lt,)?T> {
+        impl<$($lt,)?T> Ty for $name<$($lt,)?T> where T: Ty {
             const ALIGN: u32 = ::core::mem::align_of::<&()>() as _;
             const SIZE: usize = ::core::mem::size_of::<&()>();
 
@@ -117,6 +118,28 @@ macro_rules! derive_ptr_type {
             fn get_value(basic_val: inkwell::values::BasicValueEnum<'static>) -> Self::Value {
                 basic_val.into_pointer_value()
             }
+
+            fn get_args_at_idx<'lt>(cx: &'lt FnCodegen<'static>, at_idx: u32) -> Val<'lt, Self> {
+                {
+                    let align_kind_id = Attribute::get_named_enum_kind_id("align");
+                    let align_attr = cx
+                        .ctx()
+                        .create_enum_attribute(align_kind_id, T::ALIGN as _);
+                    cx.func()
+                        .add_attribute(AttributeLoc::Param(at_idx), align_attr);
+                }
+                {
+                    let deref_kind_id = Attribute::get_named_enum_kind_id("dereferenceable");
+                    let deref_attr = cx.ctx().create_enum_attribute(deref_kind_id, T::SIZE as _);
+                    cx.func().add_attribute(AttributeLoc::Param(at_idx), deref_attr);
+                }
+
+                let val = cx
+                    .func()
+                    .get_nth_param(at_idx)
+                    .expect("Param number mismatch!");
+                Val::new(cx, val)
+            }
         }
     };
 }
@@ -125,7 +148,10 @@ derive_ptr_type!(P);
 derive_ptr_type!(R, 'r);
 derive_ptr_type!(M, 'm);
 
-impl<T> P<T> {
+impl<T> P<T>
+where
+    T: Ty,
+{
     pub fn ref_ty<'r>(&self) -> R<'r, T> {
         R::new(self.ctx())
     }
@@ -134,7 +160,10 @@ impl<T> P<T> {
     }
 }
 
-impl<'r, T> R<'r, T> {
+impl<'r, T> R<'r, T>
+where
+    T: Ty,
+{
     pub fn ptr_ty(&self) -> P<T> {
         P::new(self.ctx())
     }
@@ -143,7 +172,10 @@ impl<'r, T> R<'r, T> {
     }
 }
 
-impl<'m, T> M<'m, T> {
+impl<'m, T> M<'m, T>
+where
+    T: Ty,
+{
     pub fn ref_ty<'r>(&self) -> R<'r, T> {
         R::new(self.ctx())
     }

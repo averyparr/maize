@@ -17,7 +17,7 @@ use inkwell::{
     builder::{Builder, BuilderError},
     context::ContextRef,
     types::{BasicMetadataTypeEnum, BasicType, FloatMathType, FunctionType},
-    values::{BasicValue, BasicValueEnum, FloatMathValue},
+    values::{BasicValue, BasicValueEnum, FloatMathValue, InstructionValue},
 };
 
 use crate::{
@@ -87,7 +87,10 @@ pub trait FloatTy: Ty {
     fn float_ty(&self) -> impl FloatMathType<'static>;
 }
 
-const ALL_FAST_MATH: u32 = 0b1111111;
+fn make_ins_fast_math(ins: InstructionValue<'_>) {
+    const ALL_FAST_MATH: u32 = 0b1111111;
+    ins.set_fast_math_flags(ALL_FAST_MATH)
+}
 
 pub trait ArithmeticTy: Ty {
     fn try_emit_add(
@@ -117,66 +120,48 @@ pub trait ArithmeticTy: Ty {
 
     fn build_add<'lt>(lhs: Val<'lt, Self>, rhs: Val<'lt, Self>) -> Val<'lt, Self> {
         assert!(lhs.cx() == rhs.cx(), "Vals must agree on FnCodegen");
+        let new_val = |b| {
+            Self::try_emit_add(b, lhs.to_underlying(), rhs.to_underlying())
+                .expect("Unable to emit add")
+        };
         // SAFETY: we have two ArithmeticTy so emitting an add is safe
-        let val = unsafe {
-            lhs.cx()
-                .with_builder(|b| Self::try_emit_add(b, lhs.to_underlying(), rhs.to_underlying()))
-        }
-        .expect("Unable to emit add");
-        if let Some(ins) = val.as_instruction_value() {
-            ins.set_fast_math_flags(ALL_FAST_MATH);
-        }
+        let val = unsafe { lhs.cx().create_value(new_val, make_ins_fast_math) };
         Val::new(lhs.cx(), val.as_basic_value_enum())
     }
     fn build_sub<'lt>(lhs: Val<'lt, Self>, rhs: Val<'lt, Self>) -> Val<'lt, Self> {
         assert!(lhs.cx() == rhs.cx(), "Vals must agree on FnCodegen");
+        let new_val = |b| {
+            Self::try_emit_sub(b, lhs.to_underlying(), rhs.to_underlying())
+                .expect("Unable to emit sub")
+        };
         // SAFETY: we have two ArithmeticTy so emitting a sub is safe
-        let val = unsafe {
-            lhs.cx()
-                .with_builder(|b| Self::try_emit_sub(b, lhs.to_underlying(), rhs.to_underlying()))
-        }
-        .expect("Unable to emit sub");
-        if let Some(ins) = val.as_instruction_value() {
-            ins.set_fast_math_flags(ALL_FAST_MATH);
-        }
+        let val = unsafe { lhs.cx().create_value(new_val, make_ins_fast_math) };
         Val::new(lhs.cx(), val.as_basic_value_enum())
     }
     fn build_mul<'lt>(lhs: Val<'lt, Self>, rhs: Val<'lt, Self>) -> Val<'lt, Self> {
         assert!(lhs.cx() == rhs.cx(), "Vals must agree on FnCodegen");
+        let new_val = |b| {
+            Self::try_emit_mul(b, lhs.to_underlying(), rhs.to_underlying())
+                .expect("Unable to emit sub")
+        };
         // SAFETY: we have two ArithmeticTy so emitting a mul is safe
-        let val = unsafe {
-            lhs.cx()
-                .with_builder(|b| Self::try_emit_mul(b, lhs.to_underlying(), rhs.to_underlying()))
-        }
-        .expect("Unable to emit sub");
-        if let Some(ins) = val.as_instruction_value() {
-            ins.set_fast_math_flags(ALL_FAST_MATH);
-        }
+        let val = unsafe { lhs.cx().create_value(new_val, make_ins_fast_math) };
         Val::new(lhs.cx(), val.as_basic_value_enum())
     }
     fn build_div<'lt>(lhs: Val<'lt, Self>, rhs: Val<'lt, Self>) -> Val<'lt, Self> {
         assert!(lhs.cx() == rhs.cx(), "Vals must agree on FnCodegen");
+        let new_val = |b| {
+            Self::try_emit_div(b, lhs.to_underlying(), rhs.to_underlying())
+                .expect("Unable to emit sub")
+        };
         // SAFETY: we have two ArithmeticTy so emitting a div is safe
-        let val = unsafe {
-            lhs.cx()
-                .with_builder(|b| Self::try_emit_div(b, lhs.to_underlying(), rhs.to_underlying()))
-        }
-        .expect("Unable to emit sub");
-        if let Some(ins) = val.as_instruction_value() {
-            ins.set_fast_math_flags(ALL_FAST_MATH);
-        }
+        let val = unsafe { lhs.cx().create_value(new_val, make_ins_fast_math) };
         Val::new(lhs.cx(), val.as_basic_value_enum())
     }
     fn build_neg<'lt>(lhs: Val<'lt, Self>) -> Val<'lt, Self> {
+        let new_val = |b| Self::try_emit_neg(b, lhs.to_underlying()).expect("Unable to emit sub");
         // SAFETY: we have a valid ArithmeticTy so emitting a neg is safe
-        let val = unsafe {
-            lhs.cx()
-                .with_builder(|b| Self::try_emit_neg(b, lhs.to_underlying()))
-        }
-        .expect("Unable to emit sub");
-        if let Some(ins) = val.as_instruction_value() {
-            ins.set_fast_math_flags(ALL_FAST_MATH);
-        }
+        let val = unsafe { lhs.cx().create_value(new_val, make_ins_fast_math) };
         Val::new(lhs.cx(), val.as_basic_value_enum())
     }
 }
