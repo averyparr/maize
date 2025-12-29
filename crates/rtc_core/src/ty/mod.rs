@@ -87,7 +87,7 @@ pub trait FloatTy: Ty {
     fn float_ty(&self) -> impl FloatMathType<'static>;
 }
 
-fn make_ins_fast_math(ins: InstructionValue<'_>) {
+pub(crate) fn make_ins_fast_math(ins: InstructionValue<'_>) {
     const ALL_FAST_MATH: u32 = 0b1111111;
     ins.set_fast_math_flags(ALL_FAST_MATH)
 }

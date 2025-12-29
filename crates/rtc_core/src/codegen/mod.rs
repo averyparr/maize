@@ -1,5 +1,6 @@
 pub mod context;
 pub mod func_with_args;
+pub mod intrinsics;
 pub mod pre_jit_func;
 pub mod target;
 

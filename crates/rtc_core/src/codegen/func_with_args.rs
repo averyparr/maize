@@ -25,6 +25,12 @@ impl<ArgsT, Ret> Func<ArgsT, Ret> {
     pub fn extract_module_codegen(self) -> (Module<'static>, FnCodegen<'static>) {
         (self.module, self.codegen)
     }
+    pub(crate) fn mod_ref(&self) -> &Module<'static> {
+        &self.module
+    }
+    pub(crate) fn cx_ref(&self) -> &FnCodegen<'static> {
+        &self.codegen
+    }
     pub fn const_val<'lt, T, FromT>(&'lt self, c: FromT) -> Val<'lt, T>
     where
         T: Ty + AcceptsConstants,
