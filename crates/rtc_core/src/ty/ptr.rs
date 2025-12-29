@@ -58,6 +58,9 @@ macro_rules! addrspace_ptr {
         where
             Ptr: PtrTy,
         {
+            const SIZE: usize = std::mem::size_of::<*mut ()>();
+            const ALIGN: u32 = std::mem::align_of::<*mut ()>() as _;
+
             fn ctx(&self) -> ContextRef<'static> {
                 self.0.ctx()
             }
@@ -100,6 +103,9 @@ macro_rules! derive_ptr_type {
         }
 
         impl<$($lt,)?T> Ty for $name<$($lt,)?T> {
+            const ALIGN: u32 = ::core::mem::align_of::<&()>() as _;
+            const SIZE: usize = ::core::mem::size_of::<&()>();
+
             fn ctx(&self) -> ContextRef<'static> {
                 self.0
             }

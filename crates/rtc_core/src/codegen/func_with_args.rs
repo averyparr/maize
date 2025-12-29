@@ -1,10 +1,10 @@
 use inkwell::AddressSpace;
+use inkwell::attributes::Attribute;
 use inkwell::attributes::AttributeLoc;
+use inkwell::types::AnyType;
 use inkwell::types::{BasicMetadataTypeEnum, BasicType, FunctionType};
 use inkwell::values::InstructionValue;
 use inkwell::{context::ContextRef, module::Module, types::BasicTypeEnum};
-
-use std::marker::PhantomData;
 
 use crate::codegen::FnCodegen;
 use crate::codegen::context::create_context;
@@ -141,10 +141,7 @@ macro_rules! impl_into_func_args {
             fn get_args<'lt>(cx: &'lt FnCodegen<'static>) -> Self::ArgValues<'lt> {
                 (
                     $(
-                        Val::new(
-                            cx,
-                            cx.func().get_nth_param($idx).expect("Param number mismatch!")
-                        ),
+                        $args::get_args_at_idx(cx, $idx),
                     )*
                 )
             }

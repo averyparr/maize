@@ -1,6 +1,7 @@
 mod constants;
 mod holder;
 mod val;
+mod vec;
 mod with_storage;
 
 pub use constants::{AcceptsConstants, C};

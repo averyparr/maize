@@ -8,7 +8,7 @@ use inkwell::{
 use crate::ty::{ArithmeticTy, FromCtx, Ty};
 
 macro_rules! float_impl {
-    ($name: ident, $basic_ty: ident) => {
+    ($name: ident, $basic_ty: ident, $align: literal, $size: literal) => {
         #[derive(Clone, Copy)]
         pub struct $name(ContextRef<'static>);
         impl FromCtx for $name {
@@ -17,6 +17,9 @@ macro_rules! float_impl {
             }
         }
         impl Ty for $name {
+            const ALIGN: u32 = $align;
+            const SIZE: usize = $size;
+
             fn ctx(&self) -> ContextRef<'static> {
                 self.0
             }
@@ -70,7 +73,7 @@ macro_rules! float_impl {
 }
 
 macro_rules! int_impl {
-    ($name: ident, $basic_ty: ident) => {
+    ($name: ident, $basic_ty: ident, $align: literal, $size: literal) => {
         pub struct $name(ContextRef<'static>);
         impl FromCtx for $name {
             fn new(ctx: ContextRef<'static>) -> Self {
@@ -78,6 +81,9 @@ macro_rules! int_impl {
             }
         }
         impl Ty for $name {
+            const ALIGN: u32 = $align;
+            const SIZE: usize = $size;
+
             fn ctx(&self) -> ContextRef<'static> {
                 self.0
             }
@@ -93,22 +99,22 @@ macro_rules! int_impl {
     };
 }
 
-float_impl!(F16, f16_type);
-float_impl!(F32, f32_type);
-float_impl!(F64, f64_type);
-float_impl!(F128, f128_type);
+float_impl!(F16, f16_type, 2, 2);
+float_impl!(F32, f32_type, 4, 4);
+float_impl!(F64, f64_type, 8, 8);
+float_impl!(F128, f128_type, 16, 16);
 
-int_impl!(I8, i8_type);
-int_impl!(I16, i16_type);
-int_impl!(I32, i32_type);
-int_impl!(I64, i64_type);
-int_impl!(I128, i128_type);
+int_impl!(I8, i8_type, 1, 1);
+int_impl!(I16, i16_type, 2, 2);
+int_impl!(I32, i32_type, 4, 4);
+int_impl!(I64, i64_type, 8, 8);
+int_impl!(I128, i128_type, 16, 16);
 
-int_impl!(U8, i8_type);
-int_impl!(U16, i16_type);
-int_impl!(U32, i32_type);
-int_impl!(U64, i64_type);
-int_impl!(U128, i128_type);
+int_impl!(U8, i8_type, 1, 1);
+int_impl!(U16, i16_type, 2, 2);
+int_impl!(U32, i32_type, 4, 4);
+int_impl!(U64, i64_type, 8, 8);
+int_impl!(U128, i128_type, 16, 16);
 
 pub trait UnsignedInt {}
 impl UnsignedInt for U8 {}

@@ -14,14 +14,14 @@ use crate::{
     val::{Holds, Val},
 };
 
-pub trait RawPtrOps {
+pub trait RawPtrOps<'ctx> {
     type Pointee: Ty;
     fn pointee_ty(&self) -> Self::Pointee;
     /// # Safety:
     /// Treat this as identical to loading from a *mut T
     /// You must ensure that the underlying ctx lasts at least
     /// as long as `'ctx
-    unsafe fn load_unchecked<'ctx>(&self) -> Val<'ctx, Self::Pointee>;
+    unsafe fn load_unchecked(&self) -> Val<'ctx, Self::Pointee>;
     /// # Safety:
     /// Treat this as identical to storing to a *mut T
     unsafe fn store_unchecked<Value>(&mut self, val: Value)
@@ -29,11 +29,11 @@ pub trait RawPtrOps {
         Value: Holds<T = Self::Pointee>;
 }
 
-pub trait RefOps: RawPtrOps {
-    fn load(&self) -> Val<'_, Self::Pointee>;
+pub trait RefOps<'ctx>: RawPtrOps<'ctx> {
+    fn load(&self) -> Val<'ctx, Self::Pointee>;
 }
 
-pub trait MutOps: RefOps {
+pub trait MutOps<'ctx>: RefOps<'ctx> {
     fn store<Value>(&mut self, val: Value)
     where
         Value: Holds<T = Self::Pointee>;
@@ -52,9 +52,11 @@ impl<'m, 'lt, T> Val<'lt, M<'m, T>> {
     pub fn as_ptr(&self) -> Val<'lt, P<T>> {
         self.as_ref().as_ptr()
     }
+
+    pub fn inc(&mut self, val: Val<'lt, T>) {}
 }
 
-impl<'lt, T> RawPtrOps for Val<'lt, P<T>>
+impl<'lt, T> RawPtrOps<'lt> for Val<'lt, P<T>>
 where
     T: Ty,
 {
@@ -65,7 +67,7 @@ where
 
     /// # Safety:
     /// See `RawPtrOps::load_unchecked`.
-    unsafe fn load_unchecked<'ctx>(&self) -> Val<'ctx, Self::Pointee> {
+    unsafe fn load_unchecked(&self) -> Val<'lt, Self::Pointee> {
         let pointee_ty = self.pointee_ty().basic_ty();
         let ptr = self.to_underlying();
         let cx = self.cx();
@@ -87,7 +89,7 @@ where
     }
 }
 
-impl<'r, 'lt, T> RawPtrOps for Val<'lt, R<'r, T>>
+impl<'r, 'lt, T> RawPtrOps<'lt> for Val<'lt, R<'r, T>>
 where
     T: Ty,
 {
@@ -95,7 +97,7 @@ where
     fn pointee_ty(&self) -> Self::Pointee {
         self.as_ptr().pointee_ty()
     }
-    unsafe fn load_unchecked<'ctx>(&self) -> Val<'ctx, Self::Pointee> {
+    unsafe fn load_unchecked(&self) -> Val<'lt, Self::Pointee> {
         // Safety: We have a reference!
         unsafe { self.as_ptr().load_unchecked() }
     }
@@ -108,7 +110,7 @@ where
     }
 }
 
-impl<'m, 'lt, T> RawPtrOps for Val<'lt, M<'m, T>>
+impl<'m, 'lt, T> RawPtrOps<'lt> for Val<'lt, M<'m, T>>
 where
     T: Ty,
 {
@@ -116,7 +118,7 @@ where
     fn pointee_ty(&self) -> Self::Pointee {
         self.as_ptr().pointee_ty()
     }
-    unsafe fn load_unchecked<'ctx>(&self) -> Val<'ctx, Self::Pointee> {
+    unsafe fn load_unchecked(&self) -> Val<'lt, Self::Pointee> {
         // Safety: We have an exclusive reference
         unsafe { self.as_ptr().load_unchecked() }
     }
@@ -129,27 +131,27 @@ where
     }
 }
 
-impl<'r, 'lt, T> RefOps for Val<'lt, R<'r, T>>
+impl<'r, 'lt, T> RefOps<'lt> for Val<'lt, R<'r, T>>
 where
     T: Ty,
 {
-    fn load(&self) -> Val<'_, Self::Pointee> {
+    fn load(&self) -> Val<'lt, Self::Pointee> {
         // Safety: We hold a shared reference
         unsafe { self.as_ptr().load_unchecked() }
     }
 }
 
-impl<'m, 'lt, T> RefOps for Val<'lt, M<'m, T>>
+impl<'m, 'lt, T> RefOps<'lt> for Val<'lt, M<'m, T>>
 where
     T: Ty,
 {
-    fn load(&self) -> Val<'_, Self::Pointee> {
+    fn load(&self) -> Val<'lt, Self::Pointee> {
         // Safety: We hold an exclusive reference
         unsafe { self.as_ptr().load_unchecked() }
     }
 }
 
-impl<'m, 'lt, T> MutOps for Val<'lt, M<'m, T>>
+impl<'m, 'lt, T> MutOps<'lt> for Val<'lt, M<'m, T>>
 where
     T: Ty,
 {
@@ -164,16 +166,16 @@ where
 
 macro_rules! impl_ptr_wrapper {
     ($wrapper_name: ident) => {
-        impl<'lt, Ptr> RawPtrOps for Val<'lt, $wrapper_name<Ptr>>
+        impl<'lt, Ptr> RawPtrOps<'lt> for Val<'lt, $wrapper_name<Ptr>>
         where
-            Val<'lt, Ptr>: RawPtrOps,
+            Val<'lt, Ptr>: RawPtrOps<'lt>,
             Ptr: Ty,
         {
-            type Pointee = <Val<'lt, Ptr> as RawPtrOps>::Pointee;
+            type Pointee = <Val<'lt, Ptr> as RawPtrOps<'lt>>::Pointee;
             fn pointee_ty(&self) -> Self::Pointee {
                 self.to_inner().pointee_ty()
             }
-            unsafe fn load_unchecked<'ctx>(&self) -> Val<'ctx, Self::Pointee> {
+            unsafe fn load_unchecked(&self) -> Val<'lt, Self::Pointee> {
                 // SAFETY: User promised!
                 unsafe { self.to_inner().load_unchecked() }
             }
@@ -186,9 +188,9 @@ macro_rules! impl_ptr_wrapper {
             }
         }
 
-        impl<'lt, Ptr> RefOps for Val<'lt, $wrapper_name<Ptr>>
+        impl<'lt, Ptr> RefOps<'lt> for Val<'lt, $wrapper_name<Ptr>>
         where
-            Val<'lt, Ptr>: RefOps,
+            Val<'lt, Ptr>: RefOps<'lt>,
             Ptr: Ty + 'lt,
         {
             fn load(&self) -> Val<'lt, Self::Pointee> {
@@ -197,9 +199,9 @@ macro_rules! impl_ptr_wrapper {
             }
         }
 
-        impl<'lt, Ptr> MutOps for Val<'lt, $wrapper_name<Ptr>>
+        impl<'lt, Ptr> MutOps<'lt> for Val<'lt, $wrapper_name<Ptr>>
         where
-            Val<'lt, Ptr>: MutOps,
+            Val<'lt, Ptr>: MutOps<'lt>,
             Ptr: Ty + 'lt,
         {
             fn store<Value>(&mut self, val: Value)

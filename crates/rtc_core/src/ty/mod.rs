@@ -1,6 +1,7 @@
 mod bool;
 pub mod primitive;
 mod ptr;
+mod vec;
 mod void;
 
 use std::u32;
@@ -8,9 +9,11 @@ use std::u32;
 pub use bool::Bool;
 pub use primitive::*;
 pub use ptr::*;
+pub use vec::*;
 pub use void::Void;
 
 use inkwell::{
+    attributes::{Attribute, AttributeLoc},
     builder::{Builder, BuilderError},
     context::ContextRef,
     types::{BasicMetadataTypeEnum, BasicType, FloatMathType, FunctionType},
@@ -27,6 +30,9 @@ pub trait FromCtx {
 }
 
 pub trait Ty: FromCtx + Sized {
+    const SIZE: usize;
+    const ALIGN: u32;
+
     fn ctx(&self) -> ContextRef<'static>;
     type Type: BasicType<'static>;
     fn basic_ty(&self) -> Self::Type;
@@ -43,6 +49,24 @@ pub trait Ty: FromCtx + Sized {
     fn mut_ty(&self) -> M<Self> {
         M::new(self.ctx())
     }
+    fn get_args_at_idx<'lt>(cx: &'lt FnCodegen<'static>, at_idx: u32) -> Val<'lt, Self> {
+        let align_kind_id = Attribute::get_named_enum_kind_id("align");
+        let align_attr = cx
+            .ctx()
+            .create_enum_attribute(align_kind_id, Self::ALIGN as _);
+        cx.func()
+            .add_attribute(AttributeLoc::Param(at_idx), align_attr);
+        let val = cx
+            .func()
+            .get_nth_param(at_idx)
+            .expect("Param number mismatch!");
+        Val::new(cx, val)
+    }
+}
+
+pub trait VecTy: Ty {
+    const N: usize;
+    type ElemT: Ty;
 }
 
 pub trait FnReturnTy: FromCtx {

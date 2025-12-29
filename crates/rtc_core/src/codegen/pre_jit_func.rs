@@ -24,6 +24,10 @@ impl<ArgsT, Ret> PreJitFunc<ArgsT, Ret> {
         }
     }
 
+    pub fn as_llvm_ir(&self) -> String {
+        self.module.print_to_string().to_string()
+    }
+
     pub fn compile(
         &self,
         target_machine: TargetMachine,

@@ -11,6 +11,9 @@ impl FromCtx for Bool {
 }
 
 impl Ty for Bool {
+    const ALIGN: u32 = ::core::mem::align_of::<bool>() as _;
+    const SIZE: usize = ::core::mem::size_of::<bool>();
+
     fn ctx(&self) -> ContextRef<'static> {
         self.0
     }
