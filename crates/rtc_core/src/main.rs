@@ -7,16 +7,16 @@ use inkwell::{OptimizationLevel, targets::FileType};
 
 use crate::{
     codegen::{
-        func_with_args::create_func,
+        func_with_args::{create_func, create_kernel},
         target::{PTXOptions, SM, TargetMachine},
     },
     primitives::{MutOps, RefOps},
-    ty::{F32, F64, M, R, Void},
+    ty::{F32, F64, Global, M, R, Void},
     val::C,
 };
 
 fn main() {
-    let func = create_func::<(R<F32>, R<F32>, M<F64>), Void>();
+    let func = create_kernel::<(Global<R<F32>>, Global<R<F32>>, Global<M<F64>>)>();
     let (a_ptr, b_ptr, mut c_ptr) = func.get_args();
 
     let a = a_ptr.load();
@@ -40,21 +40,3 @@ fn main() {
     let s = str::from_utf8(&out).expect("Should be valid UTF-8");
     println!("{}", s);
 }
-
-// mod test {
-//     use inkwell::{OptimizationLevel, targets::FileType};
-
-//     use crate::{
-//         codegen::{
-//             func_with_args::create_func,
-//             target::{PTXOptions, SM, TargetMachine},
-//         },
-//         ty::{F32, F64, M, R, Void},
-//         val::C,
-//     };
-
-//     use super::*;
-
-//     #[test]
-
-// }

@@ -106,6 +106,15 @@ where
     }
 }
 
+pub fn create_kernel<ArgsT>() -> Func<ArgsT, Void>
+where
+    ArgsT: IntoFuncArgs,
+{
+    let func = create_func();
+    func.codegen.func.set_call_conventions(71);
+    func
+}
+
 pub trait IntoFuncArgs {
     type ArgValues<'lt>;
     fn get_args<'lt>(cx: &'lt FnCodegen<'static>) -> Self::ArgValues<'lt>;

@@ -1,4 +1,4 @@
-use std::marker::PhantomData;
+use std::{marker::PhantomData, ops::Deref};
 
 use inkwell::values::BasicValueEnum;
 
@@ -17,6 +17,12 @@ impl<'lt, T> Val<'lt, T> {
         // SAFETY: This is a valid lifetime extention by
         // the above precondition
         unsafe { &*(self.cx as *const _) }
+    }
+    pub fn get_val<'borrow>(&self) -> BasicValueEnum<'static>
+    where
+        'lt: 'borrow,
+    {
+        self.val
     }
 }
 

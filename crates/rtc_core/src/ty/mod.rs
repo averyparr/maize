@@ -7,7 +7,7 @@ use std::u32;
 
 pub use bool::Bool;
 pub use primitive::*;
-pub use ptr::{M, P, R};
+pub use ptr::*;
 pub use void::Void;
 
 use inkwell::{
