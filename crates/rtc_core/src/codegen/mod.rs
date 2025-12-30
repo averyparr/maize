@@ -10,6 +10,7 @@ use inkwell::{
     basic_block::BasicBlock,
     builder::{Builder, BuilderError},
     context::ContextRef,
+    module::Module,
     types::BasicType,
     values::{BasicValue, BasicValueEnum, FunctionValue, InstructionValue, PointerValue},
 };
@@ -22,6 +23,13 @@ pub(crate) struct FnCodegen<'ctx> {
     ctx: ContextRef<'ctx>,
     func: FunctionValue<'ctx>,
     bb: Cell<BasicBlock<'ctx>>,
+}
+
+/// Very important that it _not_ be clone or copy!
+#[derive(PartialEq)]
+pub(crate) struct CodegenModule<'ctx> {
+    codegen: FnCodegen<'ctx>,
+    module: Module<'ctx>,
 }
 
 impl<'ctx> FnCodegen<'ctx> {
@@ -210,5 +218,20 @@ impl<'ctx> FnCodegen<'ctx> {
             self.with_builder(|b| b.build_alloca(value.get_type(), "build_alloca"))
                 .expect("Should be able to build alloca")
         }
+    }
+}
+
+impl<'ctx> CodegenModule<'ctx> {
+    pub(crate) fn new(module: Module<'ctx>, codegen: FnCodegen<'ctx>) -> Self {
+        Self { codegen, module }
+    }
+    pub(crate) fn extract_module_codegen(self) -> (Module<'ctx>, FnCodegen<'ctx>) {
+        (self.module, self.codegen)
+    }
+    pub(crate) fn module(&self) -> &Module<'ctx> {
+        &self.module
+    }
+    pub(crate) fn cx(&self) -> &FnCodegen<'ctx> {
+        &self.codegen
     }
 }

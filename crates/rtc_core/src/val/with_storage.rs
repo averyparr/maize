@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use inkwell::values::{BasicValue, BasicValueEnum};
 
 use crate::{
-    codegen::FnCodegen,
+    codegen::{CodegenModule, FnCodegen},
     ty::{M, R, Ty},
     val::Holds,
 };
@@ -14,14 +14,15 @@ impl<'lt, T> Val<'lt, S<T>>
 where
     T: Ty,
 {
-    pub fn new_with_storage(cx: &'lt FnCodegen<'static>, val: BasicValueEnum<'static>) -> Self {
-        let ptr = cx.build_alloca(val);
+    pub fn new_with_storage(cm: &'lt CodegenModule<'static>, val: BasicValueEnum<'static>) -> Self {
+        let cg = cm.cx();
+        let ptr = cg.build_alloca(val);
         let ret = unsafe {
-            cx.with_builder(|b| b.build_store(ptr, val))
+            cg.with_builder(|b| b.build_store(ptr, val))
                 .expect("Unable to build store")
         };
         Val {
-            cx,
+            cm,
             val: ptr.as_basic_value_enum(),
             phantom: PhantomData,
         }
@@ -31,26 +32,26 @@ where
         let ptr = self.val.into_pointer_value();
         let pointee_ty = self.to_underlying_ty();
         // SAFETY: This alloca only ever stored our own value
-        let val = unsafe { self.cx().load(pointee_ty, ptr, Some(T::ALIGN), None) };
+        let val = unsafe { self.cm().cx().load(pointee_ty, ptr, Some(T::ALIGN), None) };
         if let Some(ins) = val.as_instruction_value() {
             ins.set_alignment(T::ALIGN)
                 .expect("Unable to set alignment");
         }
-        Val::new(self.cx(), val)
+        Val::new(self.cm(), val)
     }
 
     pub fn get_ref<'r>(&'r self) -> Val<'lt, R<'r, T>>
     where
         T: Ty,
     {
-        Val::new(self.cx(), self.val)
+        Val::new(self.cm(), self.val)
     }
 
     pub fn get_mut<'m>(&'m mut self) -> Val<'lt, M<'m, T>>
     where
         T: Ty,
     {
-        Val::new(self.cx(), self.val)
+        Val::new(self.cm(), self.val)
     }
 }
 
@@ -63,13 +64,13 @@ where
         self.get().to_underlying()
     }
     fn to_underlying_ty(&self) -> T::Type {
-        T::new(self.cx().ctx()).basic_ty()
+        T::new(self.cm().cx().ctx()).basic_ty()
     }
     fn get_ty(&self) -> Self::T {
-        T::new(self.cx().ctx())
+        T::new(self.cm().cx().ctx())
     }
-    fn held_cx(&self) -> &FnCodegen<'static> {
-        self.cx()
+    fn held_cm(&self) -> &CodegenModule<'static> {
+        self.cm()
     }
 }
 

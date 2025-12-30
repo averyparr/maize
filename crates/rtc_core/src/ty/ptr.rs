@@ -12,7 +12,8 @@ use inkwell::{
 };
 
 use crate::{
-    ty::{FnCodegen, FromCtx, Ty},
+    codegen::CodegenModule,
+    ty::{FromCtx, Ty},
     val::{Holds, Val},
 };
 
@@ -80,7 +81,7 @@ macro_rules! addrspace_ptr {
             Ptr: Ty,
         {
             pub fn to_inner(&'_ self) -> Val<'lt, Ptr> {
-                Val::new(self.cx(), self.get_val())
+                Val::new(self.cm(), self.get_val())
             }
         }
     };
@@ -119,7 +120,8 @@ macro_rules! derive_ptr_type {
                 basic_val.into_pointer_value()
             }
 
-            fn get_args_at_idx<'lt>(cx: &'lt FnCodegen<'static>, at_idx: u32) -> Val<'lt, Self> {
+            fn get_args_at_idx<'lt>(cm: &'lt CodegenModule<'static>, at_idx: u32) -> Val<'lt, Self> {
+                let cx = cm.cx();
                 {
                     let align_kind_id = Attribute::get_named_enum_kind_id("align");
                     let align_attr = cx
@@ -138,7 +140,7 @@ macro_rules! derive_ptr_type {
                     .func()
                     .get_nth_param(at_idx)
                     .expect("Param number mismatch!");
-                Val::new(cx, val)
+                Val::new(cm, val)
             }
         }
     };

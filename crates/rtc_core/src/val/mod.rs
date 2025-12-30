@@ -11,14 +11,14 @@ use std::marker::PhantomData;
 
 use inkwell::values::BasicValueEnum;
 
-use crate::codegen::FnCodegen;
+use crate::codegen::CodegenModule;
 
 /// Describes a generic 'Value' of a certain
 /// type, with that type being either T or
 /// held by some thin-wrapper around T (e.g. S<T>, C<T>)
 #[derive(Clone, Copy)]
 pub struct Val<'lt, T> {
-    cx: &'lt FnCodegen<'static>,
+    cm: &'lt CodegenModule<'static>,
     val: BasicValueEnum<'static>,
     phantom: PhantomData<T>,
 }

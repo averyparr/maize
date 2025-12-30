@@ -20,14 +20,14 @@ pub trait MinMaxableType: Ty {
 
 impl MinMaxableType for F32 {
     const MIN: &str = "llvm.nvvm.fmin.f";
-    const MIN_FTZ: Option<&str> = Some("llvm.nvvm.fmin_ftz.f");
-    const MIN_NAN: Option<&str> = Some("llvm.nvvm.fmin_nan.f");
-    const MIN_FTZ_NAN: Option<&str> = Some("llvm.nvvm.fmin_ftz_nan.f");
+    const MIN_FTZ: Option<&str> = Some("llvm.nvvm.fmin.ftz.f");
+    const MIN_NAN: Option<&str> = Some("llvm.nvvm.fmin.nan.f");
+    const MIN_FTZ_NAN: Option<&str> = Some("llvm.nvvm.fmin.ftz_nan.f");
 
     const MAX: &str = "llvm.nvvm.fmax.f";
-    const MAX_FTZ: Option<&str> = Some("llvm.nvvm.fmax_ftz.f");
-    const MAX_NAN: Option<&str> = Some("llvm.nvvm.fmax_nan.f");
-    const MAX_FTZ_NAN: Option<&str> = Some("llvm.nvvm.fmax_ftz_nan.f");
+    const MAX_FTZ: Option<&str> = Some("llvm.nvvm.fmax.ftz.f");
+    const MAX_NAN: Option<&str> = Some("llvm.nvvm.fmax.nan.f");
+    const MAX_FTZ_NAN: Option<&str> = Some("llvm.nvvm.fmax.ftz_nan.f");
 }
 
 impl MinMaxableType for F64 {
@@ -77,7 +77,7 @@ impl<ArgsT, Ret> Func<ArgsT, Ret> {
             .try_as_basic_value()
             .expect_basic("Must be a basic value!");
 
-        Val::new(self.cx_ref(), ret_val)
+        Val::new(self.cm_ref(), ret_val)
     }
 
     // Min variants

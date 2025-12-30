@@ -1,4 +1,9 @@
+pub mod explog;
+pub mod fabs;
+pub mod floorceil;
 pub mod minmax;
 pub mod nanosleep;
+pub mod rcp;
 pub mod rsqrt;
+pub mod sincos;
 pub mod sqrt;

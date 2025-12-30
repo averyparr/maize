@@ -1,6 +1,10 @@
 use inkwell::values::BasicValue;
 
-use crate::{codegen::FnCodegen, ty::Ty, val::Val};
+use crate::{
+    codegen::{CodegenModule, FnCodegen},
+    ty::Ty,
+    val::Val,
+};
 
 use super::S;
 
@@ -9,7 +13,7 @@ pub trait Holds {
     fn to_underlying(&self) -> <Self::T as Ty>::Value;
     fn to_underlying_ty(&self) -> <Self::T as Ty>::Type;
     fn get_ty(&self) -> Self::T;
-    fn held_cx(&self) -> &FnCodegen<'static>;
+    fn held_cm(&self) -> &CodegenModule<'static>;
 }
 
 impl<'lt, T, Holder> Holds for &'lt Holder
@@ -27,8 +31,8 @@ where
     fn get_ty(&self) -> Self::T {
         <Holder as Holds>::get_ty(self)
     }
-    fn held_cx(&self) -> &FnCodegen<'static> {
-        <Holder as Holds>::held_cx(self)
+    fn held_cm(&self) -> &CodegenModule<'static> {
+        <Holder as Holds>::held_cm(self)
     }
 }
 
@@ -47,7 +51,7 @@ where
     fn get_ty(&self) -> Self::T {
         <Holder as Holds>::get_ty(self)
     }
-    fn held_cx(&self) -> &FnCodegen<'static> {
-        <Holder as Holds>::held_cx(self)
+    fn held_cm(&self) -> &CodegenModule<'static> {
+        <Holder as Holds>::held_cm(self)
     }
 }

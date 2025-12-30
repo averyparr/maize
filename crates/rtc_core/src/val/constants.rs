@@ -1,7 +1,7 @@
 use inkwell::{context::ContextRef, values::BasicValue};
 
 use crate::{
-    codegen::FnCodegen,
+    codegen::{CodegenModule, FnCodegen},
     ty::{Ty, primitive::*},
     val::Val,
 };
@@ -19,15 +19,16 @@ pub trait AcceptsConstants: Sized {
     const ZERO: Self::Assoc;
     const ONE: Self::Assoc;
 
-    fn new_const<'lt>(c: Self::Assoc, ctx: &'lt FnCodegen<'static>) -> Val<'lt, Self>;
+    fn new_const<'lt>(c: Self::Assoc, ctx: &'lt CodegenModule<'static>) -> Val<'lt, Self>;
 }
 
 macro_rules! derive_constant {
     ($name: ident, $tipe: ty, $ty_fn: ident, $const_ty_fn: ident$(, $rest_args: tt)?) => {
         impl AcceptsConstants for $name {
             type Assoc = $tipe;
-            fn new_const<'lt>(c: Self::Assoc, cx: &'lt FnCodegen<'static>) -> Val<'lt, Self> {
+            fn new_const<'lt>(c: Self::Assoc, cx: &'lt CodegenModule<'static>) -> Val<'lt, Self> {
                 let val = cx
+                    .cx()
                     .ctx()
                     .$ty_fn()
                     .$const_ty_fn((c as _)$(, $rest_args)?)
@@ -41,7 +42,7 @@ macro_rules! derive_constant {
 }
 
 // Can't do this yet because rustc stable doesn't support f16
-// derive_constant!(F16, f16, f16_type, const_float);
+derive_constant!(F16, f32, f16_type, const_float);
 derive_constant!(F32, f32, f32_type, const_float);
 derive_constant!(F64, f64, f64_type, const_float);
 // Can't do this yet because rustc stable doesn't support f128

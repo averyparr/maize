@@ -47,7 +47,7 @@ impl<ArgsT, Ret> Func<ArgsT, Ret> {
             .try_as_basic_value()
             .expect_basic("Must be a basic value!");
 
-        Val::new(self.cx_ref(), ret_val)
+        Val::new(self.cm_ref(), ret_val)
     }
 
     pub fn rsqrt<Float: RsqrtableType>(&self, val: Val<'_, Float>) -> Val<'_, Float> {

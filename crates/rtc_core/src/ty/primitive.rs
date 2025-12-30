@@ -1,6 +1,7 @@
 use inkwell::{
     builder::{Builder, BuilderError},
     context::ContextRef,
+    llvm_sys::core::LLVMBFloatTypeInContext,
     types::{FloatType, IntType},
     values::{BasicValueEnum, FloatValue, IntValue},
 };

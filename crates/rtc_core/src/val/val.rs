@@ -2,21 +2,24 @@ use std::{marker::PhantomData, ops::Deref};
 
 use inkwell::values::BasicValueEnum;
 
-use crate::{codegen::FnCodegen, ty::Ty};
+use crate::{
+    codegen::{CodegenModule, FnCodegen},
+    ty::Ty,
+};
 
 use super::{Holds, S, Val};
 
 impl<'lt, T> Val<'lt, T> {
-    pub fn cx(&self) -> &'lt FnCodegen<'static> {
-        &self.cx
+    pub fn cm(&self) -> &'lt CodegenModule<'static> {
+        &self.cm
     }
     /// # Safety:
     /// The underlying FnCodegen must indeed be valid
     /// for 'any.
-    pub unsafe fn cx_with_lifetime<'any>(&self) -> &'any FnCodegen<'static> {
+    pub unsafe fn cm_with_lifetime<'any>(&self) -> &'any CodegenModule<'static> {
         // SAFETY: This is a valid lifetime extention by
         // the above precondition
-        unsafe { &*(self.cx as *const _) }
+        unsafe { &*(self.cm as *const _) }
     }
     pub fn get_val<'borrow>(&self) -> BasicValueEnum<'static>
     where
@@ -30,16 +33,16 @@ impl<'lt, T> Val<'lt, T>
 where
     T: Ty,
 {
-    pub(crate) fn new(cx: &'lt FnCodegen<'static>, val: BasicValueEnum<'static>) -> Self {
+    pub(crate) fn new(cm: &'lt CodegenModule<'static>, val: BasicValueEnum<'static>) -> Self {
         Self {
-            cx,
+            cm,
             val,
             phantom: PhantomData,
         }
     }
 
     pub fn with_storage(self) -> Val<'lt, S<T>> {
-        Val::new_with_storage(self.cx(), self.val)
+        Val::new_with_storage(self.cm(), self.val)
     }
 }
 
@@ -52,12 +55,12 @@ where
         T::get_value(self.val)
     }
     fn to_underlying_ty(&self) -> T::Type {
-        T::new(self.cx().ctx()).basic_ty()
+        T::new(self.cm().cx().ctx()).basic_ty()
     }
     fn get_ty(&self) -> Self::T {
-        T::new(self.cx().ctx())
+        T::new(self.cm().cx().ctx())
     }
-    fn held_cx(&self) -> &FnCodegen<'static> {
-        self.cx()
+    fn held_cm(&self) -> &CodegenModule<'static> {
+        self.cm()
     }
 }

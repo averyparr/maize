@@ -67,7 +67,7 @@ where
     T: Ty,
 {
     pub fn as_ptr(&self) -> Val<'lt, P<T>> {
-        Val::new(self.cx(), self.to_underlying().as_basic_value_enum())
+        Val::new(self.cm(), self.to_underlying().as_basic_value_enum())
     }
 }
 
@@ -76,7 +76,7 @@ where
     T: Ty,
 {
     pub fn as_ref(&self) -> Val<'lt, R<'m, T>> {
-        Val::new(self.cx(), self.to_underlying().as_basic_value_enum())
+        Val::new(self.cm(), self.to_underlying().as_basic_value_enum())
     }
     pub fn as_ptr(&self) -> Val<'lt, P<T>> {
         self.as_ref().as_ptr()
@@ -91,7 +91,7 @@ where
 {
     type Pointee = T;
     fn pointee_ty(&self) -> Self::Pointee {
-        Self::Pointee::new(self.cx().ctx())
+        Self::Pointee::new(self.cm().cx().ctx())
     }
 
     /// # Safety:
@@ -105,12 +105,12 @@ where
     {
         let pointee_ty = self.pointee_ty().basic_ty();
         let ptr = self.to_underlying();
-        let cx = self.cx();
+        let cx = self.cm().cx();
         // Safety: User promised the load is valid!
         let inner_val =
             unsafe { cx.load(pointee_ty, ptr, Some(<Self::Pointee as Ty>::ALIGN), for_ins) };
         // Safety: User promised 'ctx lasts as long as the underlying FnCodegen!
-        let cx_extended = unsafe { self.cx_with_lifetime() };
+        let cx_extended = unsafe { self.cm_with_lifetime() };
         Val::new(cx_extended, inner_val)
     }
     unsafe fn store_unchecked<'a, Value>(
@@ -123,7 +123,7 @@ where
     {
         let ptr_val = self.to_underlying();
         let value = val.to_underlying();
-        let cx = self.cx();
+        let cx = self.cm().cx();
         // Safety: User promised that storing to *mut T is valid
         unsafe { cx.store(ptr_val, value, Some(<Self::Pointee as Ty>::ALIGN), for_ins) };
     }
@@ -144,7 +144,7 @@ where
     where
         'lt: 'a,
     {
-        let ctx = self.cx().ctx();
+        let ctx = self.cm().cx().ctx();
         let with_readonly = with_attrs(&ctx, &["invariant.load", "noalias"]);
         if let Some(for_ins) = for_ins {
             let for_ins = |ins| {
@@ -186,7 +186,7 @@ where
     where
         'lt: 'a,
     {
-        let ctx = self.cx().ctx();
+        let ctx = self.cm().cx().ctx();
         let with_noalias = with_attrs(&ctx, &["noalias"]);
         if let Some(for_ins) = for_ins {
             let for_ins = |ins| {
@@ -206,7 +206,7 @@ where
         Value: Holds<T = Self::Pointee>,
         'lt: 'a,
     {
-        let ctx = self.cx().ctx();
+        let ctx = self.cm().cx().ctx();
         let with_noalias = with_attrs(&ctx, &["noalias"]);
         if let Some(for_ins) = for_ins {
             let for_ins = |ins| {

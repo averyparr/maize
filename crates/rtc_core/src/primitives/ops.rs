@@ -12,7 +12,7 @@ where
     Val<'lt, Inner>: Holds<T = T>,
     T: Ty,
 {
-    let cx = val.cx();
+    let cx = val.cm();
     let val = val.to_underlying().as_basic_value_enum();
     Val::new(cx, val)
 }
@@ -80,7 +80,7 @@ where
 {
     type Output = Val<'lt, T>;
     fn neg(self) -> Self::Output {
-        let val = Val::new(self.cx(), self.to_underlying().as_basic_value_enum());
+        let val = Val::new(self.cm(), self.to_underlying().as_basic_value_enum());
         T::build_neg(val)
     }
 }
@@ -92,7 +92,7 @@ where
 {
     type Output = Val<'lt, T>;
     fn add(self, rhs: C<T::Assoc>) -> Self::Output {
-        let rhs = T::new_const(rhs.0, self.cx());
+        let rhs = T::new_const(rhs.0, self.cm());
         to_inner(self) + rhs
     }
 }
@@ -104,7 +104,7 @@ where
 {
     type Output = Val<'lt, T>;
     fn sub(self, rhs: C<T::Assoc>) -> Self::Output {
-        let rhs = T::new_const(rhs.0, self.cx());
+        let rhs = T::new_const(rhs.0, self.cm());
         to_inner(self) - rhs
     }
 }
@@ -116,7 +116,7 @@ where
 {
     type Output = Val<'lt, T>;
     fn mul(self, rhs: C<T::Assoc>) -> Self::Output {
-        let rhs = T::new_const(rhs.0, self.cx());
+        let rhs = T::new_const(rhs.0, self.cm());
         to_inner(self) * rhs
     }
 }
@@ -128,7 +128,7 @@ where
 {
     type Output = Val<'lt, T>;
     fn div(self, rhs: C<T::Assoc>) -> Self::Output {
-        let rhs = T::new_const(rhs.0, self.cx());
+        let rhs = T::new_const(rhs.0, self.cm());
         to_inner(self) / rhs
     }
 }
@@ -140,7 +140,7 @@ where
 {
     type Output = Val<'lt, T>;
     fn add(self, rhs: Val<'lt, Inner>) -> Self::Output {
-        let lhs = T::new_const(self.0, rhs.cx());
+        let lhs = T::new_const(self.0, rhs.cm());
         lhs + to_inner(rhs)
     }
 }
@@ -152,7 +152,7 @@ where
 {
     type Output = Val<'lt, T>;
     fn sub(self, rhs: Val<'lt, Inner>) -> Self::Output {
-        let lhs = T::new_const(self.0, rhs.cx());
+        let lhs = T::new_const(self.0, rhs.cm());
         lhs - to_inner(rhs)
     }
 }
@@ -164,7 +164,7 @@ where
 {
     type Output = Val<'lt, T>;
     fn mul(self, rhs: Val<'lt, Inner>) -> Self::Output {
-        let lhs = T::new_const(self.0, rhs.cx());
+        let lhs = T::new_const(self.0, rhs.cm());
         lhs * to_inner(rhs)
     }
 }
@@ -176,7 +176,7 @@ where
 {
     type Output = Val<'lt, T>;
     fn div(self, rhs: Val<'lt, Inner>) -> Self::Output {
-        let lhs = T::new_const(self.0, rhs.cx());
+        let lhs = T::new_const(self.0, rhs.cm());
         lhs / to_inner(rhs)
     }
 }
