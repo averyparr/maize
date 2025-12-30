@@ -6,7 +6,7 @@ use inkwell::{
     values::{BasicValueEnum, VectorValue},
 };
 
-use crate::ty::{ArithmeticTy, FromCtx, SignedInt, Ty, VecTy};
+use crate::ty::{ArithmeticTy, CodegenModule, FromCtx, Ty, VecTy};
 
 #[derive(Clone, Copy)]
 pub struct VF<T, const N: u32>(ContextRef<'static>, PhantomData<T>);
@@ -55,38 +55,43 @@ macro_rules! impl_traits_for_vec_ty {
             T: ArithmeticTy<Type = $inkwell_ty<'static>>,
         {
             fn try_emit_add(
-                builder: inkwell::builder::Builder<'static>,
+                cm: &CodegenModule<'static>,
                 lhs: Self::Value,
                 rhs: Self::Value,
             ) -> Result<Self::Value, inkwell::builder::BuilderError> {
-                builder.$add(lhs, rhs, "vec_float_add")
+                // Safety: We have two vecs so add is safe
+                unsafe { cm.cx().with_builder(|b| b.$add(lhs, rhs, "vec_float_add")) }
             }
             fn try_emit_sub(
-                builder: inkwell::builder::Builder<'static>,
+                cm: &CodegenModule<'static>,
                 lhs: Self::Value,
                 rhs: Self::Value,
             ) -> Result<Self::Value, inkwell::builder::BuilderError> {
-                builder.$sub(lhs, rhs, "vec_float_sub")
+                // Safety: We have two vecs so sub is safe
+                unsafe { cm.cx().with_builder(|b| b.$sub(lhs, rhs, "vec_float_sub")) }
             }
             fn try_emit_mul(
-                builder: inkwell::builder::Builder<'static>,
+                cm: &CodegenModule<'static>,
                 lhs: Self::Value,
                 rhs: Self::Value,
             ) -> Result<Self::Value, inkwell::builder::BuilderError> {
-                builder.$mul(lhs, rhs, "vec_float_mul")
+                // Safety: We have two vecs so mul is safe
+                unsafe { cm.cx().with_builder(|b| b.$mul(lhs, rhs, "vec_float_mul")) }
             }
             fn try_emit_div(
-                builder: inkwell::builder::Builder<'static>,
+                cm: &CodegenModule<'static>,
                 lhs: Self::Value,
                 rhs: Self::Value,
             ) -> Result<Self::Value, inkwell::builder::BuilderError> {
-                builder.$div(lhs, rhs, "vec_float_div")
+                // Safety: We have two vecs so div is safe
+                unsafe { cm.cx().with_builder(|b| b.$div(lhs, rhs, "vec_float_div")) }
             }
             fn try_emit_neg(
-                builder: inkwell::builder::Builder<'static>,
+                cm: &CodegenModule<'static>,
                 val: Self::Value,
             ) -> Result<Self::Value, inkwell::builder::BuilderError> {
-                builder.$neg(val, "vec_float_neg")
+                // Safety: We have a vec-val so neg is safe
+                unsafe { cm.cx().with_builder(|b| b.$neg(val, "vec_float_neg")) }
             }
         }
     };

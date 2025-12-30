@@ -6,7 +6,7 @@ use inkwell::{
     values::{BasicValueEnum, FloatValue, IntValue},
 };
 
-use crate::ty::{ArithmeticTy, FromCtx, Ty};
+use crate::ty::{ArithmeticTy, CodegenModule, FromCtx, Ty};
 
 macro_rules! float_impl {
     ($name: ident, $basic_ty: ident, $align: literal, $size: literal) => {
@@ -36,38 +36,58 @@ macro_rules! float_impl {
 
         impl ArithmeticTy for $name {
             fn try_emit_add(
-                builder: Builder<'static>,
+                cm: &CodegenModule<'static>,
                 lhs: Self::Value,
                 rhs: Self::Value,
             ) -> Result<Self::Value, BuilderError> {
-                builder.build_float_add(lhs, rhs, "add_float")
+                // Safety: We have two floats so an add should be safe
+                unsafe {
+                    cm.cx()
+                        .with_builder(|b| b.build_float_add(lhs, rhs, "add_float"))
+                }
             }
             fn try_emit_sub(
-                builder: Builder<'static>,
+                cm: &CodegenModule<'static>,
                 lhs: Self::Value,
                 rhs: Self::Value,
             ) -> Result<Self::Value, BuilderError> {
-                builder.build_float_sub(lhs, rhs, "sub_float")
+                // Safety: We have two floats so a sub should be safe
+                unsafe {
+                    cm.cx()
+                        .with_builder(|b| b.build_float_sub(lhs, rhs, "add_float"))
+                }
             }
             fn try_emit_mul(
-                builder: Builder<'static>,
+                cm: &CodegenModule<'static>,
                 lhs: Self::Value,
                 rhs: Self::Value,
             ) -> Result<Self::Value, BuilderError> {
-                builder.build_float_mul(lhs, rhs, "mul_float")
+                // Safety: We have two floats so a mul should be safe
+                unsafe {
+                    cm.cx()
+                        .with_builder(|b| b.build_float_mul(lhs, rhs, "add_float"))
+                }
             }
             fn try_emit_div(
-                builder: Builder<'static>,
+                cm: &CodegenModule<'static>,
                 lhs: Self::Value,
                 rhs: Self::Value,
             ) -> Result<Self::Value, BuilderError> {
-                builder.build_float_div(lhs, rhs, "div_float")
+                // Safety: We have two floats so a div should be safe
+                unsafe {
+                    cm.cx()
+                        .with_builder(|b| b.build_float_div(lhs, rhs, "add_float"))
+                }
             }
             fn try_emit_neg(
-                builder: Builder<'static>,
+                cm: &CodegenModule<'static>,
                 val: Self::Value,
             ) -> Result<Self::Value, BuilderError> {
-                builder.build_float_neg(val, "neg_float")
+                // Safety: We have a float so a neg should be safe
+                unsafe {
+                    cm.cx()
+                        .with_builder(|b| b.build_float_neg(val, "neg_float"))
+                }
             }
         }
     };

@@ -103,26 +103,7 @@ impl<'ctx> FnCodegen<'ctx> {
         builder.position_at_end(self.bb());
         f(builder)
     }
-    /// # Safety:
-    /// Giving access to the builder/instructions lets you emit very unsound code.
-    /// Calling this function safely is only possible if F/OnIns doesn't cause
-    /// the builder to emit unsafe code.
-    pub(crate) unsafe fn create_value<
-        F: FnOnce(Builder<'ctx>) -> U,
-        OnIns: FnOnce(InstructionValue<'ctx>),
-        U: BasicValue<'ctx>,
-    >(
-        &self,
-        f: F,
-        on_ins: OnIns,
-    ) -> U {
-        // SAFETY: User promised!
-        let val = unsafe { self.with_builder(f) };
-        if let Some(ins) = val.as_instruction_value() {
-            on_ins(ins);
-        }
-        val
-    }
+
     /// # Safety:
     /// It must be valid to load a type `pointee_ty` through `ptr`
     /// as-if a *const T
@@ -233,5 +214,22 @@ impl<'ctx> CodegenModule<'ctx> {
     }
     pub(crate) fn cx(&self) -> &FnCodegen<'ctx> {
         &self.codegen
+    }
+
+    pub(crate) unsafe fn create_value<
+        F: FnOnce(Builder<'ctx>) -> U,
+        OnIns: FnOnce(InstructionValue<'ctx>),
+        U: BasicValue<'ctx>,
+    >(
+        &self,
+        f: F,
+        on_ins: OnIns,
+    ) -> U {
+        // SAFETY: User promised!
+        let val = unsafe { self.cx().with_builder(f) };
+        if let Some(ins) = val.as_instruction_value() {
+            on_ins(ins);
+        }
+        val
     }
 }

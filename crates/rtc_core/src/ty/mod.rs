@@ -96,74 +96,57 @@ pub(crate) fn make_ins_fast_math(ins: InstructionValue<'_>) {
 
 pub trait ArithmeticTy: Ty {
     fn try_emit_add(
-        builder: Builder<'static>,
+        cm: &CodegenModule<'static>,
         lhs: Self::Value,
         rhs: Self::Value,
     ) -> Result<Self::Value, BuilderError>;
     fn try_emit_sub(
-        builder: Builder<'static>,
+        cm: &CodegenModule<'static>,
         lhs: Self::Value,
         rhs: Self::Value,
     ) -> Result<Self::Value, BuilderError>;
     fn try_emit_mul(
-        builder: Builder<'static>,
+        cm: &CodegenModule<'static>,
         lhs: Self::Value,
         rhs: Self::Value,
     ) -> Result<Self::Value, BuilderError>;
     fn try_emit_div(
-        builder: Builder<'static>,
+        cm: &CodegenModule<'static>,
         lhs: Self::Value,
         rhs: Self::Value,
     ) -> Result<Self::Value, BuilderError>;
     fn try_emit_neg(
-        builder: Builder<'static>,
+        cm: &CodegenModule<'static>,
         val: Self::Value,
     ) -> Result<Self::Value, BuilderError>;
 
     fn build_add<'lt>(lhs: Val<'lt, Self>, rhs: Val<'lt, Self>) -> Val<'lt, Self> {
         assert!(lhs.cm() == rhs.cm(), "Vals must agree on FnCodegen");
-        let new_val = |b| {
-            Self::try_emit_add(b, lhs.to_underlying(), rhs.to_underlying())
-                .expect("Unable to emit add")
-        };
-        // SAFETY: we have two ArithmeticTy so emitting an add is safe
-        let val = unsafe { lhs.cm().cx().create_value(new_val, make_ins_fast_math) };
+        let val = Self::try_emit_add(lhs.cm(), lhs.to_underlying(), rhs.to_underlying())
+            .expect("Could not emit add");
         Val::new(lhs.cm(), val.as_basic_value_enum())
     }
     fn build_sub<'lt>(lhs: Val<'lt, Self>, rhs: Val<'lt, Self>) -> Val<'lt, Self> {
         assert!(lhs.cm() == rhs.cm(), "Vals must agree on FnCodegen");
-        let new_val = |b| {
-            Self::try_emit_sub(b, lhs.to_underlying(), rhs.to_underlying())
-                .expect("Unable to emit sub")
-        };
-        // SAFETY: we have two ArithmeticTy so emitting a sub is safe
-        let val = unsafe { lhs.cm().cx().create_value(new_val, make_ins_fast_math) };
+        let val = Self::try_emit_sub(lhs.cm(), lhs.to_underlying(), rhs.to_underlying())
+            .expect("Could not emit sub");
         Val::new(lhs.cm(), val.as_basic_value_enum())
     }
     fn build_mul<'lt>(lhs: Val<'lt, Self>, rhs: Val<'lt, Self>) -> Val<'lt, Self> {
         assert!(lhs.cm() == rhs.cm(), "Vals must agree on FnCodegen");
-        let new_val = |b| {
-            Self::try_emit_mul(b, lhs.to_underlying(), rhs.to_underlying())
-                .expect("Unable to emit sub")
-        };
-        // SAFETY: we have two ArithmeticTy so emitting a mul is safe
-        let val = unsafe { lhs.cm().cx().create_value(new_val, make_ins_fast_math) };
+        let val = Self::try_emit_mul(lhs.cm(), lhs.to_underlying(), rhs.to_underlying())
+            .expect("Could not emit mul");
         Val::new(lhs.cm(), val.as_basic_value_enum())
     }
     fn build_div<'lt>(lhs: Val<'lt, Self>, rhs: Val<'lt, Self>) -> Val<'lt, Self> {
         assert!(lhs.cm() == rhs.cm(), "Vals must agree on FnCodegen");
-        let new_val = |b| {
-            Self::try_emit_div(b, lhs.to_underlying(), rhs.to_underlying())
-                .expect("Unable to emit sub")
-        };
-        // SAFETY: we have two ArithmeticTy so emitting a div is safe
-        let val = unsafe { lhs.cm().cx().create_value(new_val, make_ins_fast_math) };
+        let val = Self::try_emit_div(lhs.cm(), lhs.to_underlying(), rhs.to_underlying())
+            .expect("Could not emit div");
         Val::new(lhs.cm(), val.as_basic_value_enum())
     }
-    fn build_neg<'lt>(lhs: Val<'lt, Self>) -> Val<'lt, Self> {
-        let new_val = |b| Self::try_emit_neg(b, lhs.to_underlying()).expect("Unable to emit sub");
-        // SAFETY: we have a valid ArithmeticTy so emitting a neg is safe
-        let val = unsafe { lhs.cm().cx().create_value(new_val, make_ins_fast_math) };
-        Val::new(lhs.cm(), val.as_basic_value_enum())
+    fn build_neg<'lt>(val: Val<'lt, Self>) -> Val<'lt, Self> {
+        let cm = val.cm();
+        let val = Self::try_emit_neg(val.cm(), val.to_underlying()).expect("Could not emit neg");
+        Val::new(cm, val.as_basic_value_enum())
     }
 }
