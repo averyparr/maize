@@ -27,7 +27,7 @@ pub(crate) struct FnCodegen<'ctx> {
 
 /// Very important that it _not_ be clone or copy!
 #[derive(PartialEq)]
-pub(crate) struct CodegenModule<'ctx> {
+pub struct CodegenModule<'ctx> {
     codegen: FnCodegen<'ctx>,
     module: Module<'ctx>,
 }
@@ -44,7 +44,7 @@ impl<'ctx> FnCodegen<'ctx> {
             bb: Cell::new(bb),
         }
     }
-    pub(crate) fn ctx(&self) -> ContextRef<'ctx> {
+    pub fn ctx(&self) -> ContextRef<'ctx> {
         self.ctx
     }
     pub(crate) fn func(&self) -> FunctionValue<'ctx> {
@@ -212,7 +212,7 @@ impl<'ctx> CodegenModule<'ctx> {
     pub(crate) fn module(&self) -> &Module<'ctx> {
         &self.module
     }
-    pub(crate) fn cx(&self) -> &FnCodegen<'ctx> {
+    pub fn cx(&self) -> &FnCodegen<'ctx> {
         &self.codegen
     }
 

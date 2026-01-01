@@ -1,8 +1,6 @@
 use inkwell::AddressSpace;
-use inkwell::attributes::Attribute;
 use inkwell::attributes::AttributeLoc;
-use inkwell::types::AnyType;
-use inkwell::types::{BasicMetadataTypeEnum, BasicType, FunctionType};
+use inkwell::types::{BasicMetadataTypeEnum, BasicType};
 use inkwell::values::InstructionValue;
 use inkwell::{context::ContextRef, module::Module, types::BasicTypeEnum};
 
@@ -10,8 +8,9 @@ use crate::codegen::CodegenModule;
 use crate::codegen::FnCodegen;
 use crate::codegen::context::create_context;
 use crate::codegen::pre_jit_func::PreJitFunc;
+use crate::traits::constants::AcceptsConstants;
 use crate::ty::{FnReturnTy, Ty, Void};
-use crate::val::{AcceptsConstants, Holds, Val};
+use crate::val::Val;
 
 const UPPER_BOUND_ON_PARAMS: usize = 16;
 
@@ -60,7 +59,7 @@ where
         // SAFETY: We are returning something of the correct type so return should be unconditionally valid
         let _: InstructionValue<'_> = unsafe {
             self.cx_ref()
-                .with_builder(|b| b.build_return(Some(&retval.to_underlying())))
+                .with_builder(|b| b.build_return(Some(&retval.val())))
         }
         .expect("Should be possible to return value!");
         PreJitFunc::new(self)

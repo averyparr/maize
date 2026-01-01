@@ -1,57 +1,16 @@
-use inkwell::values::BasicValue;
-
 use crate::{
-    codegen::{CodegenModule, FnCodegen},
-    ty::Ty,
+    traits::{HasCXVal, holder::Holds},
     val::Val,
 };
 
-use super::S;
-
-pub trait Holds {
-    type T: Ty;
-    fn to_underlying(&self) -> <Self::T as Ty>::Value;
-    fn to_underlying_ty(&self) -> <Self::T as Ty>::Type;
-    fn get_ty(&self) -> Self::T;
-    fn held_cm(&self) -> &CodegenModule<'static>;
-}
-
-impl<'lt, T, Holder> Holds for &'lt Holder
+impl<'lt, Holder> Val<'lt, Holder>
 where
-    Holder: Holds<T = T>,
-    T: Ty,
+    Holder: Holds,
 {
-    type T = T;
-    fn to_underlying(&self) -> <Self::T as Ty>::Value {
-        <Holder as Holds>::to_underlying(self)
-    }
-    fn to_underlying_ty(&self) -> <Self::T as Ty>::Type {
-        <Holder as Holds>::to_underlying_ty(self)
-    }
-    fn get_ty(&self) -> Self::T {
-        <Holder as Holds>::get_ty(self)
-    }
-    fn held_cm(&self) -> &CodegenModule<'static> {
-        <Holder as Holds>::held_cm(self)
-    }
-}
-
-impl<'lt, T, Holder> Holds for &'lt mut Holder
-where
-    Holder: Holds<T = T>,
-    T: Ty,
-{
-    type T = T;
-    fn to_underlying(&self) -> <Self::T as Ty>::Value {
-        <Holder as Holds>::to_underlying(self)
-    }
-    fn to_underlying_ty(&self) -> <Self::T as Ty>::Type {
-        <Holder as Holds>::to_underlying_ty(self)
-    }
-    fn get_ty(&self) -> Self::T {
-        <Holder as Holds>::get_ty(self)
-    }
-    fn held_cm(&self) -> &CodegenModule<'static> {
-        <Holder as Holds>::held_cm(self)
+    pub fn get(self) -> Val<'lt, Holder::T> {
+        let held_value = Holder::extract_value(self.cx(), self.val());
+        // Safety: We just extracted the held value, so
+        // it should be of the correct type.
+        unsafe { Val::new(self.cm(), held_value) }
     }
 }

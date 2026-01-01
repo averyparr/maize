@@ -1,5 +1,5 @@
 pub mod codegen;
-pub mod primitives;
+pub mod traits;
 pub mod ty;
 pub mod val;
 

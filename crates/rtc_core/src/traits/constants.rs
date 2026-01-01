@@ -1,10 +1,6 @@
-use inkwell::{context::ContextRef, values::BasicValue};
+use inkwell::values::BasicValue;
 
-use crate::{
-    codegen::{CodegenModule, FnCodegen},
-    ty::{Ty, primitive::*},
-    val::Val,
-};
+use crate::{codegen::CodegenModule, ty::primitive::*, val::Val};
 
 pub struct C<T>(pub T);
 
@@ -31,9 +27,9 @@ macro_rules! derive_constant {
                     .cx()
                     .ctx()
                     .$ty_fn()
-                    .$const_ty_fn((c as _)$(, $rest_args)?)
-                    .as_basic_value_enum();
-                Val::new(cx, val)
+                    .$const_ty_fn((c as _)$(, $rest_args)?);
+                // SAFETY: we just created a constant of this type
+                unsafe {Val::new(cx, val)}
             }
             const ONE: Self::Assoc = 1 as _;
             const ZERO: Self::Assoc = 0 as _;

@@ -6,21 +6,21 @@ use crate::{
     val::{Holds, Val},
 };
 
-pub trait FloorCeilableType: Ty {
+pub trait HasFloorCeil: Ty {
     const FLOOR: &str;
     const FLOOR_FTZ: Option<&str>;
     const CEIL: &str;
     const CEIL_FTZ: Option<&str>;
 }
 
-impl FloorCeilableType for F32 {
+impl HasFloorCeil for F32 {
     const FLOOR: &str = "llvm.nvvm.floor.f";
     const FLOOR_FTZ: Option<&str> = Some("llvm.nvvm.floor.ftz.f");
     const CEIL: &str = "llvm.nvvm.ceil.f";
     const CEIL_FTZ: Option<&str> = Some("llvm.nvvm.ceil.ftz.f");
 }
 
-impl FloorCeilableType for F64 {
+impl HasFloorCeil for F64 {
     const FLOOR: &str = "llvm.nvvm.floor.d";
     const FLOOR_FTZ: Option<&str> = None;
     const CEIL: &str = "llvm.nvvm.ceil.d";
@@ -28,46 +28,29 @@ impl FloorCeilableType for F64 {
 }
 
 impl<ArgsT, Ret> Func<ArgsT, Ret> {
-    fn call_floorceil_intrinsic<Float: FloorCeilableType>(
-        &self,
-        val: Val<'_, Float>,
-        intrinsic_name: &str,
-    ) -> Val<'_, Float> {
-        let ty = Float::new(self.cx_ref().ctx()).basic_ty();
-        let fn_ty = ty.fn_type(&[ty.as_basic_type_enum().into()], false);
-        let fn_val = self.mod_ref().add_function(intrinsic_name, fn_ty, None);
+    pub fn floor<T: HasFloorCeil>(&self, val: Val<'_, T>) -> Val<'_, T> {
+        // Safety: `T` `HasFloorCeil` intrinsic
+        unsafe { self.cm_ref().call_unary_function(val, T::FLOOR) }
+    }
 
-        let call_site = unsafe {
-            self.cx_ref().with_builder(|b| {
-                b.build_call(
-                    fn_val,
-                    &[val.to_underlying().as_basic_value_enum().into()],
-                    "floorceil",
-                )
-            })
+    pub fn floor_ftz<T: HasFloorCeil>(&self, val: Val<'_, T>) -> Val<'_, T> {
+        // Safety: `T` `HasFloorCeil` intrinsic
+        unsafe {
+            self.cm_ref()
+                .call_unary_function(val, T::FLOOR_FTZ.unwrap_or(T::FLOOR))
         }
-        .expect("Could not generate floor/ceil call");
-
-        let ret_val = call_site
-            .try_as_basic_value()
-            .expect_basic("Must be a basic value!");
-
-        Val::new(self.cm_ref(), ret_val)
     }
 
-    pub fn floor<Float: FloorCeilableType>(&self, val: Val<'_, Float>) -> Val<'_, Float> {
-        self.call_floorceil_intrinsic(val, Float::FLOOR)
+    pub fn ceil<T: HasFloorCeil>(&self, val: Val<'_, T>) -> Val<'_, T> {
+        // Safety: `T` `HasFloorCeil` intrinsic
+        unsafe { self.cm_ref().call_unary_function(val, T::CEIL) }
     }
 
-    pub fn floor_ftz<Float: FloorCeilableType>(&self, val: Val<'_, Float>) -> Val<'_, Float> {
-        self.call_floorceil_intrinsic(val, Float::FLOOR_FTZ.unwrap_or(Float::FLOOR))
-    }
-
-    pub fn ceil<Float: FloorCeilableType>(&self, val: Val<'_, Float>) -> Val<'_, Float> {
-        self.call_floorceil_intrinsic(val, Float::CEIL)
-    }
-
-    pub fn ceil_ftz<Float: FloorCeilableType>(&self, val: Val<'_, Float>) -> Val<'_, Float> {
-        self.call_floorceil_intrinsic(val, Float::CEIL_FTZ.unwrap_or(Float::CEIL))
+    pub fn ceil_ftz<T: HasFloorCeil>(&self, val: Val<'_, T>) -> Val<'_, T> {
+        // Safety: `T` `HasFloorCeil` intrinsic
+        unsafe {
+            self.cm_ref()
+                .call_unary_function(val, T::CEIL_FTZ.unwrap_or(T::CEIL))
+        }
     }
 }

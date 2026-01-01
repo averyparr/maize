@@ -1,20 +1,17 @@
-use std::{
-    marker::PhantomData,
-    ops::{Deref, DerefMut},
-};
+use std::marker::PhantomData;
 
 use inkwell::{
     AddressSpace,
     attributes::{Attribute, AttributeLoc},
     context::ContextRef,
     types::PointerType,
-    values::{BasicValue, PointerValue},
+    values::PointerValue,
 };
 
 use crate::{
-    codegen::CodegenModule,
-    ty::{FromCtx, Ty},
-    val::{Holds, Val},
+    traits::ptr::{MutTy, PtrTy, RefTy},
+    ty::{CodegenModule, FromCtx, Ty},
+    val::Val,
 };
 
 enum PTXAddressSpaces {
@@ -27,15 +24,11 @@ enum PTXAddressSpaces {
     Cluster = 7,
 }
 
-pub trait PtrTy: Ty {
-    fn new_in(ctx: ContextRef<'static>, addrspace: AddressSpace) -> Self;
-}
-
 #[derive(Clone, Copy)]
 pub struct P<T>(ContextRef<'static>, AddressSpace, PhantomData<*mut T>);
 #[derive(Clone, Copy)]
-pub struct R<'r, T>(ContextRef<'static>, AddressSpace, PhantomData<&'r T>);
-pub struct M<'m, T>(ContextRef<'static>, AddressSpace, PhantomData<&'m mut T>);
+pub struct R<T>(ContextRef<'static>, AddressSpace, PhantomData<T>);
+pub struct M<T>(ContextRef<'static>, AddressSpace, PhantomData<T>);
 
 #[derive(Clone, Copy)]
 pub struct Global<Ptr>(Ptr);
@@ -61,7 +54,7 @@ macro_rules! addrspace_ptr {
             Ptr: PtrTy,
         {
             const SIZE: usize = std::mem::size_of::<*mut ()>();
-            const ALIGN: u32 = std::mem::align_of::<*mut ()>() as _;
+            const ALIGN: usize = std::mem::align_of::<*mut ()>();
 
             fn ctx(&self) -> ContextRef<'static> {
                 self.0.ctx()
@@ -78,12 +71,29 @@ macro_rules! addrspace_ptr {
 
         impl<'lt, Ptr> Val<'lt, $name<Ptr>>
         where
-            Ptr: Ty,
+            Ptr: PtrTy,
         {
             pub fn to_inner(&'_ self) -> Val<'lt, Ptr> {
-                Val::new(self.cm(), self.get_val())
+                // SAFETY: This is just a matter of decaying the name
+                // of the type
+                unsafe { Val::new(self.cm(), self.to_underlying()) }
             }
         }
+
+        impl<'lt, Ptr> PtrTy for $name<Ptr>
+        where
+            Ptr: PtrTy,
+        {
+            type Pointee = Ptr::Pointee;
+            fn new_in(ctx: ContextRef<'static>, addrspace: AddressSpace) -> Self {
+                let my_addrspace = AddressSpace::from(PTXAddressSpaces::$addrspace as u16);
+                assert_eq!(addrspace, my_addrspace);
+                Self::new(ctx)
+            }
+        }
+
+        impl<'lt, Ptr> RefTy for $name<Ptr> where Ptr: RefTy {}
+        impl<'lt, Ptr> MutTy for $name<Ptr> where Ptr: MutTy {}
     };
 }
 
@@ -91,21 +101,22 @@ addrspace_ptr!(Global, Global);
 addrspace_ptr!(Shared, Shared);
 
 macro_rules! derive_ptr_type {
-    ($name: ident$(, $lt: tt)?) => {
-        impl<$($lt,)?T> PtrTy for $name<$($lt,)?T> where T: Ty {
+    ($name: ident$(: $mt: tt mut)?$(, $rf: tt)?) => {
+        impl<T> PtrTy for $name<$($mt mut)?$($rf)?T> where T: Ty {
+            type Pointee = T;
             fn new_in(ctx: ContextRef<'static>, addrspace: AddressSpace) -> Self {
                 Self(ctx, addrspace, PhantomData)
             }
         }
 
-        impl<$($lt,)?T> FromCtx for $name<$($lt,)?T> where T: Ty {
+        impl<T> FromCtx for $name<$($mt mut)?$($rf)?T> where T: Ty {
             fn new(ctx: ContextRef<'static>) -> Self {
                 Self::new_in(ctx, AddressSpace::default())
             }
         }
 
-        impl<$($lt,)?T> Ty for $name<$($lt,)?T> where T: Ty {
-            const ALIGN: u32 = ::core::mem::align_of::<&()>() as _;
+        impl<T> Ty for $name<$($mt mut)?$($rf)?T> where T: Ty {
+            const ALIGN: usize = ::core::mem::align_of::<&()>();
             const SIZE: usize = ::core::mem::size_of::<&()>();
 
             fn ctx(&self) -> ContextRef<'static> {
@@ -140,48 +151,54 @@ macro_rules! derive_ptr_type {
                     .func()
                     .get_nth_param(at_idx)
                     .expect("Param number mismatch!");
-                Val::new(cm, val)
+                // SAFETY: We just got the value from a newly created
+                // function which should error if it passes the wrong value.
+                unsafe {Val::new(cm, Self::get_value(val))}
             }
         }
     };
 }
 
 derive_ptr_type!(P);
-derive_ptr_type!(R, 'r);
-derive_ptr_type!(M, 'm);
+derive_ptr_type!(R,&);
+derive_ptr_type!(M:&mut);
 
 impl<T> P<T>
 where
     T: Ty,
 {
-    pub fn ref_ty<'r>(&self) -> R<'r, T> {
+    pub fn ref_ty(&self) -> R<&T> {
         R::new(self.ctx())
     }
-    pub fn mut_ty<'m>(&self) -> M<'m, T> {
+    pub fn mut_ty(&self) -> M<&mut T> {
         M::new(self.ctx())
     }
 }
 
-impl<'r, T> R<'r, T>
+impl<T> R<&T>
 where
     T: Ty,
 {
     pub fn ptr_ty(&self) -> P<T> {
         P::new(self.ctx())
     }
-    pub fn mut_ty<'m>(&self) -> M<'m, T> {
+    pub fn mut_ty<'m>(&self) -> M<&mut T> {
         M::new(self.ctx())
     }
 }
 
-impl<'m, T> M<'m, T>
+impl<T> M<&mut T>
 where
     T: Ty,
 {
-    pub fn ref_ty<'r>(&self) -> R<'r, T> {
+    pub fn ref_ty<'r>(&self) -> R<&T> {
         R::new(self.ctx())
     }
     pub fn ptr_ty(&self) -> P<T> {
         P::new(self.ctx())
     }
 }
+
+impl<T> RefTy for R<&T> where T: Ty {}
+impl<T> RefTy for M<&mut T> where T: Ty {}
+impl<T> MutTy for M<&mut T> where T: Ty {}

@@ -1,29 +1,25 @@
-mod bool;
 pub mod primitive;
-pub mod primitive_vec;
-mod ptr;
-mod vec;
-mod void;
+pub mod ptr;
+pub mod vec;
+pub mod void;
 
 use std::u32;
 
-pub use bool::Bool;
-pub use primitive::*;
-pub use ptr::*;
 pub use vec::*;
 pub use void::Void;
 
 use inkwell::{
     attributes::{Attribute, AttributeLoc},
-    builder::{Builder, BuilderError},
+    builder::BuilderError,
     context::ContextRef,
-    types::{BasicMetadataTypeEnum, BasicType, FloatMathType, FunctionType},
+    types::{BasicMetadataTypeEnum, BasicType, FloatMathType, FunctionType, VectorType},
     values::{BasicValue, BasicValueEnum, FloatMathValue, InstructionValue},
 };
 
 use crate::{
-    codegen::{CodegenModule, FnCodegen},
-    val::{Holds, Val},
+    codegen::CodegenModule,
+    ty::ptr::{M, P, R},
+    val::Val,
 };
 
 pub trait FromCtx {
@@ -32,7 +28,7 @@ pub trait FromCtx {
 
 pub trait Ty: FromCtx + Sized {
     const SIZE: usize;
-    const ALIGN: u32;
+    const ALIGN: usize;
 
     fn ctx(&self) -> ContextRef<'static>;
     type Type: BasicType<'static>;
@@ -44,10 +40,10 @@ pub trait Ty: FromCtx + Sized {
     fn ptr_ty(&self) -> P<Self> {
         P::new(self.ctx())
     }
-    fn ref_ty(&self) -> R<Self> {
+    fn ref_ty(&self) -> R<&Self> {
         R::new(self.ctx())
     }
-    fn mut_ty(&self) -> M<Self> {
+    fn mut_ty(&self) -> M<&mut Self> {
         M::new(self.ctx())
     }
     fn get_args_at_idx<'lt>(cm: &'lt CodegenModule<'static>, at_idx: u32) -> Val<'lt, Self> {
@@ -62,13 +58,16 @@ pub trait Ty: FromCtx + Sized {
             .func()
             .get_nth_param(at_idx)
             .expect("Param number mismatch!");
-        Val::new(cm, val)
+        // SAFETY: We just got this from a (hopefully?) strongly
+        // typed function and so this should be a valid cast.
+        unsafe { Val::new(cm, Self::get_value(val)) }
     }
 }
 
-pub trait VecTy: Ty {
+pub trait VecTy: Ty<Type = VectorType<'static>> {
     const N: usize;
     type ElemT: Ty;
+    type LenParametrized<const N: u32>: VecTy<ElemT = Self::ElemT>;
 }
 
 pub trait FnReturnTy: FromCtx {
@@ -91,7 +90,7 @@ pub trait FloatTy: Ty {
 
 pub(crate) fn make_ins_fast_math(ins: InstructionValue<'_>) {
     const ALL_FAST_MATH: u32 = 0b1111111;
-    // ins.set_fast_math_flags(ALL_FAST_MATH)
+    ins.set_fast_math_flags(ALL_FAST_MATH)
 }
 
 pub trait ArithmeticTy: Ty {
@@ -124,29 +123,42 @@ pub trait ArithmeticTy: Ty {
         assert!(lhs.cm() == rhs.cm(), "Vals must agree on FnCodegen");
         let val = Self::try_emit_add(lhs.cm(), lhs.to_underlying(), rhs.to_underlying())
             .expect("Could not emit add");
-        Val::new(lhs.cm(), val.as_basic_value_enum())
+        // SAFETY: We have just built this from an add
+        // of two values
+        unsafe { Val::new(lhs.cm(), val) }
     }
     fn build_sub<'lt>(lhs: Val<'lt, Self>, rhs: Val<'lt, Self>) -> Val<'lt, Self> {
         assert!(lhs.cm() == rhs.cm(), "Vals must agree on FnCodegen");
         let val = Self::try_emit_sub(lhs.cm(), lhs.to_underlying(), rhs.to_underlying())
             .expect("Could not emit sub");
-        Val::new(lhs.cm(), val.as_basic_value_enum())
+        // SAFETY: We have just built this from a sub
+        // of two values
+        unsafe { Val::new(lhs.cm(), val) }
     }
     fn build_mul<'lt>(lhs: Val<'lt, Self>, rhs: Val<'lt, Self>) -> Val<'lt, Self> {
         assert!(lhs.cm() == rhs.cm(), "Vals must agree on FnCodegen");
         let val = Self::try_emit_mul(lhs.cm(), lhs.to_underlying(), rhs.to_underlying())
             .expect("Could not emit mul");
-        Val::new(lhs.cm(), val.as_basic_value_enum())
+        // SAFETY: We have just built this from a mul
+        // of two values
+        unsafe { Val::new(lhs.cm(), val) }
     }
     fn build_div<'lt>(lhs: Val<'lt, Self>, rhs: Val<'lt, Self>) -> Val<'lt, Self> {
         assert!(lhs.cm() == rhs.cm(), "Vals must agree on FnCodegen");
         let val = Self::try_emit_div(lhs.cm(), lhs.to_underlying(), rhs.to_underlying())
             .expect("Could not emit div");
-        Val::new(lhs.cm(), val.as_basic_value_enum())
+        // SAFETY: We have just built this from a div
+        // of two values
+        unsafe { Val::new(lhs.cm(), val) }
     }
-    fn build_neg<'lt>(val: Val<'lt, Self>) -> Val<'lt, Self> {
+    fn build_neg<'lt>(val: Val<'lt, Self>) -> Val<'lt, Self>
+    where
+        Self: 'lt,
+    {
         let cm = val.cm();
-        let val = Self::try_emit_neg(val.cm(), val.to_underlying()).expect("Could not emit neg");
-        Val::new(cm, val.as_basic_value_enum())
+        let neg_val =
+            Self::try_emit_neg(val.cm(), val.to_underlying()).expect("Could not emit neg");
+        // SAFETY: We have just built this from a neg of a value
+        unsafe { Val::new(cm, neg_val) }
     }
 }
