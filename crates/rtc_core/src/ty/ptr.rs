@@ -14,6 +14,7 @@ use crate::{
     val::Val,
 };
 
+#[expect(unused, reason = "Please remove once gone")]
 enum PTXAddressSpaces {
     Generic = 0,
     Global = 1,

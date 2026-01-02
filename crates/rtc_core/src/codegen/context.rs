@@ -1,9 +1,4 @@
-use std::cell::Cell;
-
-use inkwell::{
-    basic_block::BasicBlock,
-    context::{Context, ContextRef},
-};
+use inkwell::context::{Context, ContextRef};
 
 pub fn create_context() -> ContextRef<'static> {
     thread_local! {

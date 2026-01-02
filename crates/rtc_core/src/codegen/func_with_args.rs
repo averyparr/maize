@@ -14,6 +14,7 @@ use crate::val::Val;
 
 const UPPER_BOUND_ON_PARAMS: usize = 16;
 
+#[expect(dead_code, reason = "Please remove if uneeded")]
 pub struct Func<ArgsT, Ret = Void> {
     ret_ty: Ret,
     arg_types: ArgsT,
@@ -21,11 +22,8 @@ pub struct Func<ArgsT, Ret = Void> {
 }
 
 impl<ArgsT, Ret> Func<ArgsT, Ret> {
-    pub fn extract_module_codegen(self) -> (Module<'static>, FnCodegen<'static>) {
+    pub(crate) fn extract_module_codegen(self) -> (Module<'static>, FnCodegen<'static>) {
         self.codegen_module.extract_module_codegen()
-    }
-    pub(crate) fn mod_ref(&self) -> &Module<'static> {
-        self.codegen_module.module()
     }
     pub(crate) fn cx_ref(&self) -> &FnCodegen<'static> {
         self.codegen_module.cx()
@@ -132,15 +130,6 @@ pub trait IntoFuncArgs {
     fn basic_val_iter<'lt>(
         args: Self::ArgValues<'lt>,
     ) -> impl ExactSizeIterator<Item = BasicValueEnum<'static>>;
-}
-
-macro_rules! count {
-    () => {
-        0
-    };
-    ($first: ident $(, $rest: ident)*) => {
-        1 + count!($($rest),*)
-    };
 }
 
 macro_rules! impl_into_func_args {

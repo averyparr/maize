@@ -1,4 +1,4 @@
-use inkwell::values::{VectorBaseValue, VectorValue};
+use inkwell::values::VectorValue;
 
 use crate::{
     traits::{HasCXVal, vectorizable::VectorizableTy},

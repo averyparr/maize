@@ -5,10 +5,7 @@ use crate::{
         holder::Holds,
         ptr::{MutTy, PtrTy, RefTy},
     },
-    ty::{
-        Ty,
-        ptr::{M, P, R},
-    },
+    ty::ptr::{P, R},
     val::Val,
 };
 

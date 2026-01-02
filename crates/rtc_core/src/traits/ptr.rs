@@ -3,7 +3,6 @@ use inkwell::{AddressSpace, context::ContextRef, values::InstructionValue};
 use crate::{
     traits::HasCXVal,
     ty::{FromCtx, Ty},
-    val::Val,
 };
 
 pub trait PtrTy: Ty {

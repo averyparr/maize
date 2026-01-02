@@ -1,5 +1,3 @@
-use inkwell::{types::BasicType, values::BasicValue};
-
 use crate::{
     codegen::func_with_args::Func,
     ty::{Ty, primitive::F32},

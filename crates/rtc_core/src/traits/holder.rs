@@ -4,6 +4,10 @@ use crate::{codegen::FnCodegen, ty::Ty, val::S};
 
 pub trait Holds {
     type T: Ty;
+    #[expect(
+        private_interfaces,
+        reason = "We intend to only make this available through our API"
+    )]
     fn extract_value(
         cx: &FnCodegen<'static>,
         val: BasicValueEnum<'static>,
@@ -15,8 +19,12 @@ where
     T: Ty,
 {
     type T = Self;
+    #[expect(
+        private_interfaces,
+        reason = "We intend to only make this available through our API"
+    )]
     fn extract_value(
-        cx: &FnCodegen<'static>,
+        _: &FnCodegen<'static>,
         val: BasicValueEnum<'static>,
     ) -> <Self::T as Ty>::Value {
         Self::get_value(val)
@@ -28,6 +36,10 @@ where
     T: Ty,
 {
     type T = T;
+    #[expect(
+        private_interfaces,
+        reason = "We intend to only make this available through our API"
+    )]
     fn extract_value(
         cx: &FnCodegen<'static>,
         val: BasicValueEnum<'static>,

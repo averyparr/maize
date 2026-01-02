@@ -10,11 +10,19 @@ pub mod stores;
 pub mod vectorizable;
 
 pub trait HasCXVal {
+    #[expect(
+        private_interfaces,
+        reason = "We intend to only make this available through our API"
+    )]
     fn cx(&self) -> &FnCodegen<'static>;
     fn bval(&self) -> BasicValueEnum<'static>;
 }
 
 impl<'lt, T> HasCXVal for Val<'lt, T> {
+    #[expect(
+        private_interfaces,
+        reason = "We intend to only make this available through our API"
+    )]
     fn cx(&self) -> &FnCodegen<'static> {
         self.cm().cx()
     }
@@ -24,6 +32,10 @@ impl<'lt, T> HasCXVal for Val<'lt, T> {
 }
 
 impl<'lt, T> HasCXVal for &Val<'lt, T> {
+    #[expect(
+        private_interfaces,
+        reason = "We intend to only make this available through our API"
+    )]
     fn cx(&self) -> &FnCodegen<'static> {
         self.cm().cx()
     }
@@ -33,6 +45,10 @@ impl<'lt, T> HasCXVal for &Val<'lt, T> {
 }
 
 impl<'lt, T> HasCXVal for &mut Val<'lt, T> {
+    #[expect(
+        private_interfaces,
+        reason = "We intend to only make this available through our API"
+    )]
     fn cx(&self) -> &FnCodegen<'static> {
         self.cm().cx()
     }

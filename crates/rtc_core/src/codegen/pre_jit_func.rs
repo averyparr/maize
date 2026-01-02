@@ -6,19 +6,17 @@ use inkwell::{
     targets::{CodeModel, FileType, InitializationConfig, Target, TargetTriple},
 };
 
-use crate::codegen::{FnCodegen, func_with_args::Func, target::TargetMachine};
+use crate::codegen::{func_with_args::Func, target::TargetMachine};
 
 pub struct PreJitFunc<ArgsT, Ret> {
-    codegen: FnCodegen<'static>,
     module: Module<'static>,
     phantom: PhantomData<(ArgsT, Ret)>,
 }
 
 impl<ArgsT, Ret> PreJitFunc<ArgsT, Ret> {
     pub fn new(func: Func<ArgsT, Ret>) -> Self {
-        let (module, codegen) = func.extract_module_codegen();
+        let (module, _) = func.extract_module_codegen();
         Self {
-            codegen,
             module,
             phantom: PhantomData,
         }

@@ -1,6 +1,6 @@
 use inkwell::{
     types::BasicType,
-    values::{BasicMetadataValueEnum, BasicValue, CallSiteValue},
+    values::{BasicValue, CallSiteValue},
 };
 
 use crate::{

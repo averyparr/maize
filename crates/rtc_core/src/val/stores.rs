@@ -1,5 +1,5 @@
 use crate::{
-    traits::{holder::Holds, indexes::IndexableTy, stores::Stores},
+    traits::{indexes::IndexableTy, stores::Stores},
     ty::ptr::{M, R},
     val::Val,
 };

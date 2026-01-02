@@ -1,7 +1,6 @@
 use std::ops::Range;
 
-use crate::{traits::{indexes::IndexableTy, stores::Stores, vectorizable::VectorizableTy}, val::{S, Val}};
-use crate::ty::FromCtx;
+use crate::{traits::{indexes::IndexableTy, vectorizable::VectorizableTy}, val::{S, Val}};
 
 impl<'lt, VecT> Val<'lt, VecT>
 where

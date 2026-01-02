@@ -8,11 +8,10 @@ use std::cell::Cell;
 
 use inkwell::{
     basic_block::BasicBlock,
-    builder::{Builder, BuilderError},
+    builder::Builder,
     context::ContextRef,
     module::Module,
-    types::BasicType,
-    values::{BasicValue, BasicValueEnum, FunctionValue, InstructionValue, PointerValue},
+    values::{BasicValueEnum, FunctionValue, PointerValue},
 };
 
 use crate::codegen::context::create_context;
@@ -69,6 +68,7 @@ impl<'ctx> FnCodegen<'ctx> {
             .expect("Should have only utc-8 basic blocks")
             .to_owned()
     }
+    #[expect(dead_code, reason = "Please remove if found later")]
     pub(crate) fn with_branch(&self, if_true: impl FnOnce(), if_false: impl FnOnce()) {
         let mut curr_name = self.curr_bb_name();
         let true_block = self.new_bb_with_suffix(&mut curr_name, "_true");
@@ -104,95 +104,6 @@ impl<'ctx> FnCodegen<'ctx> {
         f(builder)
     }
 
-    /// # Safety:
-    /// It must be valid to load a type `pointee_ty` through `ptr`
-    /// as-if a *const T
-    pub(crate) unsafe fn try_load<'a>(
-        &self,
-        pointee_ty: impl BasicType<'ctx>,
-        ptr: PointerValue<'ctx>,
-        align: Option<u32>,
-        for_ins: Option<&dyn Fn(InstructionValue<'a>)>,
-    ) -> Result<BasicValueEnum<'ctx>, BuilderError>
-    where
-        'ctx: 'a,
-    {
-        // SAFETY: It's valid to emit a load
-        unsafe { self.with_builder(move |b| b.build_load(pointee_ty, ptr, "try_ld")) }.map(|v| {
-            if let Some(ins) = v.as_instruction_value() {
-                if let Some(align) = align {
-                    ins.set_alignment(align)
-                        .expect("Cannot set load alignment!");
-                }
-                if let Some(for_ins) = for_ins {
-                    for_ins(ins)
-                }
-            }
-            v
-        })
-    }
-    /// # Safety:
-    /// It must be valid to load a type `pointee_ty` through `ptr`
-    /// as-if a *const T
-    pub(crate) unsafe fn load<'a>(
-        &self,
-        pointee_ty: impl BasicType<'ctx>,
-        ptr: PointerValue<'ctx>,
-        align: Option<u32>,
-        for_ins: Option<&dyn Fn(InstructionValue<'a>)>,
-    ) -> BasicValueEnum<'ctx>
-    where
-        'ctx: 'a,
-    {
-        unsafe {
-            // SAFETY: Identical precondition.
-            self.try_load(pointee_ty, ptr, align, for_ins)
-                .expect("Unable to generate load")
-        }
-    }
-    /// # Safety:
-    /// It must be valid to write a value `value` through `ptr`
-    /// as-if a *mut T
-    pub(crate) unsafe fn try_store<'a>(
-        &self,
-        ptr: PointerValue<'ctx>,
-        value: impl BasicValue<'ctx>,
-        align: Option<u32>,
-        for_ins: Option<&dyn Fn(InstructionValue<'a>)>,
-    ) -> Result<(), BuilderError>
-    where
-        'ctx: 'a,
-    {
-        // SAFETY: It's valid to emit a store
-        let ret = unsafe { self.with_builder(|b| b.build_store(ptr, value)) };
-
-        ret.map(|i| {
-            if let Some(align) = align {
-                i.set_alignment(align);
-            }
-            if let Some(for_ins) = for_ins {
-                for_ins(i);
-            }
-        })
-    }
-    /// # Safety:
-    /// It must be valid to write a value `value` through `ptr`
-    /// as-if a *mut T
-    pub(crate) unsafe fn store<'a>(
-        &self,
-        ptr: PointerValue<'ctx>,
-        value: impl BasicValue<'ctx>,
-        align: Option<u32>,
-        for_ins: Option<&dyn Fn(InstructionValue<'a>)>,
-    ) where
-        'ctx: 'a,
-    {
-        // SAFETY: identical precondition.
-        unsafe {
-            self.try_store(ptr, value, align, for_ins)
-                .expect("Cannot generate store")
-        }
-    }
     pub(crate) fn build_alloca(&self, value: BasicValueEnum<'ctx>) -> PointerValue<'ctx> {
         // SAFETY: Unconditionally safe to create allocas
         unsafe {
@@ -212,24 +123,7 @@ impl<'ctx> CodegenModule<'ctx> {
     pub(crate) fn module(&self) -> &Module<'ctx> {
         &self.module
     }
-    pub fn cx(&self) -> &FnCodegen<'ctx> {
+    pub(crate) fn cx(&self) -> &FnCodegen<'ctx> {
         &self.codegen
-    }
-
-    pub(crate) unsafe fn create_value<
-        F: FnOnce(Builder<'ctx>) -> U,
-        OnIns: FnOnce(InstructionValue<'ctx>),
-        U: BasicValue<'ctx>,
-    >(
-        &self,
-        f: F,
-        on_ins: OnIns,
-    ) -> U {
-        // SAFETY: User promised!
-        let val = unsafe { self.cx().with_builder(f) };
-        if let Some(ins) = val.as_instruction_value() {
-            on_ins(ins);
-        }
-        val
     }
 }

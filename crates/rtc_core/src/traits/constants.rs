@@ -1,5 +1,3 @@
-use inkwell::values::BasicValue;
-
 use crate::{codegen::CodegenModule, ty::primitive::*, val::Val};
 
 pub struct C<T>(pub T);

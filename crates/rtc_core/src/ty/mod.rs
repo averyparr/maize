@@ -123,6 +123,9 @@ pub trait ArithmeticTy: Ty {
         assert!(lhs.cm() == rhs.cm(), "Vals must agree on FnCodegen");
         let val = Self::try_emit_add(lhs.cm(), lhs.to_underlying(), rhs.to_underlying())
             .expect("Could not emit add");
+        if let Some(ins) = val.as_instruction_value() {
+            make_ins_fast_math(ins)
+        }
         // SAFETY: We have just built this from an add
         // of two values
         unsafe { Val::new(lhs.cm(), val) }
@@ -131,6 +134,9 @@ pub trait ArithmeticTy: Ty {
         assert!(lhs.cm() == rhs.cm(), "Vals must agree on FnCodegen");
         let val = Self::try_emit_sub(lhs.cm(), lhs.to_underlying(), rhs.to_underlying())
             .expect("Could not emit sub");
+        if let Some(ins) = val.as_instruction_value() {
+            make_ins_fast_math(ins)
+        }
         // SAFETY: We have just built this from a sub
         // of two values
         unsafe { Val::new(lhs.cm(), val) }
@@ -139,6 +145,9 @@ pub trait ArithmeticTy: Ty {
         assert!(lhs.cm() == rhs.cm(), "Vals must agree on FnCodegen");
         let val = Self::try_emit_mul(lhs.cm(), lhs.to_underlying(), rhs.to_underlying())
             .expect("Could not emit mul");
+        if let Some(ins) = val.as_instruction_value() {
+            make_ins_fast_math(ins)
+        }
         // SAFETY: We have just built this from a mul
         // of two values
         unsafe { Val::new(lhs.cm(), val) }
@@ -147,6 +156,9 @@ pub trait ArithmeticTy: Ty {
         assert!(lhs.cm() == rhs.cm(), "Vals must agree on FnCodegen");
         let val = Self::try_emit_div(lhs.cm(), lhs.to_underlying(), rhs.to_underlying())
             .expect("Could not emit div");
+        if let Some(ins) = val.as_instruction_value() {
+            make_ins_fast_math(ins)
+        }
         // SAFETY: We have just built this from a div
         // of two values
         unsafe { Val::new(lhs.cm(), val) }
@@ -156,9 +168,11 @@ pub trait ArithmeticTy: Ty {
         Self: 'lt,
     {
         let cm = val.cm();
-        let neg_val =
-            Self::try_emit_neg(val.cm(), val.to_underlying()).expect("Could not emit neg");
+        let val = Self::try_emit_neg(val.cm(), val.to_underlying()).expect("Could not emit neg");
+        if let Some(ins) = val.as_instruction_value() {
+            make_ins_fast_math(ins)
+        }
         // SAFETY: We have just built this from a neg of a value
-        unsafe { Val::new(cm, neg_val) }
+        unsafe { Val::new(cm, val) }
     }
 }
