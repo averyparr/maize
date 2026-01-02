@@ -2,8 +2,8 @@ use inkwell::{types::BasicType, values::BasicValue};
 
 use crate::{
     codegen::func_with_args::Func,
-    ty::{F32, F64, Ty},
-    val::{Holds, Val},
+    ty::{Ty, primitive::*},
+    val::Val,
 };
 
 pub trait MinMaxableType: Ty {
@@ -43,50 +43,13 @@ impl MinMaxableType for F64 {
 }
 
 impl<ArgsT, Ret> Func<ArgsT, Ret> {
-    fn call_minmax_intrinsic<Float: MinMaxableType>(
-        &self,
-        a: Val<'_, Float>,
-        b: Val<'_, Float>,
-        intrinsic_name: &str,
-    ) -> Val<'_, Float> {
-        let ty = Float::new(self.cx_ref().ctx()).basic_ty();
-        let fn_ty = ty.fn_type(
-            &[
-                ty.as_basic_type_enum().into(),
-                ty.as_basic_type_enum().into(),
-            ],
-            false,
-        );
-        let fn_val = self.mod_ref().add_function(intrinsic_name, fn_ty, None);
-
-        let call_site = unsafe {
-            self.cx_ref().with_builder(|builder| {
-                builder.build_call(
-                    fn_val,
-                    &[
-                        a.to_underlying().as_basic_value_enum().into(),
-                        b.to_underlying().as_basic_value_enum().into(),
-                    ],
-                    "minmax",
-                )
-            })
-        }
-        .expect("Could not generate minmax call");
-
-        let ret_val = call_site
-            .try_as_basic_value()
-            .expect_basic("Must be a basic value!");
-
-        Val::new(self.cm_ref(), ret_val)
-    }
-
-    // Min variants
     pub fn fmin<Float: MinMaxableType>(
         &self,
         a: Val<'_, Float>,
         b: Val<'_, Float>,
     ) -> Val<'_, Float> {
-        self.call_minmax_intrinsic(a, b, Float::MIN)
+        // Safety: `Float` implements `MinMaxableType`
+        unsafe { self.cm_ref().call_binary_function(a, b, Float::MIN) }
     }
 
     pub fn fmin_ftz<Float: MinMaxableType>(
@@ -94,7 +57,9 @@ impl<ArgsT, Ret> Func<ArgsT, Ret> {
         a: Val<'_, Float>,
         b: Val<'_, Float>,
     ) -> Val<'_, Float> {
-        self.call_minmax_intrinsic(a, b, Float::MIN_FTZ.unwrap_or(Float::MIN))
+        let intrinsic = Float::MIN_FTZ.unwrap_or(Float::MIN);
+        // Safety: `Float` implements `MinMaxableType`
+        unsafe { self.cm_ref().call_binary_function(a, b, intrinsic) }
     }
 
     pub fn fmin_nan<Float: MinMaxableType>(
@@ -102,7 +67,9 @@ impl<ArgsT, Ret> Func<ArgsT, Ret> {
         a: Val<'_, Float>,
         b: Val<'_, Float>,
     ) -> Val<'_, Float> {
-        self.call_minmax_intrinsic(a, b, Float::MIN_NAN.unwrap_or(Float::MIN))
+        let intrinsic = Float::MIN_NAN.unwrap_or(Float::MIN);
+        // Safety: `Float` implements `MinMaxableType`
+        unsafe { self.cm_ref().call_binary_function(a, b, intrinsic) }
     }
 
     pub fn fmin_ftz_nan<Float: MinMaxableType>(
@@ -110,16 +77,19 @@ impl<ArgsT, Ret> Func<ArgsT, Ret> {
         a: Val<'_, Float>,
         b: Val<'_, Float>,
     ) -> Val<'_, Float> {
-        self.call_minmax_intrinsic(a, b, Float::MIN_FTZ_NAN.unwrap_or(Float::MIN))
+        let intrinsic = Float::MIN_FTZ_NAN.unwrap_or(Float::MIN);
+        // Safety: `Float` implements `MinMaxableType`
+        unsafe { self.cm_ref().call_binary_function(a, b, intrinsic) }
     }
 
-    // Max variants
     pub fn fmax<Float: MinMaxableType>(
         &self,
         a: Val<'_, Float>,
         b: Val<'_, Float>,
     ) -> Val<'_, Float> {
-        self.call_minmax_intrinsic(a, b, Float::MAX)
+        let intrinsic = Float::MAX;
+        // Safety: `Float` implements `MinMaxableType`
+        unsafe { self.cm_ref().call_binary_function(a, b, intrinsic) }
     }
 
     pub fn fmax_ftz<Float: MinMaxableType>(
@@ -127,7 +97,9 @@ impl<ArgsT, Ret> Func<ArgsT, Ret> {
         a: Val<'_, Float>,
         b: Val<'_, Float>,
     ) -> Val<'_, Float> {
-        self.call_minmax_intrinsic(a, b, Float::MAX_FTZ.unwrap_or(Float::MAX))
+        let intrinsic = Float::MAX_FTZ.unwrap_or(Float::MAX);
+        // Safety: `Float` implements `MinMaxableType`
+        unsafe { self.cm_ref().call_binary_function(a, b, intrinsic) }
     }
 
     pub fn fmax_nan<Float: MinMaxableType>(
@@ -135,7 +107,9 @@ impl<ArgsT, Ret> Func<ArgsT, Ret> {
         a: Val<'_, Float>,
         b: Val<'_, Float>,
     ) -> Val<'_, Float> {
-        self.call_minmax_intrinsic(a, b, Float::MAX_NAN.unwrap_or(Float::MAX))
+        let intrinsic = Float::MAX_NAN.unwrap_or(Float::MAX);
+        // Safety: `Float` implements `MinMaxableType`
+        unsafe { self.cm_ref().call_binary_function(a, b, intrinsic) }
     }
 
     pub fn fmax_ftz_nan<Float: MinMaxableType>(
@@ -143,6 +117,8 @@ impl<ArgsT, Ret> Func<ArgsT, Ret> {
         a: Val<'_, Float>,
         b: Val<'_, Float>,
     ) -> Val<'_, Float> {
-        self.call_minmax_intrinsic(a, b, Float::MAX_FTZ_NAN.unwrap_or(Float::MAX))
+        let intrinsic = Float::MAX_FTZ_NAN.unwrap_or(Float::MAX);
+        // Safety: `Float` implements `MinMaxableType`
+        unsafe { self.cm_ref().call_binary_function(a, b, intrinsic) }
     }
 }

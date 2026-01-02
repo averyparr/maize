@@ -2,8 +2,8 @@ use inkwell::{types::BasicType, values::BasicValue};
 
 use crate::{
     codegen::func_with_args::Func,
-    ty::{F16, F32, F64, Ty},
-    val::{Holds, Val},
+    ty::{Ty, primitive::*},
+    val::Val,
 };
 
 pub trait HasAbs: Ty {

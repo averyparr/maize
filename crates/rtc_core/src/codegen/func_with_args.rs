@@ -1,7 +1,7 @@
 use inkwell::AddressSpace;
 use inkwell::attributes::AttributeLoc;
 use inkwell::types::{BasicMetadataTypeEnum, BasicType};
-use inkwell::values::InstructionValue;
+use inkwell::values::{BasicValue, BasicValueEnum, InstructionValue};
 use inkwell::{context::ContextRef, module::Module, types::BasicTypeEnum};
 
 use crate::codegen::CodegenModule;
@@ -129,6 +129,9 @@ pub trait IntoFuncArgs {
     fn get_args<'lt>(cx: &'lt CodegenModule<'static>) -> Self::ArgValues<'lt>;
     fn new_from_ctx(ctx: ContextRef<'static>) -> Self;
     fn basic_ty_iter(&self) -> impl ExactSizeIterator<Item = BasicTypeEnum<'static>>;
+    fn basic_val_iter<'lt>(
+        args: Self::ArgValues<'lt>,
+    ) -> impl ExactSizeIterator<Item = BasicValueEnum<'static>>;
 }
 
 macro_rules! count {
@@ -166,6 +169,15 @@ macro_rules! impl_into_func_args {
                     $(
                         self.$idx.basic_ty().as_basic_type_enum(),
                     )*
+                ].into_iter()
+            }
+            fn basic_val_iter<'lt>(
+                args: Self::ArgValues<'lt>,
+            ) -> impl ExactSizeIterator<Item = BasicValueEnum<'static>> {
+                [
+                    $(
+                        args.$idx.to_underlying().as_basic_value_enum()
+                    ),*
                 ].into_iter()
             }
         }

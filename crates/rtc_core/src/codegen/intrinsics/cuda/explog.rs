@@ -1,6 +1,6 @@
 use crate::{
     codegen::func_with_args::Func,
-    ty::{F16, F32, F64, Ty},
+    ty::{Ty, primitive::*},
     val::Val,
 };
 

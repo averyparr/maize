@@ -2,11 +2,14 @@ use inkwell::{types::BasicType, values::BasicValue};
 
 use crate::{
     codegen::func_with_args::Func,
-    ty::{F32, F64, Ty},
-    val::{Holds, Val},
+    ty::{Ty, primitive::*},
+    val::Val,
 };
 
-pub trait SqrtableType: Ty {
+/// # Safety:
+/// All of these intrinsic names must be valid unary
+/// intrinsics which take values of a type Ty::Value.
+pub unsafe trait SqrtableType: Ty {
     const RN: &str;
     const RZ: &str;
     const RM: &str;
@@ -21,7 +24,8 @@ pub trait SqrtableType: Ty {
     const APPROX_FTZ: Option<&str>;
 }
 
-impl SqrtableType for F32 {
+// Safety: These are the NVVM intrinsics for sqrt for f32
+unsafe impl SqrtableType for F32 {
     const RN: &str = "llvm.nvvm.sqrt.rn.f";
     const RZ: &str = "llvm.nvvm.sqrt.rz.f";
     const RM: &str = "llvm.nvvm.sqrt.rm.f";
@@ -36,7 +40,8 @@ impl SqrtableType for F32 {
     const APPROX_FTZ: Option<&str> = Some("llvm.nvvm.sqrt.approx.ftz.f");
 }
 
-impl SqrtableType for F64 {
+// Safety: These are the NVVM intrinsics for sqrt for f64
+unsafe impl SqrtableType for F64 {
     const RN: &str = "llvm.nvvm.sqrt.rn.d";
     const RZ: &str = "llvm.nvvm.sqrt.rz.d";
     const RM: &str = "llvm.nvvm.sqrt.rm.d";
@@ -52,66 +57,56 @@ impl SqrtableType for F64 {
 }
 
 impl<ArgsT, Ret> Func<ArgsT, Ret> {
-    fn call_intrinsic<Float: SqrtableType>(
-        &self,
-        val: Val<'_, Float>,
-        intrinsic_name: &str,
-    ) -> Val<'_, Float> {
-        let ty = Float::new(self.cx_ref().ctx()).basic_ty();
-        let fn_ty = ty.fn_type(&[ty.as_basic_type_enum().into()], false);
-        let fn_val = self.mod_ref().add_function(intrinsic_name, fn_ty, None);
-
-        // Safety: We have a sqrt function and so calling sqrt() is safe.
-        let call_site = unsafe {
-            self.cx_ref().with_builder(|b| {
-                b.build_call(
-                    fn_val,
-                    &[val.to_underlying().as_basic_value_enum().into()],
-                    "sqrt",
-                )
-            })
-        }
-        .expect("Could not generate a call instruction");
-
-        let ret_val = call_site
-            .try_as_basic_value()
-            .expect_basic("Must be a basic value!");
-
-        Val::new(self.cm_ref(), ret_val)
-    }
     pub fn sqrt<Float: SqrtableType>(&self, val: Val<'_, Float>) -> Val<'_, Float> {
-        let default_val = Float::RN;
-        self.call_intrinsic(val, default_val)
+        let intrinsic_name = Float::RN;
+        // Safety: `Float` implements `SqrtableType`
+        unsafe { self.cm_ref().call_unary_function(val, intrinsic_name) }
     }
     pub fn sqrt_ftz<Float: SqrtableType>(&self, val: Val<'_, Float>) -> Val<'_, Float> {
-        self.call_intrinsic(val, Float::RN_FTZ.unwrap_or(Float::RN))
+        let intrinsic_name = Float::RN_FTZ.unwrap_or(Float::RN);
+        // Safety: `Float` implements `SqrtableType`
+        unsafe { self.cm_ref().call_unary_function(val, intrinsic_name) }
     }
     pub fn sqrt_approx<Float: SqrtableType>(&self, val: Val<'_, Float>) -> Val<'_, Float> {
-        let name = Float::APPROX.unwrap_or(Float::RN);
-        self.call_intrinsic(val, name)
+        let intrinsic_name = Float::APPROX.unwrap_or(Float::RN);
+        // Safety: `Float` implements `SqrtableType`
+        unsafe { self.cm_ref().call_unary_function(val, intrinsic_name) }
     }
     pub fn sqrt_approx_ftz<Float: SqrtableType>(&self, val: Val<'_, Float>) -> Val<'_, Float> {
-        let selected_ins = Float::APPROX_FTZ.or(Float::RN_FTZ).unwrap_or(Float::RN);
-        self.call_intrinsic(val, selected_ins)
+        let intrinsic_name = Float::APPROX_FTZ.or(Float::RN_FTZ).unwrap_or(Float::RN);
+        // Safety: `Float` implements `SqrtableType`
+        unsafe { self.cm_ref().call_unary_function(val, intrinsic_name) }
     }
 
     /// Messy intrinsics
     pub fn sqrt_rz<Float: SqrtableType>(&self, val: Val<'_, Float>) -> Val<'_, Float> {
-        self.call_intrinsic(val, Float::RZ)
+        let intrinsic_name = Float::RZ;
+        // Safety: `Float` implements `SqrtableType`
+        unsafe { self.cm_ref().call_unary_function(val, intrinsic_name) }
     }
     pub fn sqrt_rm<Float: SqrtableType>(&self, val: Val<'_, Float>) -> Val<'_, Float> {
-        self.call_intrinsic(val, Float::RM)
+        let intrinsic_name = Float::RM;
+        // Safety: `Float` implements `SqrtableType`
+        unsafe { self.cm_ref().call_unary_function(val, intrinsic_name) }
     }
     pub fn sqrt_rp<Float: SqrtableType>(&self, val: Val<'_, Float>) -> Val<'_, Float> {
-        self.call_intrinsic(val, Float::RP)
+        let intrinsic_name = Float::RP;
+        // Safety: `Float` implements `SqrtableType`
+        unsafe { self.cm_ref().call_unary_function(val, intrinsic_name) }
     }
     pub fn sqrt_rz_ftz<Float: SqrtableType>(&self, val: Val<'_, Float>) -> Val<'_, Float> {
-        self.call_intrinsic(val, Float::RZ_FTZ.unwrap_or(Float::RZ))
+        let intrinsic_name = Float::RZ_FTZ.unwrap_or(Float::RZ);
+        // Safety: `Float` implements `SqrtableType`
+        unsafe { self.cm_ref().call_unary_function(val, intrinsic_name) }
     }
     pub fn sqrt_rm_ftz<Float: SqrtableType>(&self, val: Val<'_, Float>) -> Val<'_, Float> {
-        self.call_intrinsic(val, Float::RM_FTZ.unwrap_or(Float::RM))
+        let intrinsic_name = Float::RM_FTZ.unwrap_or(Float::RM);
+        // Safety: `Float` implements `SqrtableType`
+        unsafe { self.cm_ref().call_unary_function(val, intrinsic_name) }
     }
     pub fn sqrt_rp_ftz<Float: SqrtableType>(&self, val: Val<'_, Float>) -> Val<'_, Float> {
-        self.call_intrinsic(val, Float::RP_FTZ.unwrap_or(Float::RP))
+        let intrinsic_name = Float::RP_FTZ.unwrap_or(Float::RP);
+        // Safety: `Float` implements `SqrtableType`
+        unsafe { self.cm_ref().call_unary_function(val, intrinsic_name) }
     }
 }
