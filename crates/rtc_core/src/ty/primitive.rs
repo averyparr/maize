@@ -7,7 +7,7 @@ use inkwell::{
 use crate::ty::{ArithmeticTy, FromCtx, Ty};
 
 macro_rules! derive_primitive {
-    ($name: ident, $prim: ty, $enum_ty: ident, $enum_val: ident, $basic_ty: ident, $basic_val: ident, $add: ident, $sub: ident, $mul: ident, $div: ident, $neg: ident) => {
+    ($name: ident, $prim: ty, $enum_ty: ident, $enum_val: ident, $basic_ty: ident, $basic_val: ident, $add: ident, $sub: ident, $mul: ident, $div: ident, $neg: ident, $size: literal, $align: literal) => {
         #[derive(Clone, Copy)]
         pub struct $name(ContextRef<'static>);
 
@@ -18,8 +18,8 @@ macro_rules! derive_primitive {
         }
 
         impl Ty for $name {
-            const SIZE: usize = std::mem::size_of::<$prim>();
-            const ALIGN: usize = std::mem::align_of::<$prim>();
+            const SIZE: usize = $size;
+            const ALIGN: usize = $align;
 
             fn ctx(&self) -> ContextRef<'static> {
                 self.0
@@ -83,7 +83,7 @@ macro_rules! derive_primitive {
         }
     };
 
-    (float: $name: ident, $prim: ty, $basic_ty: ident) => {
+    (float: $name: ident, $prim: ty, $basic_ty: ident, $size: literal, $align: literal) => {
         derive_primitive!(
             $name,
             $prim,
@@ -95,11 +95,13 @@ macro_rules! derive_primitive {
             build_float_sub,
             build_float_mul,
             build_float_div,
-            build_float_neg
+            build_float_neg,
+            $size,
+            $align
         );
     };
 
-    (int: $name: ident, $prim: ty, $basic_ty: ident) => {
+    (int: $name: ident, $prim: ty, $basic_ty: ident, $size: literal, $align: literal) => {
         derive_primitive!(
             $name,
             $prim,
@@ -111,11 +113,13 @@ macro_rules! derive_primitive {
             build_int_sub,
             build_int_mul,
             build_int_signed_div,
-            build_int_neg
+            build_int_neg,
+            $size,
+            $align
         );
     };
 
-    (uint: $name: ident, $prim: ty, $basic_ty: ident) => {
+    (uint: $name: ident, $prim: ty, $basic_ty: ident, $size: literal, $align: literal) => {
         derive_primitive!(
             $name,
             $prim,
@@ -127,23 +131,25 @@ macro_rules! derive_primitive {
             build_int_sub,
             build_int_mul,
             build_int_unsigned_div,
-            build_int_neg
+            build_int_neg,
+            $size,
+            $align
         );
     };
 }
 
-derive_primitive!(float: F16, f32, f16_type);
-derive_primitive!(float: F32, f32, f32_type);
-derive_primitive!(float: F64, f64, f64_type);
+derive_primitive!(float: F16, f32, f16_type, 2, 2);
+derive_primitive!(float: F32, f32, f32_type, 4, 4);
+derive_primitive!(float: F64, f64, f64_type, 8, 8);
 
-derive_primitive!(int: I8, i8, i8_type);
-derive_primitive!(int: I16, i16, i16_type);
-derive_primitive!(int: I32, i32, i32_type);
-derive_primitive!(int: I64, i64, i64_type);
-derive_primitive!(int: I128, i128, i128_type);
+derive_primitive!(int: I8, i8, i8_type, 1, 1);
+derive_primitive!(int: I16, i16, i16_type, 2, 2);
+derive_primitive!(int: I32, i32, i32_type, 4, 4);
+derive_primitive!(int: I64, i64, i64_type, 8, 8);
+derive_primitive!(int: I128, i128, i128_type, 16, 16);
 
-derive_primitive!(uint: U8, u8, i8_type);
-derive_primitive!(uint: U16, u16, i16_type);
-derive_primitive!(uint: U32, u32, i32_type);
-derive_primitive!(uint: U64, u64, i64_type);
-derive_primitive!(uint: U128, u128, i128_type);
+derive_primitive!(uint: U8, u8, i8_type, 1, 1);
+derive_primitive!(uint: U16, u16, i16_type, 2, 2);
+derive_primitive!(uint: U32, u32, i32_type, 4, 4);
+derive_primitive!(uint: U64, u64, i64_type, 8, 8);
+derive_primitive!(uint: U128, u128, i128_type, 16, 1);

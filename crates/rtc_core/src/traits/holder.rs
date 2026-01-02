@@ -1,6 +1,8 @@
-use inkwell::values::BasicValueEnum;
-
-use crate::{codegen::FnCodegen, ty::Ty, val::S};
+use crate::{
+    traits::HasCXVal,
+    ty::Ty,
+    val::{S, Val},
+};
 
 pub trait Holds {
     type T: Ty;
@@ -8,10 +10,7 @@ pub trait Holds {
         private_interfaces,
         reason = "We intend to only make this available through our API"
     )]
-    fn extract_value(
-        cx: &FnCodegen<'static>,
-        val: BasicValueEnum<'static>,
-    ) -> <Self::T as Ty>::Value;
+    fn extract_value(val: Val<'_, Self>) -> Val<'_, Self::T>;
 }
 
 impl<T> Holds for T
@@ -23,11 +22,8 @@ where
         private_interfaces,
         reason = "We intend to only make this available through our API"
     )]
-    fn extract_value(
-        _: &FnCodegen<'static>,
-        val: BasicValueEnum<'static>,
-    ) -> <Self::T as Ty>::Value {
-        Self::get_value(val)
+    fn extract_value(val: Val<'_, Self>) -> Val<'_, Self::T> {
+        val
     }
 }
 
@@ -40,15 +36,16 @@ where
         private_interfaces,
         reason = "We intend to only make this available through our API"
     )]
-    fn extract_value(
-        cx: &FnCodegen<'static>,
-        val: BasicValueEnum<'static>,
-    ) -> <Self::T as Ty>::Value {
+    fn extract_value(val: Val<'_, Self>) -> Val<'_, Self::T> {
+        let cm = val.cm();
+        let cx = val.cx();
+        let val = val.val();
         assert!(val.is_pointer_value(), "Must have a pointer value!");
         let ptr = val.into_pointer_value();
         let pointee_ty = T::new(cx.ctx()).basic_ty();
         let value_enum = unsafe { cx.with_builder(|b| b.build_load(pointee_ty, ptr, "hold_load")) }
             .expect("Unable to generate load!");
-        T::get_value(value_enum)
+        let val = T::get_value(value_enum);
+        unsafe { Val::new(cm, val) }
     }
 }

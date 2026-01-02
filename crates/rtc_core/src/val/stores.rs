@@ -1,6 +1,9 @@
 use crate::{
-    traits::{indexes::IndexableTy, stores::Stores},
-    ty::ptr::{M, R},
+    traits::{
+        indexes::{IndexablePtr, IndexableRef, IndexableTy},
+        stores::{Stores, StoresIndexable},
+    },
+    ty::ptr::{M, P, R},
     val::Val,
 };
 
@@ -8,35 +11,57 @@ impl<'lt, Storage> Val<'lt, Storage>
 where
     Storage: Stores,
 {
-    pub fn get_ref<'a>(&'a self) -> Val<'a, R<&'a Storage::T>> {
-        let ptr = Storage::get_ptr_to_value(self);
-        // Safety: We are creating a shared reference with
-        // lifetime tied to the shared borrow of self
-        unsafe { Val::new(self.cm(), ptr) }
+    pub fn get_ptr<'a>(&self) -> Val<'a, P<Storage::T>>
+    where
+        'lt: 'a,
+    {
+        Storage::get_ptr_to_value(self)
+    }
+    pub fn get_ref<'a>(&'a self) -> Val<'lt, R<&'a Storage::T>> {
+        Storage::get_ref_to_value(self)
     }
     pub fn get_mut<'a>(&'a mut self) -> Val<'a, M<&'a mut Storage::T>> {
-        let ptr = Storage::get_ptr_to_value(self);
-        // Safety: We are creating a mutable reference with
-        // lifetime tied to the mutable borrow of self
-        unsafe { Val::new(self.cm(), ptr) }
+        Storage::get_mut_to_value(self)
     }
 }
 
 impl<'lt, Storage, VecT> Val<'lt, Storage>
 where
-    Storage: Stores<T = VecT>,
+    Storage: StoresIndexable<T = VecT>,
     VecT: IndexableTy,
 {
-    pub fn get_ref_at<'a>(&'a self, idx: usize) -> Val<'a, R<&'a VecT::ElemT>> {
-        let ret = Storage::get_ptr_at_idx(self, idx);
-        // SAFETY: get_ptr_at_idx returns only inbounds pointers and
-        // we hold a shared reference tied to the lifetime 'a of our borrow
-        unsafe { Val::new(self.cm(), ret) }
+    pub fn get_ptr_at<'a>(&'a self, idx: usize) -> Val<'lt, P<<Storage::T as IndexableTy>::ElemT>>
+    where
+        'lt: 'a,
+    {
+        Storage::get_ptr_at(self, idx)
     }
-    pub fn get_mut_at<'a>(&'a mut self, idx: usize) -> Val<'a, M<&'a mut VecT::ElemT>> {
-        let ret = Storage::get_ptr_at_idx(self, idx);
-        // SAFETY: get_ptr_at_idx returns only inbounds pointers and
-        // we hold a mutable reference tied to the lifetime 'a of our borrow
-        unsafe { Val::new(self.cm(), ret) }
+
+    pub fn get_ref_at<'b>(
+        &'b self,
+        idx: usize,
+    ) -> Val<'lt, R<&'b <Storage::T as IndexableTy>::ElemT>> {
+        Storage::get_ref_at(self, idx)
+    }
+
+    pub fn get_mut_at<'b>(
+        &'b mut self,
+        idx: usize,
+    ) -> Val<'lt, M<&'b mut <Storage::T as IndexableTy>::ElemT>> {
+        Storage::get_mut_at(self, idx)
+    }
+
+    pub fn get_chunks<'b, const CHUNK_SIZE: usize>(
+        &'b self,
+    ) -> (
+        impl ExactSizeIterator<
+            Item = Val<'b, R<&'b <Storage::T as IndexableTy>::ParametrizedLen<CHUNK_SIZE>>>,
+        >,
+        impl ExactSizeIterator<Item = Val<'b, R<&'b <Storage::T as IndexableTy>::ElemT>>>,
+    )
+    where
+        VecT: 'b,
+    {
+        R::chunks_ref(Storage::get_ref_to_value(self))
     }
 }

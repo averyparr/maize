@@ -1,6 +1,7 @@
 pub mod primitive;
 pub mod ptr;
 pub mod vec;
+pub mod vec_shuffle;
 pub mod void;
 
 use std::u32;

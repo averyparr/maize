@@ -146,3 +146,14 @@ where
         self.get() + rhs.get()
     }
 }
+
+impl<'lt, Holder> Val<'lt, Holder>
+where
+    Holder: Holds,
+    Holder::T: ArithmeticTy + Copy,
+{
+    pub fn square(self) -> Val<'lt, Holder::T> {
+        let raw_val = self.get();
+        raw_val * raw_val
+    }
+}

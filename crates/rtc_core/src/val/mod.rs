@@ -3,18 +3,19 @@ mod indexes;
 mod ops;
 mod ptr;
 mod stores;
+mod vec;
 
 use std::marker::PhantomData;
 
-use inkwell::values::{BasicValue, BasicValueEnum, InstructionValue};
+use inkwell::values::{BasicValue, BasicValueEnum, InstructionValue, PointerValue};
 
-use crate::{codegen::CodegenModule, ty::Ty};
+use crate::{codegen::CodegenModule, traits::stores::Stores, ty::Ty};
 
 /// Describes a generic 'Value' of a certain
 /// type, with that type being either T or
 /// held by some thin-wrapper around T (e.g. S<T>, C<T>)
 #[derive(Clone, Copy)]
-pub struct Val<'lt, T> {
+pub struct Val<'lt, T: ?Sized> {
     cm: &'lt CodegenModule<'static>,
     val: BasicValueEnum<'static>,
     phantom: PhantomData<T>,
@@ -24,9 +25,10 @@ pub struct Val<'lt, T> {
 /// which makes it possible to e.g. take mutable
 /// references to it.
 /// Importantly, does *not* implement Ty itself
-pub struct S<T>(PhantomData<T>);
+#[derive(Clone, Copy)]
+pub struct S<T: ?Sized>(PhantomData<T>);
 
-impl<'lt, T> Val<'lt, T> {
+impl<'lt, T: ?Sized> Val<'lt, T> {
     pub(crate) fn cm(&self) -> &'lt CodegenModule<'static> {
         &self.cm
     }
@@ -40,6 +42,20 @@ impl<'lt, T> Val<'lt, T> {
         Self {
             cm,
             val: val.as_basic_value_enum(),
+            phantom: PhantomData,
+        }
+    }
+
+    pub(crate) unsafe fn new_from_storage<Storage: Stores<T = T>>(
+        cm: &'lt CodegenModule<'static>,
+        ptr_to_storage: PointerValue<'static>,
+    ) -> Val<'lt, S<T>>
+    where
+        T: Ty,
+    {
+        Val {
+            cm,
+            val: ptr_to_storage.as_basic_value_enum(),
             phantom: PhantomData,
         }
     }

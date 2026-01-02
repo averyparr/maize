@@ -25,11 +25,32 @@ enum PTXAddressSpaces {
     Cluster = 7,
 }
 
-#[derive(Clone, Copy)]
 pub struct P<T>(ContextRef<'static>, AddressSpace, PhantomData<*mut T>);
-#[derive(Clone, Copy)]
+
+impl<T> Clone for P<T> {
+    fn clone(&self) -> Self {
+        Self(self.0, self.1, PhantomData)
+    }
+}
+impl<T> Copy for P<T> {}
+
 pub struct R<T>(ContextRef<'static>, AddressSpace, PhantomData<T>);
+
+impl<T> Clone for R<T> {
+    fn clone(&self) -> Self {
+        Self(self.0, self.1, PhantomData)
+    }
+}
+impl<T> Copy for R<T> {}
+
 pub struct M<T>(ContextRef<'static>, AddressSpace, PhantomData<T>);
+
+impl<T> Clone for M<T> {
+    fn clone(&self) -> Self {
+        Self(self.0, self.1, PhantomData)
+    }
+}
+impl<T> Copy for M<T> {}
 
 #[derive(Clone, Copy)]
 pub struct Global<Ptr>(Ptr);

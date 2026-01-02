@@ -21,12 +21,20 @@ impl<T, const N: usize> FromCtx for V<T, N> {
     }
 }
 
+const fn prod_or_element_align(mut numel: usize, mut element_align: usize) -> usize {
+    while numel % 2 == 0 {
+        element_align *= 2;
+        numel /= 2;
+    }
+    element_align
+}
+
 impl<T, const N: usize> Ty for V<T, N>
 where
     T: VectorizableTy,
 {
     const SIZE: usize = N * T::SIZE;
-    const ALIGN: usize = N * T::ALIGN;
+    const ALIGN: usize = prod_or_element_align(N, T::ALIGN);
 
     fn ctx(&self) -> ContextRef<'static> {
         self.0
