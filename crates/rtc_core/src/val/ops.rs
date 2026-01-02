@@ -1,9 +1,12 @@
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
 use crate::{
-    traits::constants::{AcceptsConstants, C},
+    traits::{
+        constants::{AcceptsConstants, C},
+        holder::Holds,
+    },
     ty::ArithmeticTy,
-    val::Val,
+    val::{S, Val},
 };
 
 impl<'lt, T> Add for Val<'lt, T>
@@ -97,5 +100,49 @@ where
     fn div(self, rhs: C<T::Assoc>) -> Self::Output {
         let vald = T::new_const(rhs.0, self.cm());
         self / vald
+    }
+}
+
+impl<'lt, T, Holder> Add<Val<'lt, Holder>> for Val<'lt, S<T>>
+where
+    Holder: Holds<T = T>,
+    T: ArithmeticTy,
+{
+    type Output = Val<'lt, T>;
+    fn add(self, rhs: Val<'lt, Holder>) -> Self::Output {
+        self.get() + rhs.get()
+    }
+}
+
+impl<'lt, T, Holder> Sub<Val<'lt, Holder>> for Val<'lt, S<T>>
+where
+    Holder: Holds<T = T>,
+    T: ArithmeticTy,
+{
+    type Output = Val<'lt, T>;
+    fn sub(self, rhs: Val<'lt, Holder>) -> Self::Output {
+        self.get() + rhs.get()
+    }
+}
+
+impl<'lt, T, Holder> Mul<Val<'lt, Holder>> for Val<'lt, S<T>>
+where
+    Holder: Holds<T = T>,
+    T: ArithmeticTy,
+{
+    type Output = Val<'lt, T>;
+    fn mul(self, rhs: Val<'lt, Holder>) -> Self::Output {
+        self.get() + rhs.get()
+    }
+}
+
+impl<'lt, T, Holder> Div<Val<'lt, Holder>> for Val<'lt, S<T>>
+where
+    Holder: Holds<T = T>,
+    T: ArithmeticTy,
+{
+    type Output = Val<'lt, T>;
+    fn div(self, rhs: Val<'lt, Holder>) -> Self::Output {
+        self.get() + rhs.get()
     }
 }
