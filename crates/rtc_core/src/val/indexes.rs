@@ -86,11 +86,12 @@ where
     VecRef: IndexableRef<Pointee = VecT>,
     VecT: IndexableTy,
 {
-    pub fn iter<'b>(&'b self) -> impl ExactSizeIterator<Item = Val<'b, R<&'b VecT::ElemT>>>
+    pub fn iter(self) -> impl ExactSizeIterator<Item = Val<'lt, R<&'lt VecT::ElemT>>>
     where
-        VecT::ElemT: 'b,
+        VecRef: 'lt,
+        VecT::ElemT: 'lt,
     {
-        (0..VecT::LEN).map(|i| VecRef::get_ref_at_idx(self, i))
+        (0..VecT::LEN).map(move |i| VecRef::get_ref_at_idx(self, i))
     }
 
     pub fn ref_at<'b>(&'b self, idx: usize) -> Val<'lt, R<&'b VecT::ElemT>> {
@@ -106,13 +107,11 @@ where
     VecMut: IndexableMut<Pointee = VecT>,
     VecT: IndexableTy,
 {
-    pub fn iter_mut<'b>(
-        &'b mut self,
-    ) -> impl ExactSizeIterator<Item = Val<'b, M<&'b mut VecT::ElemT>>>
+    pub fn iter_mut(self) -> impl ExactSizeIterator<Item = Val<'lt, M<&'lt mut VecT::ElemT>>>
     where
-        VecT::ElemT: 'b,
+        VecT::ElemT: 'lt,
     {
-        (0..VecT::LEN).map(|i| {
+        (0..VecT::LEN).map(move |i| {
             let ptr = VecMut::get_ptr_at_idx(self, i);
             // Safety: We hold an exclusive reference and are handing out only
             // exclusive references to sub-objects which are disjoint

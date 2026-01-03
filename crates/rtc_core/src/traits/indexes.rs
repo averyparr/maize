@@ -19,7 +19,7 @@ use crate::{
     val::Val,
 };
 
-pub trait IndexableTy: Ty {
+pub trait IndexableTy: Ty<Value = VectorValue<'static>> {
     const LEN: usize;
     type ElemT: Ty;
 
@@ -105,7 +105,7 @@ fn extract_element(
 
 pub trait IndexablePtr: PtrTy<Pointee: IndexableTy> {
     fn get_ptr_at_idx<'a>(
-        val: &Val<'a, Self>,
+        val: Val<'a, Self>,
         idx: usize,
     ) -> Val<'a, P<<Self::Pointee as IndexableTy>::ElemT>>
     where
@@ -144,12 +144,12 @@ pub trait IndexablePtr: PtrTy<Pointee: IndexableTy> {
         let bulk = (0..num_chunks)
             .map(|c| c * CHUNK_LEN)
             .map(move |chunk_offset| {
-                let ptr = Self::get_ptr_at_idx(&val, chunk_offset);
+                let ptr = Self::get_ptr_at_idx(val, chunk_offset);
                 // Safety: This is just a pointer to a sub-vector
                 unsafe { Val::new(val.cm(), ptr.to_underlying()) }
             });
         let rest = (rest_offset..Self::Pointee::LEN).map(move |i| {
-            let ptr = Self::get_ptr_at_idx(&val, i);
+            let ptr = Self::get_ptr_at_idx(val, i);
             // Safety: This is just a pointer to an individual element
             unsafe { Val::new(val.cm(), ptr.to_underlying()) }
         });
@@ -158,10 +158,10 @@ pub trait IndexablePtr: PtrTy<Pointee: IndexableTy> {
 }
 
 pub trait IndexableRef: IndexablePtr {
-    fn get_ref_at_idx<'a, 'b>(
-        val: &'b Val<'a, Self>,
+    fn get_ref_at_idx<'a>(
+        val: Val<'a, Self>,
         idx: usize,
-    ) -> Val<'a, R<&'b <Self::Pointee as IndexableTy>::ElemT>>
+    ) -> Val<'a, R<&'a <Self::Pointee as IndexableTy>::ElemT>>
     where
         Self::Pointee: IndexableTy,
     {
@@ -197,7 +197,7 @@ pub trait IndexableRef: IndexablePtr {
 
 pub trait IndexableMut: IndexableRef {
     fn get_mut_at_idx<'a, 'b>(
-        val: &'b mut Val<'a, Self>,
+        val: Val<'a, Self>,
         idx: usize,
     ) -> Val<'a, M<&'b mut <Self::Pointee as IndexableTy>::ElemT>>
     where

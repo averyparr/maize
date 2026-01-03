@@ -1,21 +1,26 @@
 use std::ops::Range;
 
 use inkwell::{
+    context::ContextRef,
     types::VectorType,
     values::{PointerValue, VectorValue},
 };
 
 use crate::{
+    codegen::intrinsics::cuda::floatlike::FloatLike,
     traits::{
+        HasCXVal,
         holder::Holds,
         indexes::{IndexableMut, IndexableRef, IndexableTy},
         ptr::{MutTy, RefTy},
+        vectorizable::VectorizableTy,
     },
     ty::{
-        ArithmeticTy,
+        ArithmeticTy, FromCtx, Ty, V, VecTy,
+        primitive::{F16, F32},
         ptr::{M, R},
     },
-    val::Val,
+    val::{S, Val},
 };
 
 impl<'lt, Holder, VecT> Val<'lt, Holder>
@@ -113,5 +118,77 @@ where
             .expect("There must be at least one element in the vector")
         };
         scalar_sum
+    }
+}
+
+trait BulkMathOps {
+    const BULK_SIZE: usize = 1;
+}
+
+impl BulkMathOps for F32 {}
+impl BulkMathOps for F16 {
+    const BULK_SIZE: usize = 2;
+}
+
+impl<'lt, VecT> Val<'lt, VecT>
+where
+    VecT: IndexableTy,
+{
+    fn map_elementwise<FE>(self, fe: FE) -> Self
+    where
+        FE: Fn(Val<'_, VecT::ElemT>) -> Val<'_, VecT::ElemT>,
+    {
+        let llvm_val = self.to_underlying().get_type().const_zero();
+        let mut ret_val = unsafe { Val::new(self.cm(), llvm_val).with_storage() };
+
+        for (mut ret, inc) in ret_val.get_mut().iter_mut().zip(self.into_iter()) {
+            ret.store(fe(inc))
+        }
+
+        ret_val.get()
+    }
+}
+
+impl<'lt, VecT> Val<'lt, VecT>
+where
+    VecT: IndexableTy,
+    VecT::ElemT: BulkMathOps,
+{
+    fn perform_op_via_bulk_function<FB, FE>(self, fb: FB, fe: FE) -> Self
+    where
+        FB: Fn(Val<'_, VecT::ParametrizedLen<2>>) -> Val<'_, VecT::ParametrizedLen<2>>,
+        FE: Fn(Val<'_, VecT::ElemT>) -> Val<'_, VecT::ElemT>,
+    {
+        if VecT::ElemT::BULK_SIZE == 1 {
+            self.map_elementwise(fe)
+        } else {
+            let llvm_val = self.to_underlying().get_type().const_zero();
+            let mut ret_val = unsafe { Val::new(self.cm(), llvm_val).with_storage() };
+
+            let (bulk_inc, rest_inc) = self.into_chunks();
+            let (bulk_ret, rest_ret) = ret_val.get_mut().chunks_mut();
+
+            for (mut ret, inc) in bulk_ret.zip(bulk_inc) {
+                ret.store(fb(inc));
+            }
+
+            for (mut ret, inc) in rest_ret.zip(rest_inc) {
+                ret.store(fe(inc))
+            }
+
+            ret_val.get()
+        }
+    }
+}
+
+impl<'lt, const N: usize> Val<'lt, V<F32, N>> {
+    pub fn abs_vec(self) -> Self {
+        self.perform_op_via_bulk_function(|_| panic!(), |b| b.abs())
+    }
+}
+
+impl<'lt, const N: usize> Val<'lt, V<F16, N>> {
+    pub fn abs_vec(self) -> Self {
+        self.perform_op_via_bulk_function(|b| b.abs(), |b| b.abs())
     }
 }
