@@ -18,7 +18,7 @@ use crate::codegen::context::create_context;
 
 /// Very important that it _not_ be clone or copy!
 #[derive(PartialEq)]
-pub(crate) struct FnCodegen<'ctx> {
+pub struct FnCodegen<'ctx> {
     ctx: ContextRef<'ctx>,
     func: FunctionValue<'ctx>,
     bb: Cell<BasicBlock<'ctx>>,

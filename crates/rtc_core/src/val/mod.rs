@@ -30,13 +30,13 @@ pub struct Val<'lt, T: ?Sized> {
 pub struct S<T: ?Sized>(PhantomData<T>);
 
 impl<'lt, T: ?Sized> Val<'lt, T> {
-    pub(crate) fn cm(&self) -> &'lt CodegenModule<'static> {
+    pub fn cm(&self) -> &'lt CodegenModule<'static> {
         &self.cm
     }
     pub(crate) fn val(&self) -> BasicValueEnum<'static> {
         self.val
     }
-    pub(crate) unsafe fn new(cm: &'lt CodegenModule<'static>, val: T::Value) -> Self
+    pub unsafe fn new(cm: &'lt CodegenModule<'static>, val: T::Value) -> Self
     where
         T: Ty,
     {

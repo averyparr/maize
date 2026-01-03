@@ -7,7 +7,6 @@ use inkwell::{
 };
 
 use crate::{
-    codegen::intrinsics::cuda::floatlike::FloatLike,
     traits::{
         HasCXVal,
         holder::Holds,
@@ -178,17 +177,5 @@ where
 
             ret_val.get()
         }
-    }
-}
-
-impl<'lt, const N: usize> Val<'lt, V<F32, N>> {
-    pub fn abs_vec(self) -> Self {
-        self.perform_op_via_bulk_function(|_| panic!(), |b| b.abs())
-    }
-}
-
-impl<'lt, const N: usize> Val<'lt, V<F16, N>> {
-    pub fn abs_vec(self) -> Self {
-        self.perform_op_via_bulk_function(|b| b.abs(), |b| b.abs())
     }
 }
