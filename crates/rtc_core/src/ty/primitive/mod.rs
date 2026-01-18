@@ -1,6 +1,8 @@
+mod bf16x2;
 mod f16x2;
 mod scalar;
 
+pub use bf16x2::BF16x2;
 pub use f16x2::F16x2;
 use inkwell::values::VectorValue;
 pub use scalar::*;

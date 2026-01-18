@@ -7,7 +7,7 @@ impl PTXOptions {
         self.sm.sm()
     }
     pub fn features(&self) -> &'static str {
-        self.sm.ptx()
+        ""
     }
 }
 
@@ -75,25 +75,6 @@ impl SM {
             SM::SM101 => "compute_101",
             SM::SM101a => "compute_101a",
             SM::SM120 => "compute_120",
-        }
-    }
-
-    pub fn ptx(&self) -> &'static str {
-        match self {
-            SM::SM70 => "+ptx70",
-            SM::SM72 => "+ptx72",
-            SM::SM75 => "+ptx75",
-            SM::SM80 => "+ptx80",
-            SM::SM86 => "+ptx86",
-            SM::SM87 => "+ptx87",
-            SM::SM89 => "+ptx89",
-            SM::SM90 => "+ptx90",
-            SM::SM90a => "+ptx90a",
-            SM::SM100 => "+ptx100",
-            SM::SM100a => "+ptx100a",
-            SM::SM101 => "+ptx101",
-            SM::SM101a => "+ptx101a",
-            SM::SM120 => "+ptx120",
         }
     }
 }

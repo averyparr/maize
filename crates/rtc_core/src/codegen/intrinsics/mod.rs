@@ -10,7 +10,6 @@ use crate::{
 };
 
 pub mod cuda;
-pub mod types;
 
 impl CodegenModule<'static> {
     /// # Safety:
@@ -73,7 +72,7 @@ impl CodegenModule<'static> {
 
     /// # Safety:
     /// The intrinsic you're naming with `intrinsic_name` must be
-    /// a valid unary ntrinsic for types `T`.
+    /// a valid unary intrinsic for types `T`.
     pub unsafe fn call_unary_function<T: Ty>(
         &self,
         val: Val<'_, T>,
@@ -153,7 +152,8 @@ impl CodegenModule<'static> {
 
 /// Safety: You must promise that INTRINSIC_NAME
 /// is valid for values of type T as a unary intrinsic.
-/// You must also not implement `call`.
+/// You must also not implement anything other than
+/// `INTRINSIC_NAME`
 pub unsafe trait UnaryIntrinsic<T: Ty> {
     const INTRINSIC_NAME: &str;
 
@@ -165,7 +165,8 @@ pub unsafe trait UnaryIntrinsic<T: Ty> {
 
 /// Safety: You must promise that INTRINSIC_NAME
 /// is valid for values of type T as a binary intrinsic.
-/// You must also not implement `call`.
+/// You must also not implement anything other than
+/// `INTRINSIC_NAME`
 pub unsafe trait BinaryIntrinsic<T: Ty> {
     const INTRINSIC_NAME: &str;
 

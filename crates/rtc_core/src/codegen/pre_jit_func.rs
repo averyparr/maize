@@ -6,7 +6,10 @@ use inkwell::{
     targets::{CodeModel, FileType, InitializationConfig, Target, TargetTriple},
 };
 
-use crate::codegen::{func_with_args::Func, target::TargetMachine};
+use crate::codegen::{
+    func_with_args::Func,
+    target::{PTXOptions, SM, TargetMachine},
+};
 
 pub struct PreJitFunc<ArgsT, Ret> {
     module: Module<'static>,
@@ -43,7 +46,7 @@ impl<ArgsT, Ret> PreJitFunc<ArgsT, Ret> {
             .create_target_machine(
                 &triple,
                 target_machine.cpu(),
-                target_machine.features(),
+                "",
                 optimization_level,
                 inkwell::targets::RelocMode::Default,
                 CodeModel::Default,
@@ -54,5 +57,13 @@ impl<ArgsT, Ret> PreJitFunc<ArgsT, Ret> {
             .write_to_memory_buffer(&self.module, file_type)
             .expect("Should be able to compile!");
         maybe_ret.as_slice().to_vec().into_boxed_slice()
+    }
+
+    pub fn compile_to_ptx(&self, sm: SM) -> Box<[u8]> {
+        self.compile(
+            TargetMachine::PTX(PTXOptions { sm }),
+            OptimizationLevel::Aggressive,
+            FileType::Assembly,
+        )
     }
 }

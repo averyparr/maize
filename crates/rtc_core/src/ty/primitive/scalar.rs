@@ -138,6 +138,7 @@ macro_rules! derive_primitive {
     };
 }
 
+derive_primitive!(float: BF16, f32, bf16_type, 2, 2);
 derive_primitive!(float: F16, f32, f16_type, 2, 2);
 derive_primitive!(float: F32, f32, f32_type, 4, 4);
 derive_primitive!(float: F64, f64, f64_type, 8, 8);

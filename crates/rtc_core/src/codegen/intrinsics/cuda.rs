@@ -1,7 +1,9 @@
 use crate::{
+    codegen::{func_with_args::create_func, target::SM},
     ty::{
-        Ty,
-        primitive::{F16, F16x2, F32, F64},
+        Ty, Void,
+        primitive::{BF16, BF16x2, F16, F16x2, F32, F64},
+        ptr::{M, R},
     },
     val::Val,
 };
@@ -21,6 +23,18 @@ macro_rules! impl_unary {
                 const INTRINSIC_NAME: &str = $intrinsic;
             }
         )*
+
+        #[cfg(test)]
+        mod $intrinsic_fn_name {
+            use super::*;
+            #[test]
+            fn test_compiles() {
+                $(
+                    let ptx = test_unary_intrinsic::<$tipe, $intrinsic_name>();
+                    assert!(! ptx.contains(".extern .func"), "PTX compiles down to\n{}", ptx);
+                )*
+            }
+        }
 
         impl<T: Ty> Val<'_, T>
         where
@@ -47,6 +61,18 @@ macro_rules! impl_binary {
             }
         )*
 
+        #[cfg(test)]
+        mod $intrinsic_fn_name {
+            use super::*;
+            #[test]
+            fn test_compiles() {
+                $(
+                    let ptx = test_binary_intrinsic::<$tipe, $intrinsic_name>();
+                    assert!(! ptx.contains(".extern .func"), "PTX compiles down to\n{}", ptx);
+                )*
+            }
+        }
+
         impl<T: Ty> Val<'_, T>
         where
             $intrinsic_name: BinaryIntrinsic<T>,
@@ -58,12 +84,33 @@ macro_rules! impl_binary {
     };
 }
 
+fn test_unary_intrinsic<T: Ty, Intrins: UnaryIntrinsic<T>>() -> String {
+    let func = create_func::<(M<&mut T>,), Void>();
+    let (mut val,) = func.get_args();
+    let out = Intrins::call_intrinsic(val.load());
+    val.store(out);
+    let ptx = String::from_utf8(func.finalize().compile_to_ptx(SM::SM90).into()).unwrap();
+
+    return ptx;
+}
+
+fn test_binary_intrinsic<T: Ty, Intrins: BinaryIntrinsic<T>>() -> String {
+    let func = create_func::<(R<&T>, R<&T>, M<&mut T>), Void>();
+    let (a, b, mut c) = func.get_args();
+    let out = Intrins::call_intrinsic(a.load(), b.load());
+    c.store(out);
+    let ptx = String::from_utf8(func.finalize().compile_to_ptx(SM::SM90).into()).unwrap();
+    ptx
+}
+
 // Unary Intrinsics
 impl_unary!(
     Abs,
     __intrinsic_abs,
     F16 = "llvm.nvvm.fabs.f16",
-    F16x2 = "llvm.nvvm.fabs.v2f16",
+    F16x2 = "llvm.nvvm.fabs.f16x2",
+    BF16 = "llvm.nvvm.fabs.bf16",
+    BF16x2 = "llvm.nvvm.fabs.bf16x2",
     F32 = "llvm.nvvm.fabs.f32",
     F64 = "llvm.nvvm.fabs.f64",
 );
@@ -71,19 +118,26 @@ impl_unary!(
     AbsFtz,
     __intrinsic_abs_ftz,
     F16 = "llvm.nvvm.fabs.ftz.f16",
-    F16x2 = "llvm.nvvm.fabs.ftz.v2f16",
-    F32 = "llvm.nvvm.fabs.ftz.f",
+    F16x2 = "llvm.nvvm.fabs.ftz.f16x2",
+    F32 = "llvm.nvvm.fabs.ftz.f32",
 );
 
 impl_unary!(
     Exp2Approx,
     __intrinsic_ex2_approx,
     F32 = "llvm.nvvm.ex2.approx.f",
+    F16 = "llvm.nvvm.ex2.approx.f16",
+    F16x2 = "llvm.nvvm.ex2.approx.f16x2",
 );
 impl_unary!(
     Exp2ApproxFtz,
     __intrinsic_ex2_approx_ftz,
     F32 = "llvm.nvvm.ex2.approx.ftz.f",
+    // For some reason, these are not supported
+    // by the LLVM backend, despite being valid PTX
+    // + seemingly defined in the NVPTX intrinsics
+    // BF16 = "llvm.nvvm.ex2.approx.ftz.bf16",
+    // BF16x2 = "llvm.nvvm.ex2.approx.ftz.bf16x2",
 );
 
 impl_unary!(
@@ -263,59 +317,63 @@ impl_binary!(
     Min,
     __intrinsic_min,
     F16 = "llvm.nvvm.fmin.f16",
-    F16x2 = "llvm.nvvm.fmin.v2f16",
+    F16x2 = "llvm.nvvm.fmin.f16x2",
+    BF16 = "llvm.nvvm.fmin.bf16",
+    // PTX, but not LLVM, supports this
+    // BF16x2 = "llvm.nvvm.fmin.bf16x2",
     F32 = "llvm.nvvm.fmin.f",
     F64 = "llvm.nvvm.fmin.d",
+);
+impl_binary!(
+    Max,
+    __intrinsic_max,
+    F16 = "llvm.nvvm.fmax.f16",
+    F16x2 = "llvm.nvvm.fmax.f16x2",
+    BF16 = "llvm.nvvm.fmax.bf16",
+    // PTX, but not LLVM, supports this
+    // BF16x2 = "llvm.nvvm.fmax.bf16x2",
+    F32 = "llvm.nvvm.fmax.f",
+    F64 = "llvm.nvvm.fmax.d",
 );
 impl_binary!(
     MinFtz,
     __intrinsic_min_ftz,
     F16 = "llvm.nvvm.fmin.ftz.f16",
-    F16x2 = "llvm.nvvm.fmin.ftz.v2f16",
+    F16x2 = "llvm.nvvm.fmin.ftz.f16x2",
     F32 = "llvm.nvvm.fmin.ftz.f",
-);
-impl_binary!(
-    MinNan,
-    __intrinsic_min_nan,
-    F16 = "llvm.nvvm.fmin.nan.f16",
-    F16x2 = "llvm.nvvm.fmin.nan.v2f16",
-    F32 = "llvm.nvvm.fmin.nan.f",
-);
-impl_binary!(
-    MinNanFtz,
-    __intrinsic_min_ftz_nan,
-    F16 = "llvm.nvvm.fmin.ftz.nan.f16",
-    F16x2 = "llvm.nvvm.fmin.ftz.nan.v2f16",
-    F32 = "llvm.nvvm.fmin.ftz.nan.f",
-);
-
-impl_binary!(
-    Max,
-    __intrinsic_max,
-    F16 = "llvm.nvvm.fmax.f16",
-    F16x2 = "llvm.nvvm.fmax.v2f16",
-    F32 = "llvm.nvvm.fmax.f",
-    F64 = "llvm.nvvm.fmax.d",
 );
 impl_binary!(
     MaxFtz,
     __intrinsic_max_ftz,
     F16 = "llvm.nvvm.fmax.ftz.f16",
-    F16x2 = "llvm.nvvm.fmax.ftz.v2f16",
+    F16x2 = "llvm.nvvm.fmax.ftz.f16x2",
     F32 = "llvm.nvvm.fmax.ftz.f",
+);
+impl_binary!(
+    MinNan,
+    __intrinsic_min_nan,
+    F16 = "llvm.nvvm.fmin.nan.f16",
+    F16x2 = "llvm.nvvm.fmin.nan.f16x2",
+    BF16 = "llvm.nvvm.fmin.nan.bf16",
+    // PTX, but not LLVM, supports this
+    // BF16x2 = "llvm.nvvm.fmin.nan.bf16x2",
+    F32 = "llvm.nvvm.fmin.nan.f",
 );
 impl_binary!(
     MaxNan,
     __intrinsic_max_nan,
     F16 = "llvm.nvvm.fmax.nan.f16",
-    F16x2 = "llvm.nvvm.fmax.nan.v2f16",
+    F16x2 = "llvm.nvvm.fmax.nan.f16x2",
+    BF16 = "llvm.nvvm.fmax.nan.bf16",
+    // PTX, but not LLVM, supports this
+    // BF16x2 = "llvm.nvvm.fmax.nan.bf16x2",
     F32 = "llvm.nvvm.fmax.nan.f",
 );
 impl_binary!(
     MaxNanFtz,
     __intrinsic_max_ftz_nan,
     F16 = "llvm.nvvm.fmax.ftz.nan.f16",
-    F16x2 = "llvm.nvvm.fmax.ftz.nan.v2f16",
+    F16x2 = "llvm.nvvm.fmax.ftz.nan.f16x2",
     F32 = "llvm.nvvm.fmax.ftz.nan.f",
 );
 
@@ -323,57 +381,68 @@ impl_binary!(
     MinXorsignAbs,
     __intrinsic_min_xorsign_abs,
     F16 = "llvm.nvvm.fmin.xorsign.abs.f16",
-    F16x2 = "llvm.nvvm.fmin.xorsign.abs.v2f16",
+    F16x2 = "llvm.nvvm.fmin.xorsign.abs.f16x2",
+    BF16 = "llvm.nvvm.fmin.xorsign.abs.bf16",
+    // PTX, but not LLVM, supports this
+    // BF16x2 = "llvm.nvvm.fmin.xorsign.abs.bf16x2",
     F32 = "llvm.nvvm.fmin.xorsign.abs.f",
+);
+impl_binary!(
+    MaxXorsignAbs,
+    __intrinsic_max_xorsign_abs,
+    F16 = "llvm.nvvm.fmax.xorsign.abs.f16",
+    F16x2 = "llvm.nvvm.fmax.xorsign.abs.f16x2",
+    BF16 = "llvm.nvvm.fmax.xorsign.abs.bf16",
+    // PTX, but not LLVM, supports this
+    // BF16x2 = "llvm.nvvm.fmax.xorsign.abs.bf16x2",
+    F32 = "llvm.nvvm.fmax.xorsign.abs.f",
 );
 impl_binary!(
     MinXorsignAbsFtz,
     __intrinsic_min_ftz_xorsign_abs,
     F16 = "llvm.nvvm.fmin.ftz.xorsign.abs.f16",
-    F16x2 = "llvm.nvvm.fmin.ftz.xorsign.abs.v2f16",
+    F16x2 = "llvm.nvvm.fmin.ftz.xorsign.abs.f16x2",
     F32 = "llvm.nvvm.fmin.ftz.xorsign.abs.f",
-);
-impl_binary!(
-    MinXorsignAbsNan,
-    __intrinsic_min_nan_xorsign_abs,
-    F16 = "llvm.nvvm.fmin.nan.xorsign.abs.f16",
-    F16x2 = "llvm.nvvm.fmin.nan.xorsign.abs.v2f16",
-    F32 = "llvm.nvvm.fmin.nan.xorsign.abs.f",
-);
-impl_binary!(
-    MinXorsignAbsFtzNan,
-    __intrinsic_min_ftz_nan_xorsign_abs,
-    F16 = "llvm.nvvm.fmin.ftz.nan.xorsign.abs.f16",
-    F16x2 = "llvm.nvvm.fmin.ftz.nan.xorsign.abs.v2f16",
-    F32 = "llvm.nvvm.fmin.ftz.nan.xorsign.abs.f",
-);
-
-impl_binary!(
-    MaxXorsignAbs,
-    __intrinsic_max_xorsign_abs,
-    F16 = "llvm.nvvm.fmax.xorsign.abs.f16",
-    F16x2 = "llvm.nvvm.fmax.xorsign.abs.v2f16",
-    F32 = "llvm.nvvm.fmax.xorsign.abs.f",
 );
 impl_binary!(
     MaxXorsignAbsFtz,
     __intrinsic_max_ftz_xorsign_abs,
     F16 = "llvm.nvvm.fmax.ftz.xorsign.abs.f16",
-    F16x2 = "llvm.nvvm.fmax.ftz.xorsign.abs.v2f16",
+    F16x2 = "llvm.nvvm.fmax.ftz.xorsign.abs.f16x2",
     F32 = "llvm.nvvm.fmax.ftz.xorsign.abs.f",
+);
+impl_binary!(
+    MinXorsignAbsNan,
+    __intrinsic_min_nan_xorsign_abs,
+    F16 = "llvm.nvvm.fmin.nan.xorsign.abs.f16",
+    F16x2 = "llvm.nvvm.fmin.nan.xorsign.abs.f16x2",
+    BF16 = "llvm.nvvm.fmin.nan.xorsign.abs.bf16",
+    // PTX, but not LLVM, supports this
+    // BF16x2 = "llvm.nvvm.fmin.nan.xorsign.abs.bf16x2",
+    F32 = "llvm.nvvm.fmin.nan.xorsign.abs.f",
 );
 impl_binary!(
     MaxXorsignAbsNan,
     __intrinsic_max_nan_xorsign_abs,
     F16 = "llvm.nvvm.fmax.nan.xorsign.abs.f16",
-    F16x2 = "llvm.nvvm.fmax.nan.xorsign.abs.v2f16",
+    F16x2 = "llvm.nvvm.fmax.nan.xorsign.abs.f16x2",
+    BF16 = "llvm.nvvm.fmax.nan.xorsign.abs.bf16",
+    // PTX, but not LLVM, supports this
+    // BF16x2 = "llvm.nvvm.fmax.nan.xorsign.abs.bf16x2",
     F32 = "llvm.nvvm.fmax.nan.xorsign.abs.f",
+);
+impl_binary!(
+    MinXorsignAbsFtzNan,
+    __intrinsic_min_ftz_nan_xorsign_abs,
+    F16 = "llvm.nvvm.fmin.ftz.nan.xorsign.abs.f16",
+    F16x2 = "llvm.nvvm.fmin.ftz.nan.xorsign.abs.f16x2",
+    F32 = "llvm.nvvm.fmin.ftz.nan.xorsign.abs.f",
 );
 impl_binary!(
     MaxXorsignAbsFtzNan,
     __intrinsic_max_ftz_nan_xorsign_abs,
     F16 = "llvm.nvvm.fmax.ftz.nan.xorsign.abs.f16",
-    F16x2 = "llvm.nvvm.fmax.ftz.nan.xorsign.abs.v2f16",
+    F16x2 = "llvm.nvvm.fmax.ftz.nan.xorsign.abs.f16x2",
     F32 = "llvm.nvvm.fmax.ftz.nan.xorsign.abs.f",
 );
 
@@ -383,39 +452,46 @@ impl_unary!(
     AbsFast,
     __intrinsic_abs_fast,
     F16 = "llvm.nvvm.fabs.ftz.f16",
-    F16x2 = "llvm.nvvm.fabs.ftz.v2f16",
-    F32 = "llvm.nvvm.fabs.ftz.f",
-    F64 = "llvm.nvvm.fabs.d", // No FTZ for F64
+    F16x2 = "llvm.nvvm.fabs.ftz.f16x2",
+    BF16 = "llvm.nvvm.fabs.bf16",
+    BF16x2 = "llvm.nvvm.fabs.bf16x2",
+    F32 = "llvm.nvvm.fabs.ftz.f32",
+    F64 = "llvm.nvvm.fabs.f64", // No FTZ for F64
 );
 
 impl_unary!(
     Exp2Fast,
     __intrinsic_exp2_fast,
-    F16 = "llvm.nvvm.ex2.approx.f16", // No FTZ for F16
-    F16x2 = "llvm.nvvm.ex2.approx.ftz.v2f16",
+    // lg2 has an f64 variant but not ex2
+    // F64 = "llvm.nvvm.ex2.approx.d",
     F32 = "llvm.nvvm.ex2.approx.ftz.f",
-    F64 = "llvm.nvvm.ex2.approx.ftz.d",
+    F16 = "llvm.nvvm.ex2.approx.f16",
+    F16x2 = "llvm.nvvm.ex2.approx.f16x2",
+    // PTX, but not LLVM, supports BF16 ex2
 );
 
 impl_unary!(
     Log2Fast,
     __intrinsic_log2_fast,
+    F64 = "llvm.nvvm.lg2.approx.d",
     F32 = "llvm.nvvm.lg2.approx.ftz.f",
-    F64 = "llvm.nvvm.lg2.approx.d", // No FTZ for F64
+    // PTX doesn't seem to have FP16 or BF16 support
 );
 
 impl_unary!(
     FloorFast,
     __intrinsic_floor_fast,
     F32 = "llvm.nvvm.floor.ftz.f",
-    F64 = "llvm.nvvm.floor.d", // No FTZ for F64
+    F64 = "llvm.nvvm.floor.d",
+    // PTX doesn't seem to support FP16 or BF16 ??
 );
 
 impl_unary!(
     CeilFast,
     __intrinsic_ceil_fast,
     F32 = "llvm.nvvm.ceil.ftz.f",
-    F64 = "llvm.nvvm.ceil.d", // No FTZ for F64
+    F64 = "llvm.nvvm.ceil.d",
+    // PTX doesn't seem to support FP16 or BF16 ??
 );
 
 impl_unary!(
@@ -429,7 +505,7 @@ impl_unary!(
     SqrtFast,
     __intrinsic_sqrt_fast,
     F32 = "llvm.nvvm.sqrt.approx.ftz.f",
-    F64 = "llvm.nvvm.sqrt.rn.d", // No approx or FTZ for F64
+    F64 = "llvm.nvvm.sqrt.rn.d",
 );
 
 impl_unary!(
@@ -457,7 +533,10 @@ impl_binary!(
     MinFast,
     __intrinsic_min_fast,
     F16 = "llvm.nvvm.fmin.ftz.f16",
-    F16x2 = "llvm.nvvm.fmin.ftz.v2f16",
+    F16x2 = "llvm.nvvm.fmin.ftz.f16x2",
+    BF16 = "llvm.nvvm.fmin.bf16",
+    // PTX, but not LLVM, supports this
+    // BF16x2 = "llvm.nvvm.fmin.bf16x2",
     F32 = "llvm.nvvm.fmin.ftz.f",
     F64 = "llvm.nvvm.fmin.d", // No FTZ for F64
 );
@@ -466,7 +545,10 @@ impl_binary!(
     MaxFast,
     __intrinsic_max_fast,
     F16 = "llvm.nvvm.fmax.ftz.f16",
-    F16x2 = "llvm.nvvm.fmax.ftz.v2f16",
+    F16x2 = "llvm.nvvm.fmax.ftz.f16x2",
+    BF16 = "llvm.nvvm.fmax.bf16",
+    // PTX, but not LLVM, supports this
+    // BF16x2 = "llvm.nvvm.fmax.bf16x2",
     F32 = "llvm.nvvm.fmax.ftz.f",
     F64 = "llvm.nvvm.fmax.d", // No FTZ for F64
 );

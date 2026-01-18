@@ -1,7 +1,7 @@
 use crate::{
     codegen::intrinsics::{
         UnaryIntrinsic,
-        types::{Abs, AbsFtz, Exp2Approx, Exp2ApproxFtz},
+        cuda::{Abs, AbsFtz, Exp2Approx, Exp2ApproxFtz},
     },
     traits::vectorizable::VectorizableTy,
     ty::{

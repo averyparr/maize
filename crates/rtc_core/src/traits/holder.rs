@@ -6,10 +6,6 @@ use crate::{
 
 pub trait Holds {
     type T: Ty;
-    #[expect(
-        private_interfaces,
-        reason = "We intend to only make this available through our API"
-    )]
     fn extract_value(val: Val<'_, Self>) -> Val<'_, Self::T>;
 }
 
@@ -18,10 +14,6 @@ where
     T: Ty,
 {
     type T = Self;
-    #[expect(
-        private_interfaces,
-        reason = "We intend to only make this available through our API"
-    )]
     fn extract_value(val: Val<'_, Self>) -> Val<'_, Self::T> {
         val
     }
@@ -32,10 +24,6 @@ where
     T: Ty,
 {
     type T = T;
-    #[expect(
-        private_interfaces,
-        reason = "We intend to only make this available through our API"
-    )]
     fn extract_value(val: Val<'_, Self>) -> Val<'_, Self::T> {
         let cm = val.cm();
         let cx = val.cx();
