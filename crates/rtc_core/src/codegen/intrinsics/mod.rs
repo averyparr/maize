@@ -157,7 +157,7 @@ impl CodegenModule<'static> {
 pub unsafe trait UnaryIntrinsic<T: Ty> {
     const INTRINSIC_NAME: &str;
 
-    fn call(val: Val<'_, T>) -> Val<'_, T> {
+    fn call_intrinsic(val: Val<'_, T>) -> Val<'_, T> {
         // Safety: User promised!
         unsafe { val.cm().call_unary_function(val, Self::INTRINSIC_NAME) }
     }
@@ -169,7 +169,7 @@ pub unsafe trait UnaryIntrinsic<T: Ty> {
 pub unsafe trait BinaryIntrinsic<T: Ty> {
     const INTRINSIC_NAME: &str;
 
-    fn call<'a>(lhs: Val<'a, T>, rhs: Val<'a, T>) -> Val<'a, T> {
+    fn call_intrinsic<'a>(lhs: Val<'a, T>, rhs: Val<'a, T>) -> Val<'a, T> {
         unsafe {
             lhs.cm()
                 .call_binary_function(lhs, rhs, Self::INTRINSIC_NAME)

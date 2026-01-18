@@ -1,6 +1,6 @@
 use crate::{
     ty::{
-        Ty, V,
+        Ty,
         primitive::{F16, F16x2, F32, F64},
     },
     val::Val,
@@ -27,7 +27,7 @@ macro_rules! impl_unary {
             $intrinsic_name: UnaryIntrinsic<T>,
         {
             pub fn $intrinsic_fn_name(self) -> Self {
-                $intrinsic_name::call(self)
+                $intrinsic_name::call_intrinsic(self)
             }
         }
     };
@@ -52,7 +52,7 @@ macro_rules! impl_binary {
             $intrinsic_name: BinaryIntrinsic<T>,
         {
             pub fn $intrinsic_fn_name(self, rhs: Self) -> Self {
-                $intrinsic_name::call(self, rhs)
+                $intrinsic_name::call_intrinsic(self, rhs)
             }
         }
     };
@@ -64,8 +64,8 @@ impl_unary!(
     __intrinsic_abs,
     F16 = "llvm.nvvm.fabs.f16",
     F16x2 = "llvm.nvvm.fabs.v2f16",
-    F32 = "llvm.nvvm.fabs.f",
-    F64 = "llvm.nvvm.fabs.d",
+    F32 = "llvm.nvvm.fabs.f32",
+    F64 = "llvm.nvvm.fabs.f64",
 );
 impl_unary!(
     AbsFtz,
@@ -78,17 +78,12 @@ impl_unary!(
 impl_unary!(
     Exp2Approx,
     __intrinsic_ex2_approx,
-    F16 = "llvm.nvvm.ex2.approx.f16",
-    F16x2 = "llvm.nvvm.ex2.approx.v2f16",
     F32 = "llvm.nvvm.ex2.approx.f",
-    F64 = "llvm.nvvm.ex2.approx.d",
 );
 impl_unary!(
     Exp2ApproxFtz,
     __intrinsic_ex2_approx_ftz,
-    F16x2 = "llvm.nvvm.ex2.approx.ftz.v2f16",
     F32 = "llvm.nvvm.ex2.approx.ftz.f",
-    F64 = "llvm.nvvm.ex2.approx.ftz.d",
 );
 
 impl_unary!(

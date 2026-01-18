@@ -4,23 +4,13 @@ use inkwell::{
     values::{BasicValueEnum, VectorValue},
 };
 
-use crate::{
-    ty::{ArithmeticTy, FromCtx, Ty, V, primitive::F16},
-    val::Val,
+use crate::ty::{
+    ArithmeticTy, FromCtx, Ty,
+    primitive::{F16, HasFundamentalVectorTy},
 };
 
-impl<'lt> Val<'lt, F16x2> {
-    pub fn as_vec(self) -> Val<'lt, V<F16, 2>> {
-        // Safety: these are the same type
-        unsafe { Val::new(self.cm(), self.to_underlying()) }
-    }
-}
-
-impl<'lt> Val<'lt, V<F16, 2>> {
-    pub fn as_primitive(self) -> Val<'lt, F16x2> {
-        // Safety: These are the same type
-        unsafe { Val::new(self.cm(), self.to_underlying()) }
-    }
+unsafe impl HasFundamentalVectorTy<2> for F16 {
+    type VecTy = F16x2;
 }
 
 #[derive(Clone, Copy)]
