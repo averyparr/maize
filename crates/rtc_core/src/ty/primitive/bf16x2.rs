@@ -4,9 +4,12 @@ use inkwell::{
     values::{BasicValueEnum, VectorValue},
 };
 
-use crate::ty::{
-    ArithmeticTy, FromCtx, Ty,
-    primitive::{BF16, HasFundamentalVectorTy},
+use crate::{
+    traits::indexes::IndexableTy,
+    ty::{
+        ArithmeticTy, FromCtx, Ty, V,
+        primitive::{BF16, HasFundamentalVectorTy},
+    },
 };
 
 unsafe impl HasFundamentalVectorTy<2> for BF16 {
@@ -39,6 +42,14 @@ impl Ty for BF16x2 {
     fn get_value(basic_val: BasicValueEnum<'static>) -> Self::Value {
         basic_val.into_vector_value()
     }
+}
+
+impl IndexableTy for BF16x2 {
+    const LEN: usize = 2;
+
+    type ElemT = BF16;
+
+    type ParametrizedLen<const M: usize> = V<Self::ElemT, M>;
 }
 
 impl ArithmeticTy for BF16x2 {

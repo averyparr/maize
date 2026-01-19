@@ -23,7 +23,7 @@ pub trait IndexableTy: Ty<Value = VectorValue<'static>> {
     const LEN: usize;
     type ElemT: Ty;
 
-    type ParametrizedLen<const M: usize>: IndexableTy<ElemT = Self::ElemT, Value = VectorValue<'static>>;
+    type ParametrizedLen<const M: usize>: IndexableTy<ElemT = Self::ElemT, Value = VectorValue<'static>, Type = VectorType<'static>>;
 
     fn split_as_iterator<'a>(
         val: Val<'a, Self>,

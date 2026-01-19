@@ -1,181 +1,139 @@
-use std::ops::Range;
-
-use inkwell::{
-    context::ContextRef,
-    types::VectorType,
-    values::{PointerValue, VectorValue},
-};
+use std::ops::Index;
 
 use crate::{
+    codegen::{
+        func_with_args::create_func,
+        intrinsics::{
+            BinaryIntrinsic, UnaryIntrinsic,
+            cuda::{Exp2Fast, Log2Fast, Min},
+        },
+    },
     traits::{
-        HasCXVal,
         holder::Holds,
         indexes::{IndexableMut, IndexableRef, IndexableTy},
-        ptr::{MutTy, RefTy},
+        stores::Stores,
+        vec::BulkOps,
         vectorizable::VectorizableTy,
     },
     ty::{
-        ArithmeticTy, FromCtx, Ty, V, VecTy,
-        primitive::{F16, F32},
+        FromCtx, Ty, V, Void,
+        primitive::{BF16, BF16x2, F16, F16x2, F32, F64},
         ptr::{M, R},
     },
     val::{S, Val},
 };
 
-impl<'lt, Holder, VecT> Val<'lt, Holder>
-where
-    Holder: Holds<T = VecT>,
-    VecT: IndexableTy,
-{
-    pub fn into_iter(self) -> impl ExactSizeIterator<Item = Val<'lt, VecT::ElemT>> {
-        VecT::split_as_iterator(self.get())
-    }
-
-    pub fn into_chunks<const CHUNK_SIZE: usize>(
-        self,
-    ) -> (
-        impl ExactSizeIterator<Item = Val<'lt, VecT::ParametrizedLen<CHUNK_SIZE>>>,
-        impl ExactSizeIterator<Item = Val<'lt, VecT::ElemT>>,
-    ) {
-        VecT::chunk_split(self.get())
+impl<'a, VecT: IndexableTy> Val<'a, VecT> {
+    pub fn elem_iter(self) -> impl ExactSizeIterator<Item = Val<'a, VecT::ElemT>> {
+        IndexableTy::split_as_iterator(self)
     }
 }
 
-impl<'lt, VecRef, VecT> Val<'lt, VecRef>
-where
-    VecRef: IndexableRef<Pointee = VecT> + 'lt,
-    VecT: IndexableTy,
-{
-    pub fn chunks<const CHUNK_SIZE: usize>(
-        self,
-    ) -> (
-        impl ExactSizeIterator<Item = Val<'lt, R<&'lt VecT::ParametrizedLen<CHUNK_SIZE>>>>,
-        impl ExactSizeIterator<Item = Val<'lt, R<&'lt VecT::ElemT>>>,
-    ) {
-        VecRef::chunks_ref(self)
+impl<'a, StoresVecT: Stores<T: IndexableTy>> Val<'a, StoresVecT> {
+    pub const fn len(&self) -> usize {
+        StoresVecT::T::LEN
     }
-}
-
-impl<'lt, VecMut, VecT> Val<'lt, VecMut>
-where
-    VecMut: IndexableMut<Pointee = VecT> + 'lt,
-    VecT: IndexableTy,
-{
-    pub fn chunks_mut<const CHUNK_SIZE: usize>(
-        self,
-    ) -> (
-        impl ExactSizeIterator<Item = Val<'lt, M<&'lt mut VecT::ParametrizedLen<CHUNK_SIZE>>>>,
-        impl ExactSizeIterator<Item = Val<'lt, M<&'lt mut VecT::ElemT>>>,
-    ) {
-        VecMut::chunks_mut(self)
+    pub fn elem_ref<'b>(
+        &'b self,
+    ) -> impl ExactSizeIterator<Item = Val<'b, R<&'b <StoresVecT::T as IndexableTy>::ElemT>>> {
+        let len = self.len();
+        let self_ref = self.get_ref();
+        (0..len).map(move |i| IndexableRef::get_ref_at_idx(self_ref, i))
     }
-}
-
-const SUM_REDUCE_MAX_VECTORIZATION: usize = 2;
-
-impl<'lt, Holder, VecT> Val<'lt, Holder>
-where
-    Holder: Holds<T = VecT>,
-    VecT: IndexableTy,
-    VecT::ElemT: ArithmeticTy,
-    VecT::ParametrizedLen<SUM_REDUCE_MAX_VECTORIZATION>: ArithmeticTy,
-{
-    pub fn sum(self) -> Val<'lt, VecT::ElemT> {
-        let raw_val = self.get();
-        let (bulk, rest) = raw_val.into_chunks();
-
-        let vector_sum = bulk
-            .fold(None, |accum, e| {
-                if let Some(val) = accum {
-                    Some(val + e)
-                } else {
-                    Some(e)
-                }
-            })
-            .map(|v| {
-                v.into_iter().fold(None, |accum, e| {
-                    if let Some(val) = accum {
-                        Some(val + e)
-                    } else {
-                        Some(e)
-                    }
-                })
-            })
-            .map(|v| {
-                v.expect("There should be at least one accum if we have even a single vector")
-            });
-        let scalar_sum = if let Some(vector_sum) = vector_sum {
-            rest.fold(vector_sum, |accum, e| accum + e)
-        } else {
-            rest.fold(None, |accum, e| {
-                if let Some(val) = accum {
-                    Some(val + e)
-                } else {
-                    Some(e)
-                }
-            })
-            .expect("There must be at least one element in the vector")
-        };
-        scalar_sum
-    }
-}
-
-trait BulkMathOps {
-    const BULK_SIZE: usize = 1;
-}
-
-impl BulkMathOps for F32 {}
-impl BulkMathOps for F16 {
-    const BULK_SIZE: usize = 2;
-}
-
-impl<'lt, VecT> Val<'lt, VecT>
-where
-    VecT: IndexableTy,
-{
-    fn map_elementwise<FE>(self, fe: FE) -> Self
+    pub fn elem_mut<'b>(
+        &'b mut self,
+    ) -> impl ExactSizeIterator<Item = Val<'b, M<&'b mut <StoresVecT::T as IndexableTy>::ElemT>>>
     where
-        FE: Fn(Val<'_, VecT::ElemT>) -> Val<'_, VecT::ElemT>,
+        'a: 'b,
     {
-        let llvm_val = self.to_underlying().get_type().const_zero();
-        let mut ret_val = unsafe { Val::new(self.cm(), llvm_val).with_storage() };
-
-        for (mut ret, inc) in ret_val.get_mut().iter_mut().zip(self.into_iter()) {
-            ret.store(fe(inc))
-        }
-
-        ret_val.get()
+        let len = self.len();
+        let self_mut = self.get_mut();
+        (0..len).map(move |i| IndexableMut::get_mut_at_idx(self_mut, i))
     }
 }
 
-impl<'lt, VecT> Val<'lt, VecT>
-where
-    VecT: IndexableTy,
-    VecT::ElemT: BulkMathOps,
-{
-    fn perform_op_via_bulk_function<FB, FE>(self, fb: FB, fe: FE) -> Self
+impl<'a, HoldsVecT: Holds<T = V<ElemT, N>>, ElemT: BulkOps, const N: usize> Val<'a, HoldsVecT> {
+    fn map_elementwise<F, U>(self, f: F) -> Val<'a, S<V<U, N>>>
     where
-        FB: Fn(Val<'_, VecT::ParametrizedLen<2>>) -> Val<'_, VecT::ParametrizedLen<2>>,
-        FE: Fn(Val<'_, VecT::ElemT>) -> Val<'_, VecT::ElemT>,
+        F: FnMut(Val<'a, ElemT>) -> Val<'a, U>,
+        U: VectorizableTy,
     {
-        if VecT::ElemT::BULK_SIZE == 1 {
-            self.map_elementwise(fe)
-        } else {
-            let llvm_val = self.to_underlying().get_type().const_zero();
-            let mut ret_val = unsafe { Val::new(self.cm(), llvm_val).with_storage() };
+        let raw_vec_val = U::vec_ty(self.cm().cx().ctx(), N).const_zero();
+        // Safety: This is initialized from a len-N U-vec so the cast is valid
+        let mut ret = unsafe { Val::new(self.cm(), raw_vec_val) }.with_storage();
+        let elem_iter = self.get().elem_iter().map(f);
+        assert_eq!(elem_iter.len(), ret.len());
+        ret.elem_mut()
+            .zip(elem_iter)
+            .for_each(|(mut r, e)| r.store(e));
+        ret
+    }
 
-            let (bulk_inc, rest_inc) = self.into_chunks();
-            let (bulk_ret, rest_ret) = ret_val.get_mut().chunks_mut();
-
-            for (mut ret, inc) in bulk_ret.zip(bulk_inc) {
-                ret.store(fb(inc));
-            }
-
-            for (mut ret, inc) in rest_ret.zip(rest_inc) {
-                ret.store(fe(inc))
-            }
-
-            ret_val.get()
+    fn zip_elementwise<F, U, HoldsRight>(
+        self,
+        other: Val<'a, HoldsRight>,
+        mut f: F,
+    ) -> Val<'a, S<V<U, N>>>
+    where
+        HoldsRight: Holds<T = V<ElemT, N>>,
+        F: FnMut(Val<'a, ElemT>, Val<'a, ElemT>) -> Val<'a, U>,
+        U: VectorizableTy,
+    {
+        let raw_vec_val = U::vec_ty(self.cm().cx().ctx(), N).const_zero();
+        // Safety: This is initialized from a len-N U-vec so the cast is valid
+        let mut ret = unsafe { Val::new(self.cm(), raw_vec_val) }.with_storage();
+        let a_iter = self.get().elem_iter();
+        let b_iter = other.get().elem_iter();
+        for (mut r, (a, b)) in ret.elem_mut().zip(a_iter.zip(b_iter)) {
+            r.store(f(a, b));
         }
+        ret
+    }
+
+    fn map_bulk<FB, FE, U>(self, mut fe: FE, mut fb: FB) -> Val<'a, S<V<U, N>>>
+    where
+        FB: FnMut(Val<'a, ElemT::BulkT>) -> Val<'a, U::BulkT>,
+        FE: FnMut(Val<'a, ElemT>) -> Val<'a, U>,
+        U: BulkOps,
+    {
+        let raw_vec_val = U::vec_ty(self.cm().cx().ctx(), N).const_zero();
+        // Safety: This is initialized from a len-N U-vec so the cast is valid
+        let mut ret = unsafe { Val::new(self.cm(), raw_vec_val) }.with_storage();
+        let (rbulk, rrest) = U::iter_bulk_mut(ret.get_mut());
+        let (ebulk, erest) = ElemT::iter_bulk(self.get());
+        for (mut r, e) in rbulk.zip(ebulk) {
+            r.store(fb(e));
+        }
+        for (mut r, e) in rrest.zip(erest) {
+            r.store(fe(e));
+        }
+        ret
+    }
+
+    fn zip_bulk<FE, FB, U, HoldsRight>(
+        self,
+        other: Val<'a, HoldsRight>,
+        mut fe: FE,
+        mut fb: FB,
+    ) -> Val<'a, S<V<U, N>>>
+    where
+        HoldsRight: Holds<T = V<ElemT, N>>,
+        FE: FnMut(Val<'a, ElemT>, Val<'a, ElemT>) -> Val<'a, U>,
+        FB: FnMut(Val<'a, ElemT::BulkT>, Val<'a, ElemT::BulkT>) -> Val<'a, U::BulkT>,
+        U: BulkOps,
+    {
+        let raw_vec_val = U::vec_ty(self.cm().cx().ctx(), N).const_zero();
+        // Safety: This is initialized from a len-N U-vec so the cast is valid
+        let mut ret = unsafe { Val::new(self.cm(), raw_vec_val) }.with_storage();
+        let (ret_bulk, ret_rest) = U::iter_bulk_mut(ret.get_mut());
+        let (a_bulk, a_rest) = ElemT::iter_bulk(self.get());
+        let (b_bulk, b_rest) = ElemT::iter_bulk(other.get());
+        for (mut r, (a, b)) in ret_bulk.zip(a_bulk.zip(b_bulk)) {
+            r.store(fb(a, b));
+        }
+        for (mut r, (a, b)) in ret_rest.zip(a_rest.zip(b_rest)) {
+            r.store(fe(a, b));
+        }
+        ret
     }
 }

@@ -14,7 +14,7 @@ use inkwell::{
     builder::BuilderError,
     context::ContextRef,
     types::{BasicMetadataTypeEnum, BasicType, FloatMathType, FunctionType, VectorType},
-    values::{BasicValue, BasicValueEnum, FloatMathValue, InstructionValue},
+    values::{BasicValue, BasicValueEnum, FloatMathValue, InstructionValue, VectorBaseValue},
 };
 
 use crate::{

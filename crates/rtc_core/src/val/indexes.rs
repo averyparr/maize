@@ -15,16 +15,6 @@ use crate::{
     val::{S, Val},
 };
 
-impl<'lt, Holder, VecT> Val<'lt, Holder>
-where
-    Holder: Holds<T = VecT>,
-    VecT: IndexableTy,
-{
-    pub const fn len() -> usize {
-        VecT::LEN
-    }
-}
-
 impl<'lt, VecT> Val<'lt, VecT>
 where
     VecT: IndexableTy,
@@ -46,7 +36,7 @@ where
 
         let start = indices.start;
 
-        let mut iter = self.into_iter();
+        let mut iter = self.elem_iter();
         for _ in 0..start {
             iter.next();
         }
