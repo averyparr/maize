@@ -154,10 +154,10 @@ impl CodegenModule<'static> {
 /// is valid for values of type T as a unary intrinsic.
 /// You must also not implement anything other than
 /// `INTRINSIC_NAME`
-pub unsafe trait UnaryIntrinsic<T: Ty> {
+pub unsafe trait UnaryIntrinsic<Intrins>: Ty {
     const INTRINSIC_NAME: &str;
 
-    fn call_intrinsic(val: Val<'_, T>) -> Val<'_, T> {
+    fn call_intrinsic(val: Val<'_, Self>) -> Val<'_, Self> {
         // Safety: User promised!
         unsafe { val.cm().call_unary_function(val, Self::INTRINSIC_NAME) }
     }
@@ -167,10 +167,10 @@ pub unsafe trait UnaryIntrinsic<T: Ty> {
 /// is valid for values of type T as a binary intrinsic.
 /// You must also not implement anything other than
 /// `INTRINSIC_NAME`
-pub unsafe trait BinaryIntrinsic<T: Ty> {
+pub unsafe trait BinaryIntrinsic<Intrins>: Ty {
     const INTRINSIC_NAME: &str;
 
-    fn call_intrinsic<'a>(lhs: Val<'a, T>, rhs: Val<'a, T>) -> Val<'a, T> {
+    fn call_intrinsic<'a>(lhs: Val<'a, Self>, rhs: Val<'a, Self>) -> Val<'a, Self> {
         unsafe {
             lhs.cm()
                 .call_binary_function(lhs, rhs, Self::INTRINSIC_NAME)

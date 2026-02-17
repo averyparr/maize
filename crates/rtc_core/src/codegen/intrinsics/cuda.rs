@@ -19,7 +19,7 @@ macro_rules! impl_unary {
     ) => {
         pub struct $intrinsic_name;
         $(
-            unsafe impl UnaryIntrinsic<$tipe> for $intrinsic_name {
+            unsafe impl UnaryIntrinsic<$intrinsic_name> for $tipe {
                 const INTRINSIC_NAME: &str = $intrinsic;
             }
         )*
@@ -36,12 +36,10 @@ macro_rules! impl_unary {
             }
         }
 
-        impl<T: Ty> Val<'_, T>
-        where
-            $intrinsic_name: UnaryIntrinsic<T>,
+        impl<T: UnaryIntrinsic<$intrinsic_name>> Val<'_, T>
         {
             pub fn $intrinsic_fn_name(self) -> Self {
-                $intrinsic_name::call_intrinsic(self)
+                T::call_intrinsic(self)
             }
         }
     };
@@ -56,7 +54,7 @@ macro_rules! impl_binary {
     ) => {
         pub struct $intrinsic_name;
         $(
-            unsafe impl BinaryIntrinsic<$tipe> for $intrinsic_name {
+            unsafe impl BinaryIntrinsic<$intrinsic_name> for $tipe {
                 const INTRINSIC_NAME: &str = $intrinsic;
             }
         )*
@@ -73,31 +71,29 @@ macro_rules! impl_binary {
             }
         }
 
-        impl<T: Ty> Val<'_, T>
-        where
-            $intrinsic_name: BinaryIntrinsic<T>,
+        impl<T: BinaryIntrinsic<$intrinsic_name>> Val<'_, T>
         {
             pub fn $intrinsic_fn_name(self, rhs: Self) -> Self {
-                $intrinsic_name::call_intrinsic(self, rhs)
+                T::call_intrinsic(self, rhs)
             }
         }
     };
 }
 
-fn test_unary_intrinsic<T: Ty, Intrins: UnaryIntrinsic<T>>() -> String {
+fn test_unary_intrinsic<T: UnaryIntrinsic<Intrins>, Intrins>() -> String {
     let func = create_func::<(M<&mut T>,), Void>();
     let (mut val,) = func.get_args();
-    let out = Intrins::call_intrinsic(val.load());
+    let out = T::call_intrinsic(val.load());
     val.store(out);
     let ptx = String::from_utf8(func.finalize().compile_to_ptx(SM::SM90).into()).unwrap();
 
     return ptx;
 }
 
-fn test_binary_intrinsic<T: Ty, Intrins: BinaryIntrinsic<T>>() -> String {
+fn test_binary_intrinsic<T: BinaryIntrinsic<Intrins>, Intrins>() -> String {
     let func = create_func::<(R<&T>, R<&T>, M<&mut T>), Void>();
     let (a, b, mut c) = func.get_args();
-    let out = Intrins::call_intrinsic(a.load(), b.load());
+    let out = T::call_intrinsic(a.load(), b.load());
     c.store(out);
     let ptx = String::from_utf8(func.finalize().compile_to_ptx(SM::SM90).into()).unwrap();
     ptx

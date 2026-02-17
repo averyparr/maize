@@ -53,7 +53,7 @@ impl<'a, StoresVecT: Stores<T: IndexableTy>> Val<'a, StoresVecT> {
 }
 
 impl<'a, HoldsVecT: Holds<T = V<ElemT, N>>, ElemT: BulkOps, const N: usize> Val<'a, HoldsVecT> {
-    fn map_elementwise<F, U>(self, f: F) -> Val<'a, S<V<U, N>>>
+    pub fn map_elementwise<F, U>(self, f: F) -> Val<'a, S<V<U, N>>>
     where
         F: FnMut(Val<'a, ElemT>) -> Val<'a, U>,
         U: VectorizableTy,
@@ -69,7 +69,7 @@ impl<'a, HoldsVecT: Holds<T = V<ElemT, N>>, ElemT: BulkOps, const N: usize> Val<
         ret
     }
 
-    fn zip_elementwise<F, U, HoldsRight>(
+    pub fn zip_elementwise<F, U, HoldsRight>(
         self,
         other: Val<'a, HoldsRight>,
         mut f: F,
@@ -90,7 +90,7 @@ impl<'a, HoldsVecT: Holds<T = V<ElemT, N>>, ElemT: BulkOps, const N: usize> Val<
         ret
     }
 
-    fn map_bulk<FB, FE, U>(self, mut fe: FE, mut fb: FB) -> Val<'a, S<V<U, N>>>
+    pub fn map_bulk<FB, FE, U>(self, mut fe: FE, mut fb: FB) -> Val<'a, S<V<U, N>>>
     where
         FB: FnMut(Val<'a, ElemT::BulkT>) -> Val<'a, U::BulkT>,
         FE: FnMut(Val<'a, ElemT>) -> Val<'a, U>,
@@ -110,7 +110,7 @@ impl<'a, HoldsVecT: Holds<T = V<ElemT, N>>, ElemT: BulkOps, const N: usize> Val<
         ret
     }
 
-    fn zip_bulk<FE, FB, U, HoldsRight>(
+    pub fn zip_bulk<FE, FB, U, HoldsRight>(
         self,
         other: Val<'a, HoldsRight>,
         mut fe: FE,
