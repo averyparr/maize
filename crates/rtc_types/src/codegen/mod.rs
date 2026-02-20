@@ -1,4 +1,5 @@
 pub mod calling_convention;
+pub mod instruction_opt;
 pub mod target;
 mod typed_func;
 

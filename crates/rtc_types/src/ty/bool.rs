@@ -4,7 +4,7 @@ use inkwell::{
     values::{AnyValueEnum, IntValue},
 };
 
-use crate::ty::{AlignedTy, ValTy};
+use crate::ty::{AlignedTy, ValTy, sized::HasMaterializedType};
 
 use super::{AnyTy, SizedTy, raw::Bool};
 
@@ -30,9 +30,6 @@ impl ValTy for Bool {
         }
     }
 }
-impl AlignedTy for Bool {
-    const ALIGN: u32 = ::std::mem::align_of::<bool>() as _;
-}
-impl SizedTy for Bool {
-    const SIZE: u32 = ::std::mem::size_of::<bool>() as _;
+impl HasMaterializedType for Bool {
+    type Materialized = bool;
 }

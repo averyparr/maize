@@ -8,7 +8,7 @@ use inkwell::{
     module::Module,
     targets::{FileType, InitializationConfig, Target, TargetMachine, TargetTriple},
     types::{BasicType, IntType},
-    values::{AnyValue, BasicValue, BasicValueEnum, FunctionValue, IntValue},
+    values::{AnyValue, BasicValue, BasicValueEnum, FunctionValue, InstructionValue, IntValue},
 };
 
 use crate::{
@@ -16,10 +16,13 @@ use crate::{
     val::Val,
 };
 
+use super::instruction_opt::InstructionOpt;
+
 pub(crate) struct FnCodegen {
     module: Module<'static>,
     func: FunctionValue<'static>,
     bb: Cell<BasicBlock<'static>>,
+    opt: Cell<InstructionOpt>,
 }
 
 macro_rules! impl_into_constant {
@@ -65,6 +68,17 @@ impl FnCodegen {
     }
     fn bb(&self) -> BasicBlock<'_> {
         self.bb.get()
+    }
+    pub fn apply_ins_opt(&self, ins: InstructionValue<'_>) {
+        self.opt.get().post_process_instruction(ins);
+    }
+    pub fn change_opt<F: FnOnce(&mut InstructionOpt)>(&self, f: F) {
+        let mut opt = self.opt.get();
+        f(&mut opt);
+        self.opt.set(opt);
+    }
+    pub fn use_fast_math(&self) {
+        self.change_opt(|o| o.use_all_fast_math());
     }
     pub fn constant<C: IntoConstantVal>(&self, val: C) -> Val<'_, C::Assoc> {
         C::to_const(val, self)
@@ -115,7 +129,13 @@ pub trait Func: Sized {
         func.set_call_conventions(Self::CALL_CONV);
         let bb = ctx.append_basic_block(func, "entry");
         let bb = Cell::new(bb);
-        let cg = FnCodegen { module, func, bb };
+        let opt = Cell::default();
+        let cg = FnCodegen {
+            module,
+            func,
+            bb,
+            opt,
+        };
         Self::new(cg)
     }
     fn get_args<'val>(&'val self) -> <Self::Args as IntoFuncArgs>::ArgValues<'val> {
@@ -123,6 +143,12 @@ pub trait Func: Sized {
     }
     fn llvm_ir(&self) -> String {
         self.cx().func.to_string()
+    }
+    fn change_opt<F: FnOnce(&mut InstructionOpt)>(&self, f: F) {
+        self.cx().change_opt(f);
+    }
+    fn use_fast_math(&self) {
+        self.cx().use_fast_math();
     }
 
     fn finalize(self) -> PreJitFunction<Self>

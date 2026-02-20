@@ -1,3 +1,5 @@
+use std::collections::btree_map::Values;
+
 use inkwell::{
     AddressSpace,
     context::ContextRef,
@@ -10,7 +12,10 @@ use inkwell::{
 
 use crate::{
     codegen::FnCodegen,
-    ty::{AnyTy, SizedTy, sized::AlignedTy},
+    ty::{
+        AnyTy, SizedTy,
+        sized::{AlignedTy, HasMaterializedType},
+    },
     val::Val,
 };
 
@@ -106,7 +111,9 @@ where
 /// support the (unsafe) equivalents of ::std::ptr::read[_unaligned]
 /// and casts to P<*const T::PointeeTy> and P<*mut T::PointeeTy>.
 pub unsafe trait ConstPtrTy:
-    for<'a> ValTy<Value<'a> = PointerValue<'a>, Type<'a> = PointerType<'a>> + SizedTy
+    for<'a> ValTy<Value<'a> = PointerValue<'a>, Type<'a> = PointerType<'a>>
+    + SizedTy
+    + HasMaterializedType
 {
     type PointeeTy: ValTy;
 
@@ -276,7 +283,7 @@ unsafe impl<T> MutPtrTy for M<&mut T> where T: ValTy {}
 /// # Safety:
 /// In order for this to be safe, a `Ty` must trace-like a &'a T
 /// and be interconvertible with a R<&'a T>
-pub trait RefTy: ConstPtrTy {
+pub unsafe trait RefTy: ConstPtrTy {
     fn ptr_attrs(
         cx: &FnCodegen,
     ) -> impl IntoIterator<Item = (&str, Option<BasicMetadataValueEnum<'_>>)>
@@ -302,7 +309,7 @@ pub trait RefTy: ConstPtrTy {
     }
 }
 
-impl<'a, T> RefTy for R<&'a T>
+unsafe impl<'a, T> RefTy for R<&'a T>
 where
     T: ValTy,
 {
@@ -323,7 +330,7 @@ where
     }
 }
 
-impl<'a, T> RefTy for M<&'a mut T>
+unsafe impl<'a, T> RefTy for M<&'a mut T>
 where
     T: ValTy,
 {
@@ -344,7 +351,7 @@ where
     }
 }
 
-pub trait MutTy: RefTy + MutPtrTy {
+pub unsafe trait MutTy: RefTy + MutPtrTy {
     fn reborrow_mut<'a, 'b>(ptr: &'b mut Val<'a, Self>) -> Val<'a, M<&'b mut Self::PointeeTy>>
     where
         'a: 'b,
@@ -380,4 +387,83 @@ pub trait MutTy: RefTy + MutPtrTy {
     }
 }
 
-impl<T> MutTy for M<&mut T> where T: ValTy {}
+unsafe impl<T> MutTy for M<&mut T> where T: ValTy {}
+
+pub trait AddrspacePtr {
+    type Inner: ConstPtrTy;
+    const ADDRSPACE: u16;
+}
+
+impl<T> AnyTy for T
+where
+    T: AddrspacePtr,
+{
+    type AnyType<'ctx> = <T::Inner as Ty>::Type<'ctx>;
+    fn any_ty<'ctx>(ctx: ContextRef<'ctx>) -> Self::AnyType<'ctx> {
+        ctx.ptr_type(AddressSpace::from(Self::ADDRSPACE))
+    }
+}
+
+impl<T> ValTy for T
+where
+    T: AddrspacePtr,
+{
+    type Value<'ctx> = <T::Inner as ValTy>::Value<'ctx>;
+
+    fn undef<'ctx>(ctx: ContextRef<'ctx>) -> Self::Value<'ctx> {
+        Self::ty(ctx).get_undef()
+    }
+
+    fn zeros<'ctx>(ctx: ContextRef<'ctx>) -> Self::Value<'ctx> {
+        Self::ty(ctx).const_null()
+    }
+
+    fn try_type_val<'ctx>(val: AnyValueEnum<'ctx>) -> Option<Self::Value<'ctx>> {
+        T::Inner::try_type_val(val)
+    }
+}
+
+impl<T> HasMaterializedType for T
+where
+    T: AddrspacePtr,
+    T::Inner: HasMaterializedType,
+{
+    type Materialized = <T::Inner as HasMaterializedType>::Materialized;
+}
+
+unsafe impl<T> ConstPtrTy for T
+where
+    T: AddrspacePtr,
+    T::Inner: ConstPtrTy,
+{
+    type PointeeTy = <T::Inner as ConstPtrTy>::PointeeTy;
+}
+
+unsafe impl<T> MutPtrTy for T
+where
+    T: AddrspacePtr,
+    T::Inner: MutPtrTy,
+{
+}
+
+unsafe impl<T> RefTy for T
+where
+    T: AddrspacePtr,
+    T::Inner: RefTy,
+{
+    fn ptr_attrs(
+        cx: &FnCodegen,
+    ) -> impl IntoIterator<Item = (&str, Option<BasicMetadataValueEnum<'_>>)>
+    where
+        Self::PointeeTy: SizedTy,
+    {
+        T::Inner::ptr_attrs(cx)
+    }
+}
+
+unsafe impl<T> MutTy for T
+where
+    T: AddrspacePtr,
+    T::Inner: MutTy,
+{
+}

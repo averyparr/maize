@@ -1,6 +1,7 @@
 mod args;
 mod arithmetic;
 mod bool;
+pub mod cuda;
 mod float;
 mod func;
 mod int;
@@ -70,7 +71,7 @@ where
 pub use args::IntoFuncArgs;
 pub use arithmetic::MathTy;
 pub use func::FnRetTy;
-pub use ptr::{ConstPtrTy, MutPtrTy, MutTy, RefTy};
+pub use ptr::{AddrspacePtr, ConstPtrTy, MutPtrTy, MutTy, RefTy};
 pub use raw::*;
 pub use sized::{AlignedTy, SizedTy};
 pub use void::VoidTy;

@@ -1,19 +1,21 @@
+use std::cell::Cell;
 use std::marker::PhantomData;
 
 use crate::ty::Void;
 use crate::ty::{FnRetTy, IntoFuncArgs};
 
+use super::instruction_opt::InstructionOpt;
 use super::target::cuda::SM;
 use super::{FnCodegen, Func};
 
 macro_rules! calling_conv {
     ($name: ident<Args> => $call_conv: literal | $cpu_config: ty) => {
-        pub struct $name<Args>(FnCodegen, PhantomData<Args>);
+        pub struct $name<Args>(FnCodegen, Cell<InstructionOpt>, PhantomData<Args>);
         impl<Args: IntoFuncArgs> Func for $name<Args> {
             type Args = Args;
             type Ret = Void;
             fn new(cx: FnCodegen) -> Self {
-                Self(cx, PhantomData)
+                Self(cx, Cell::default(), PhantomData)
             }
             fn cx(&self) -> &FnCodegen {
                 &self.0
@@ -23,12 +25,12 @@ macro_rules! calling_conv {
         }
     };
     ($name: ident<Args, Ret> => $call_conv: literal | $cpu_config: ty) => {
-        pub struct $name<Args, Ret>(FnCodegen, PhantomData<(Args, Ret)>);
+        pub struct $name<Args, Ret>(FnCodegen, Cell<InstructionOpt>, PhantomData<(Args, Ret)>);
         impl<Args: IntoFuncArgs, Ret: FnRetTy> Func for $name<Args, Ret> {
             type Args = Args;
             type Ret = Ret;
             fn new(cx: FnCodegen) -> Self {
-                Self(cx, PhantomData)
+                Self(cx, Cell::default(), PhantomData)
             }
             fn cx(&self) -> &FnCodegen {
                 &self.0

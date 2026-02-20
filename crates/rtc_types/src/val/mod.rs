@@ -28,7 +28,6 @@ where
         self.0
     }
     pub(crate) unsafe fn new(cx: &'ctx FnCodegen, val: AnyValueEnum<'ctx>) -> Self {
-        assert_eq!(T::ty(cx.ctx()).as_any_type_enum(), val.get_type());
         Self(cx, val, PhantomData)
     }
     /// # Safety: This is identical to ::std::mem::transmute.
