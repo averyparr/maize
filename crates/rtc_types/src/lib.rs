@@ -7,11 +7,13 @@ mod val;
 use inkwell::values::AnyValue;
 use ty::raw::*;
 
+type Fl = F32;
+
 fn test_inner() {
-    let kernel = new_ptx_kernel::<(F64, F64, P<F64>)>();
-    let (a, b, c) = kernel.get_args();
+    let kernel = new_ptx_kernel::<(Fl, Fl, M<&mut Fl>)>();
+    let (a, b, mut c) = kernel.get_args();
     println!("{:?}", a.raw().print_to_string());
-    unsafe { c.store_unchecked(a + b) };
+    c.store(a + b);
     let res = kernel.finalize().compile_asm_optimized(SM::SM90);
     println!("{res}");
     assert!(false);

@@ -11,7 +11,7 @@ mod void;
 
 use inkwell::{
     context::ContextRef,
-    types::{AnyType, BasicType},
+    types::{AnyType, ArrayType, BasicType},
     values::{AnyValue, AnyValueEnum, BasicValue},
 };
 
@@ -47,10 +47,30 @@ where
     }
 }
 
+impl<T> AnyTy for [T]
+where
+    T: Ty,
+{
+    type AnyType<'ctx> = ArrayType<'ctx>;
+    fn any_ty<'ctx>(ctx: ContextRef<'ctx>) -> Self::AnyType<'ctx> {
+        T::ty(ctx).array_type(0)
+    }
+}
+
+impl<T> Ty for [T]
+where
+    T: Ty,
+{
+    type Type<'ctx> = ArrayType<'ctx>;
+    fn ty<'ctx>(ctx: ContextRef<'ctx>) -> Self::Type<'ctx> {
+        T::ty(ctx).array_type(0)
+    }
+}
+
 pub use args::IntoFuncArgs;
 pub use arithmetic::MathTy;
 pub use func::FnRetTy;
-pub use ptr::PtrTy;
+pub use ptr::{ConstPtrTy, MutPtrTy, MutTy, RefTy};
 pub use raw::*;
-pub use sized::SizedTy;
+pub use sized::{AlignedTy, SizedTy};
 pub use void::VoidTy;

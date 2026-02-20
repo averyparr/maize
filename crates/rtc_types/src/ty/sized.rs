@@ -6,17 +6,33 @@ pub trait HasMaterializedType {
     type Materialized;
 }
 
-pub trait SizedTy: ValTy {
-    const SIZE: usize;
-    const ALIGN: usize;
+pub trait AlignedTy: AnyTy {
+    const ALIGN: u32;
+}
+
+pub trait SizedTy: AlignedTy + ValTy {
+    const SIZE: u32;
+}
+
+impl<T> AlignedTy for T
+where
+    T: ValTy + HasMaterializedType,
+{
+    const ALIGN: u32 = ::std::mem::align_of::<T::Materialized>() as u32;
 }
 
 impl<T> SizedTy for T
 where
     T: ValTy + HasMaterializedType,
 {
-    const SIZE: usize = ::std::mem::size_of::<T::Materialized>();
-    const ALIGN: usize = ::std::mem::align_of::<T::Materialized>();
+    const SIZE: u32 = ::std::mem::size_of::<T::Materialized>() as u32;
+}
+
+impl<T> AlignedTy for [T]
+where
+    T: SizedTy,
+{
+    const ALIGN: u32 = T::ALIGN;
 }
 
 macro_rules! impl_size_align {
@@ -49,11 +65,12 @@ impl_size_align!(
     U128 => u128,
 );
 
-impl<T> HasMaterializedType for P<T>
-where
-    T: HasMaterializedType,
-{
-    type Materialized = *mut T::Materialized;
+impl<T> HasMaterializedType for P<*const T> {
+    type Materialized = *const T;
+}
+
+impl<T> HasMaterializedType for P<*mut T> {
+    type Materialized = *mut T;
 }
 
 impl<'a, T> HasMaterializedType for R<&'a T> {

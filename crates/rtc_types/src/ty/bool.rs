@@ -4,7 +4,7 @@ use inkwell::{
     values::{AnyValueEnum, IntValue},
 };
 
-use crate::ty::ValTy;
+use crate::ty::{AlignedTy, ValTy};
 
 use super::{AnyTy, SizedTy, raw::Bool};
 
@@ -30,7 +30,9 @@ impl ValTy for Bool {
         }
     }
 }
+impl AlignedTy for Bool {
+    const ALIGN: u32 = ::std::mem::align_of::<bool>() as _;
+}
 impl SizedTy for Bool {
-    const SIZE: usize = ::std::mem::size_of::<bool>();
-    const ALIGN: usize = ::std::mem::align_of::<bool>();
+    const SIZE: u32 = ::std::mem::size_of::<bool>() as _;
 }

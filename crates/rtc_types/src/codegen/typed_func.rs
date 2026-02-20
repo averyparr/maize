@@ -7,10 +7,14 @@ use inkwell::{
     context::ContextRef,
     module::Module,
     targets::{FileType, InitializationConfig, Target, TargetMachine, TargetTriple},
-    values::FunctionValue,
+    types::{BasicType, IntType},
+    values::{AnyValue, BasicValue, BasicValueEnum, FunctionValue, IntValue},
 };
 
-use crate::ty::{FnRetTy, IntoFuncArgs, ValTy, VoidTy};
+use crate::{
+    ty::{F32, F64, FnRetTy, I8, I16, I32, I64, IntoFuncArgs, U8, U16, U32, U64, ValTy, VoidTy},
+    val::Val,
+};
 
 pub(crate) struct FnCodegen {
     module: Module<'static>,
@@ -18,17 +22,53 @@ pub(crate) struct FnCodegen {
     bb: Cell<BasicBlock<'static>>,
 }
 
-impl<'ctx> FnCodegen {
-    pub(crate) fn ctx<'a>(&'a self) -> ContextRef<'a> {
+macro_rules! impl_into_constant {
+    ($(
+        $raw_ty: ty | $trace_ty: ty => $ty_fn: ident | $val_fn: ident $(($($args: tt),*))?;
+    )*) => {
+        $(
+            impl IntoConstantVal for $raw_ty {
+                type Assoc = $trace_ty;
+                fn to_const(self, cx: &FnCodegen) -> Val<'_, Self::Assoc> {
+                    let raw = cx.ctx().$ty_fn().$val_fn(self as _, $($($args,)*)?);
+                    unsafe {Val::new(cx, raw.as_any_value_enum())}
+                }
+            }
+        )*
+    };
+}
+
+impl_into_constant!(
+    f32 | F32 => f32_type | const_float;
+    f64 | F64 => f64_type | const_float;
+    u8  | U8  => i8_type  | const_int (false);
+    u16 | U16 => i16_type | const_int (false);
+    u32 | U32 => i32_type | const_int (false);
+    u64 | U64 => i64_type | const_int (false);
+    i8  | I8  => i8_type  | const_int (false);
+    i16 | I16 => i16_type | const_int (false);
+    i32 | I32 => i32_type | const_int (false);
+    i64 | I64 => i64_type | const_int (false);
+);
+
+pub trait IntoConstantVal {
+    type Assoc: ValTy;
+    fn to_const(self, cx: &FnCodegen) -> Val<'_, Self::Assoc>;
+}
+
+impl FnCodegen {
+    pub(crate) fn ctx(&self) -> ContextRef<'_> {
         self.module.get_context()
     }
-    pub(crate) fn func(&self) -> FunctionValue<'ctx> {
+    pub(crate) fn func(&self) -> FunctionValue<'_> {
         self.func
     }
-    fn bb(&self) -> BasicBlock<'ctx> {
+    fn bb(&self) -> BasicBlock<'_> {
         self.bb.get()
     }
-
+    pub fn constant<C: IntoConstantVal>(&self, val: C) -> Val<'_, C::Assoc> {
+        C::to_const(val, self)
+    }
     /// # Safety:
     /// Giving access to the builder lets you emit very unsound code.
     /// Calling this function safely is only possible if F doesn't cause the builder

@@ -24,11 +24,25 @@ declare_zst_types!(
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct V<T, const N: usize>(PhantomData<T>);
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct P<T>(PhantomData<T>);
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+impl<T> Clone for P<T> {
+    fn clone(&self) -> Self {
+        P(PhantomData)
+    }
+}
+impl<T> Copy for P<T> {}
+
+#[derive(Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct R<T>(PhantomData<T>);
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+impl<T> Clone for R<T> {
+    fn clone(&self) -> Self {
+        R(PhantomData)
+    }
+}
+impl<T> Copy for R<T> {}
+// _Must_ not be Copy or we immediately break aliasing
+#[derive(Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct M<T>(PhantomData<T>);
 
 impl<T, const N: usize> V<T, N> {

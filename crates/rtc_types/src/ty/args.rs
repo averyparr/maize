@@ -9,7 +9,7 @@ use crate::codegen::FnCodegen;
 use crate::{ty::SizedTy, val::Val};
 
 pub trait IntoFuncArgs {
-    fn arg_aligns() -> impl AsRef<[usize]>;
+    fn arg_aligns() -> impl AsRef<[u32]>;
     fn produce_args<'ctx>(ctx: ContextRef<'ctx>) -> impl AsRef<[BasicMetadataTypeEnum<'ctx>]>;
     type ArgValues<'ctx>;
     fn try_extract_args<'a>(cx: &'a FnCodegen) -> Option<Self::ArgValues<'a>>;
@@ -21,7 +21,7 @@ macro_rules! impl_into_func_args {
         where
             $($names: SizedTy,)*
         {
-            fn arg_aligns() -> impl AsRef<[usize]> {
+            fn arg_aligns() -> impl AsRef<[u32]> {
                 [$($names::ALIGN,)*]
             }
             fn produce_args<'ctx>(ctx: ContextRef<'ctx>) -> impl AsRef<[BasicMetadataTypeEnum<'ctx>]> {
