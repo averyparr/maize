@@ -5,4 +5,4 @@ edition = "2024"
 
 [dependencies]
 rtc_core = { path = "./crates/rtc_core" }
-const_map = { path = "./crates/const_map" }
+rtc_types = { path = "./crates/rtc_types" }
