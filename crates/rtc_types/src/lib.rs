@@ -21,10 +21,14 @@ pub fn test_inner() {
         .then(|| {
             let ret = d.load();
             d.store(b.load());
+            kernel.return_void();
             ret
         })
-        .or(a.cx().constant(100.0));
-    c.store(res);
+        .or_else(|| {
+            c.store(c.cx().constant(0.0));
+            c.cx().constant(0.0)
+        });
+    d.store(res);
     kernel.cx().func().print_to_stderr();
     let res = kernel.finalize().compile_asm_optimized(SM::SM90);
     println!("{res}");
