@@ -1,0 +1,139 @@
+use std::marker::PhantomData;
+
+use inkwell::{
+    basic_block::BasicBlock,
+    values::{AnyValue, InstructionValue},
+};
+
+use crate::{
+    codegen::FnCodegen,
+    ty::{AnyTy, Bool, FnRetTy, ValTy, Void},
+    val::Val,
+};
+
+pub enum ControlFlow<Continue, Return> {
+    Continue(Continue),
+    Return(Option<Return>),
+}
+
+pub struct ThenNoVal<'a> {
+    cx: &'a FnCodegen,
+    then_bb: BasicBlock<'static>,
+    else_bb: BasicBlock<'static>,
+    uni_bb: BasicBlock<'static>,
+}
+
+pub struct Then<'a, Ret: ValTy> {
+    val_from_if: Val<'a, Ret>,
+    raw: ThenNoVal<'a>,
+}
+
+impl<'a> Drop for ThenNoVal<'a> {
+    fn drop(&mut self) {
+        jump_from_block_to_other_block(self.else_bb, self.uni_bb);
+    }
+}
+
+impl<'a, Ret: ValTy> Then<'a, Ret> {
+    pub fn or(self, val: Val<'a, Ret>) -> Val<'a, Ret> {
+        self.or_else(|| val)
+    }
+    pub fn or_else(self, f: impl FnOnce() -> Val<'a, Ret>) -> Val<'a, Ret> {
+        let cx = self.val_from_if.cx();
+
+        let else_ret = cx.with_bb_as(self.raw.else_bb, f);
+
+        let raw_ret = cx.with_bb_as(self.raw.uni_bb, || {
+            let phi_ty = Ret::ty(cx.ctx());
+            let phi_val = unsafe {
+                cx.with_builder(|b| b.build_phi(phi_ty, "if_else_phi"))
+                    .expect("phi from if/then/else should be able to be created")
+            };
+            phi_val.add_incoming(&[
+                (&self.val_from_if.ll_typed(), self.raw.then_bb),
+                (&else_ret.ll_typed(), self.raw.else_bb),
+            ]);
+            phi_val
+        });
+
+        // Should drop self which drops ThenNoVal which in turn unconditionally jumps from else to uni
+        unsafe { Val::new(else_ret.cx(), raw_ret.as_any_value_enum()) }
+    }
+}
+
+impl<'a> ThenNoVal<'a> {
+    pub fn or(self) {
+        // Drop self
+    }
+    pub fn or_else(self, f: impl FnOnce()) {
+        let cx = self.cx;
+        cx.with_bb_as(self.else_bb, f)
+        // Should drop self which unconditionally jumps from else to uni
+    }
+}
+
+fn jump_from_block_to_other_block<'ctx>(from: BasicBlock<'ctx>, to: BasicBlock<'ctx>) {
+    let ctx = from.get_context();
+    let builder = ctx.create_builder();
+    builder.position_at_end(from);
+    builder
+        .build_unconditional_branch(to)
+        .expect("Must be able to build unconditional branch between blocks");
+}
+
+fn setup_branch_on<'ctx>(
+    cond: Val<'ctx, Bool>,
+) -> (
+    BasicBlock<'static>, // then
+    BasicBlock<'static>, // else
+) {
+    let cx = cond.cx();
+    let false_val = cx.constant_from(false);
+    let comp = unsafe {
+        cx.with_builder(|b| {
+            b.build_int_compare(
+                inkwell::IntPredicate::NE,
+                cond.ll_typed(),
+                false_val.ll_typed(),
+                "icmp",
+            )
+        })
+    }
+    .expect("icmp between bools should succeed");
+    let then_block = cx.ctx().append_basic_block(cx.func(), "then_bb");
+    let else_block = cx.ctx().append_basic_block(cx.func(), "else_bb");
+
+    let _jmp =
+        unsafe { cx.with_builder(|b| b.build_conditional_branch(comp, then_block, else_block)) }
+            .expect("jne on an icmp should succeed");
+    (then_block, else_block)
+}
+
+impl<'a> Val<'a, Bool> {
+    fn then_inner<U>(self, f: impl FnOnce() -> U) -> (ThenNoVal<'a>, U) {
+        let (then_bb, else_bb) = setup_branch_on(self);
+        let cx = self.cx();
+        let uni_bb = cx.ctx().append_basic_block(cx.func(), "post_if");
+
+        let ret = cx.with_bb_as(then_bb, f);
+        jump_from_block_to_other_block(then_bb, uni_bb);
+        cx.set_bb(uni_bb);
+
+        let then_obj = ThenNoVal {
+            cx,
+            then_bb,
+            else_bb,
+            uni_bb,
+        };
+        (then_obj, ret)
+    }
+
+    pub fn branch<If: FnOnce()>(self, f: If) -> ThenNoVal<'a> {
+        let (ret, _rest) = self.then_inner(f);
+        ret
+    }
+    pub fn then<Ret: ValTy>(self, f: impl FnOnce() -> Val<'a, Ret>) -> Then<'a, Ret> {
+        let (raw, val_from_if) = self.then_inner(f);
+        Then { val_from_if, raw }
+    }
+}
