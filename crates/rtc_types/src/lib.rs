@@ -1,6 +1,6 @@
 use crate::{
-    codegen::{Func, if_stmt::ControlFlow, new_ptx_device, new_ptx_kernel, target::cuda::SM},
-    ty::cuda::{Global, Shared},
+    codegen::{Func, new_ptx_kernel, target::cuda::SM},
+    ty::cuda::Global,
 };
 
 mod codegen;
@@ -8,7 +8,6 @@ mod intrinsics;
 mod ty;
 mod val;
 
-use inkwell::values::AnyValue;
 use ty::raw::*;
 
 type Fl = F32;
@@ -18,25 +17,21 @@ pub fn test_inner() {
     kernel.use_fast_math();
     let (a, b, mut c, mut d) = kernel.get_args();
 
-    let res = a
-        .then(|| {
-            let ret = d.load();
-            d.store(b.load().__intrinsic_cos_fast());
-            kernel.return_void();
-            ret
-        })
-        .or_else(|| {
-            c.store(c.cx().constant(0.0).__intrinsic_ex2_approx());
-            c.cx().constant(0.0)
-        });
+    let res = a.then(|| b.load()).or_else(|| b.load());
+    // let res = b.load();
     d.store(res);
+
+    let mut s = res.with_storage();
+    s.as_mut().store(c.load());
+    d.store(s.as_ref().load());
+    d.store(b.load_nc());
     kernel.cx().func().print_to_stderr();
-    let res = kernel.finalize().compile_asm_optimized(SM::SM90);
+    let res = kernel.finalize().compile_asm_quickly(SM::SM90);
     println!("{res}");
     assert!(false);
 }
 
 #[test]
-fn test() {
+fn test_codegen() {
     test_inner();
 }

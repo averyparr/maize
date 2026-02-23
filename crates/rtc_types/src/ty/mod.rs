@@ -24,6 +24,8 @@ pub trait AnyTy {
 pub trait Ty: AnyTy {
     type Type<'ctx>: BasicType<'ctx>;
     fn ty<'ctx>(ctx: ContextRef<'ctx>) -> Self::Type<'ctx>;
+    const NEEDS_DROP: bool = false;
+    fn inner_drop(val: &mut Val<'_, Self>) {}
 }
 
 pub trait ValTy: Ty {

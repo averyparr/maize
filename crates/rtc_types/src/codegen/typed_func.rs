@@ -6,6 +6,7 @@ use inkwell::{
     builder::Builder,
     context::ContextRef,
     module::Module,
+    passes::PassBuilderOptions,
     targets::{FileType, InitializationConfig, Target, TargetMachine, TargetTriple},
     types::{BasicType, IntType},
     values::{AnyValue, BasicValue, BasicValueEnum, FunctionValue, InstructionValue, IntValue},
@@ -121,7 +122,7 @@ impl FnCodegen {
     /// Giving access to the builder lets you emit very unsound code.
     /// Calling this function safely is only possible if F doesn't cause the builder
     /// to emit unsafe code.
-    pub(crate) unsafe fn with_builder<'a, F: FnOnce(Builder<'a>) -> U, U>(&'a self, f: F) -> U {
+    pub(crate) unsafe fn with_builder<F: FnOnce(Builder<'static>) -> U, U>(&self, f: F) -> U {
         let builder = self.ctx().create_builder();
         builder.position_at_end(self.bb());
         f(builder)
@@ -234,7 +235,7 @@ where
 
         let triple = TargetTriple::create(cpu.triple());
         let target = Target::from_triple(&triple).expect("cpu.triple() invalid for LLVM");
-        let compiler = target
+        let machine = target
             .create_target_machine(
                 &triple,
                 cpu.cpu(),
@@ -245,7 +246,20 @@ where
             )
             .expect("Could not create a compiler with the given option");
 
-        let maybe_ret = compiler
+        let passes = match optimization_level {
+            OptimizationLevel::None => "default<O0>",
+            OptimizationLevel::Less => "default<O1>",
+            OptimizationLevel::Default => "default<O2>",
+            OptimizationLevel::Aggressive => "default<O3>",
+        };
+
+        self.0
+            .cx()
+            .module
+            .run_passes(passes, &machine, PassBuilderOptions::create())
+            .expect("Unable to run passes on module");
+
+        let maybe_ret = machine
             .write_to_memory_buffer(&self.0.cx().module, file_type)
             .expect("Unable to compile");
         maybe_ret.as_slice().to_vec().into_boxed_slice()

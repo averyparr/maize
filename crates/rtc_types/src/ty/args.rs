@@ -42,10 +42,11 @@ macro_rules! impl_into_func_args {
                 }
                 let aligns = Self::arg_aligns();
                 let aligns = aligns.as_ref();
-                for (idx, &align) in aligns.iter().enumerate() {
-                    let attribute = ctx.create_enum_attribute(align_kind_id, align as u64);
-                    func.add_attribute(AttributeLoc::Param(idx as u32), attribute);
-                }
+                $(
+                    for attr in $names::fn_arg_attrs(ctx).into_iter() {
+                        func.add_attribute(AttributeLoc::Param($idx), attr);
+                    }
+                )*
                 if func.count_params() as usize != aligns.len() {
                     return None;
                 }

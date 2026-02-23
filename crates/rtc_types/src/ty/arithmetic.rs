@@ -32,7 +32,7 @@ unsafe impl MathTy for $tipes {
         lhs: Val<'a, Self>,
         rhs: Val<'a, Self>,
     ) -> Val<'a, Self> {
-        let build = |b: Builder<'a>| {
+        let build = |b: Builder<'static>| {
             b
             .$add(lhs.ll_typed(), rhs.ll_typed(), "add")
             .expect("Typed add should always succeed")
@@ -45,7 +45,7 @@ unsafe impl MathTy for $tipes {
         lhs: Val<'a, Self>,
         rhs: Val<'a, Self>,
     ) -> Val<'a, Self> {
-        let build = |b: Builder<'a>| {
+        let build = |b: Builder<'static>| {
             b
             .$sub(lhs.ll_typed(), rhs.ll_typed(), "sub")
             .expect("Typed sub should always succeed")
@@ -58,7 +58,7 @@ unsafe impl MathTy for $tipes {
         lhs: Val<'a, Self>,
         rhs: Val<'a, Self>,
     ) -> Val<'a, Self> {
-        let build = |b: Builder<'a>| {
+        let build = |b: Builder<'static>| {
             b
             .$mul(lhs.ll_typed(), rhs.ll_typed(), "mul")
             .expect("Typed mul should always succeed")
@@ -71,7 +71,7 @@ unsafe impl MathTy for $tipes {
         lhs: Val<'a, Self>,
         rhs: Val<'a, Self>,
     ) -> Val<'a, Self> {
-        let build = |b: Builder<'a>| {
+        let build = |b: Builder<'static>| {
             b
             .$div(lhs.ll_typed(), rhs.ll_typed(), "div")
             .expect("Typed div should always succeed")
@@ -81,7 +81,7 @@ unsafe impl MathTy for $tipes {
         unsafe { Val::new(lhs.cx(), lhs.cx().with_builder(build)) }
     }
     fn neg<'a>(val: Val<'a, Self>) -> Val<'a, Self> {
-        let build = |b: Builder<'a>| {
+        let build = |b: Builder<'static>| {
             b
             .$neg(val.ll_typed(), "neg")
             .expect("Typed neg should always succeed")

@@ -1,21 +1,13 @@
-use std::collections::btree_map::Values;
-
 use inkwell::{
     AddressSpace,
     context::ContextRef,
     types::PointerType,
-    values::{
-        AnyValue, AnyValueEnum, BasicMetadataValueEnum, BasicValue, InstructionValue,
-        InstructionValueError, PointerValue,
-    },
+    values::{AnyValue, AnyValueEnum, BasicMetadataValueEnum, BasicValue, PointerValue},
 };
 
 use crate::{
     codegen::FnCodegen,
-    ty::{
-        AnyTy, SizedTy,
-        sized::{AlignedTy, HasMaterializedType},
-    },
+    ty::{AnyTy, SizedTy, sized::AlignedTy},
     val::Val,
 };
 
@@ -111,9 +103,7 @@ where
 /// support the (unsafe) equivalents of ::std::ptr::read[_unaligned]
 /// and casts to P<*const T::PointeeTy> and P<*mut T::PointeeTy>.
 pub unsafe trait ConstPtrTy:
-    for<'a> ValTy<Value<'a> = PointerValue<'a>, Type<'a> = PointerType<'a>>
-    + SizedTy
-    + HasMaterializedType
+    for<'a> ValTy<Value<'a> = PointerValue<'a>, Type<'a> = PointerType<'a>> + SizedTy
 {
     type PointeeTy: ValTy;
 
@@ -382,8 +372,14 @@ pub unsafe trait MutTy: RefTy + MutPtrTy {
     where
         Self::PointeeTy: SizedTy,
     {
-        let _ = Self::swap(ptr, val);
-        // Should call drop here.
+        if Self::PointeeTy::NEEDS_DROP {
+            let mut res = Self::swap(ptr, val);
+            Self::PointeeTy::inner_drop(&mut res);
+        } else {
+            let ptr = Self::reborrow_mut(ptr);
+            let metadata = Self::ptr_attrs(ptr.cx());
+            let _: () = unsafe { M::write_with_instruction_metadata(ptr, val, metadata) };
+        }
     }
 }
 
@@ -423,12 +419,25 @@ where
     }
 }
 
-impl<T> HasMaterializedType for T
+impl<T> AlignedTy for T
 where
     T: AddrspacePtr,
-    T::Inner: HasMaterializedType,
+    T::Inner: AlignedTy,
 {
-    type Materialized = <T::Inner as HasMaterializedType>::Materialized;
+    const ALIGN: u32 = T::Inner::ALIGN;
+}
+
+impl<T> SizedTy for T
+where
+    T: AddrspacePtr,
+    T::Inner: SizedTy,
+{
+    const SIZE: u32 = T::Inner::SIZE;
+    fn fn_arg_attrs(
+        ctx: ContextRef<'_>,
+    ) -> impl IntoIterator<Item = inkwell::attributes::Attribute> {
+        T::Inner::fn_arg_attrs(ctx)
+    }
 }
 
 unsafe impl<T> ConstPtrTy for T

@@ -1,10 +1,8 @@
-use crate::ty::{AnyTy, raw::*};
+use inkwell::{attributes::Attribute, context::ContextRef, values::AnyValue};
+
+use crate::ty::{AnyTy, Ty, raw::*};
 
 use super::ValTy;
-
-pub trait HasMaterializedType {
-    type Materialized;
-}
 
 pub trait AlignedTy: AnyTy {
     const ALIGN: u32;
@@ -12,20 +10,11 @@ pub trait AlignedTy: AnyTy {
 
 pub trait SizedTy: AlignedTy + ValTy {
     const SIZE: u32;
-}
-
-impl<T> AlignedTy for T
-where
-    T: ValTy + HasMaterializedType,
-{
-    const ALIGN: u32 = ::std::mem::align_of::<T::Materialized>() as u32;
-}
-
-impl<T> SizedTy for T
-where
-    T: ValTy + HasMaterializedType,
-{
-    const SIZE: u32 = ::std::mem::size_of::<T::Materialized>() as u32;
+    fn fn_arg_attrs(ctx: ContextRef<'_>) -> impl IntoIterator<Item = Attribute> {
+        let align_id = Attribute::get_named_enum_kind_id("align");
+        let enum_attr = ctx.create_enum_attribute(align_id, Self::ALIGN as _);
+        [enum_attr]
+    }
 }
 
 impl<T> AlignedTy for [T]
@@ -38,8 +27,11 @@ where
 macro_rules! impl_size_align {
     ($($mock: ty => $materialized: ty),*$(,)?) => {
         $(
-            impl HasMaterializedType for $mock {
-                type Materialized = $materialized;
+            impl AlignedTy for $mock {
+                const ALIGN: u32 = ::std::mem::align_of::<$materialized>() as _;
+            }
+            impl SizedTy for $mock {
+                const SIZE: u32 = ::std::mem::size_of::<$materialized>() as _;
             }
         )*
     };
@@ -65,18 +57,77 @@ impl_size_align!(
     U128 => u128,
 );
 
-impl<T> HasMaterializedType for P<*const T> {
-    type Materialized = *const T;
+impl<T> AlignedTy for P<*const T>
+where
+    T: AnyTy,
+{
+    const ALIGN: u32 = ::std::mem::align_of::<*const ()>() as _;
 }
 
-impl<T> HasMaterializedType for P<*mut T> {
-    type Materialized = *mut T;
+impl<T> AlignedTy for P<*mut T>
+where
+    T: AnyTy,
+{
+    const ALIGN: u32 = ::std::mem::align_of::<*const ()>() as _;
 }
 
-impl<'a, T> HasMaterializedType for R<&'a T> {
-    type Materialized = &'a T;
+impl<T> AlignedTy for R<&T>
+where
+    T: Ty,
+{
+    const ALIGN: u32 = ::std::mem::align_of::<&()>() as _;
 }
 
-impl<'a, T> HasMaterializedType for M<&'a mut T> {
-    type Materialized = &'a mut T;
+impl<T> AlignedTy for M<&mut T>
+where
+    T: Ty,
+{
+    const ALIGN: u32 = ::std::mem::align_of::<&mut ()>() as _;
+}
+
+impl<T> SizedTy for P<*const T>
+where
+    T: AnyTy,
+{
+    const SIZE: u32 = ::std::mem::size_of::<*const ()>() as _;
+}
+
+impl<T> SizedTy for P<*mut T>
+where
+    T: AnyTy,
+{
+    const SIZE: u32 = ::std::mem::size_of::<*const ()>() as _;
+}
+
+impl<T> SizedTy for R<&T>
+where
+    T: Ty,
+{
+    const SIZE: u32 = ::std::mem::size_of::<&()>() as _;
+
+    fn fn_arg_attrs(ctx: ContextRef<'_>) -> impl IntoIterator<Item = Attribute> {
+        let align_id = Attribute::get_named_enum_kind_id("align");
+        let enum_attr = ctx.create_enum_attribute(align_id, Self::ALIGN as _);
+        let noalias_id = Attribute::get_named_enum_kind_id("noalias");
+        let noalias_attr = ctx.create_enum_attribute(noalias_id, 0);
+        let nonnull_id = Attribute::get_named_enum_kind_id("nonnull");
+        let nonnull_attr = ctx.create_enum_attribute(nonnull_id, 0);
+        [enum_attr, noalias_attr, nonnull_attr]
+    }
+}
+
+impl<T> SizedTy for M<&mut T>
+where
+    T: Ty,
+{
+    const SIZE: u32 = ::std::mem::size_of::<&mut ()>() as _;
+    fn fn_arg_attrs(ctx: ContextRef<'_>) -> impl IntoIterator<Item = Attribute> {
+        let align_id = Attribute::get_named_enum_kind_id("align");
+        let enum_attr = ctx.create_enum_attribute(align_id, Self::ALIGN as _);
+        let noalias_id = Attribute::get_named_enum_kind_id("noalias");
+        let noalias_attr = ctx.create_enum_attribute(noalias_id, 0);
+        let nonnull_id = Attribute::get_named_enum_kind_id("nonnull");
+        let nonnull_attr = ctx.create_enum_attribute(nonnull_id, 0);
+        [enum_attr, noalias_attr, nonnull_attr]
+    }
 }
