@@ -12,7 +12,9 @@ use inkwell::{
 };
 
 use crate::{
-    ty::{F32, F64, FnRetTy, I8, I16, I32, I64, IntoFuncArgs, U8, U16, U32, U64, ValTy, VoidTy},
+    ty::{
+        Bool, F32, F64, FnRetTy, I8, I16, I32, I64, IntoFuncArgs, U8, U16, U32, U64, ValTy, VoidTy,
+    },
     val::Val,
 };
 
@@ -27,12 +29,21 @@ pub(crate) struct FnCodegen {
 
 macro_rules! impl_into_constant {
     ($(
-        $raw_ty: ty | $trace_ty: ty => $ty_fn: ident | $val_fn: ident $(($($args: tt),*))?;
+        $trace_ty: ty | $raw_ty: ty => $ty_fn: ident | $val_fn: ident $(($($args: tt),*))?;
     )*) => {
         $(
-            impl IntoConstantVal for $raw_ty {
+            impl ConstValTy for $trace_ty {
+                type Assoc = $raw_ty;
+                fn to_const(assoc: impl Into<Self::Assoc>, cx: &FnCodegen) -> Val<'_, Self> {
+                    let val_as_assoc = assoc.into();
+                    let raw = cx.ctx().$ty_fn().$val_fn(val_as_assoc as _, $($($args,)*)?);
+                    unsafe {Val::new(cx, raw.as_any_value_enum())}
+                }
+            }
+
+            impl IntoConstVal for $raw_ty {
                 type Assoc = $trace_ty;
-                fn to_const(self, cx: &FnCodegen) -> Val<'_, Self::Assoc> {
+                fn into_const_val(self, cx: &FnCodegen) -> Val<'_, Self::Assoc> {
                     let raw = cx.ctx().$ty_fn().$val_fn(self as _, $($($args,)*)?);
                     unsafe {Val::new(cx, raw.as_any_value_enum())}
                 }
@@ -42,32 +53,48 @@ macro_rules! impl_into_constant {
 }
 
 impl_into_constant!(
-    f32 | F32 => f32_type | const_float;
-    f64 | F64 => f64_type | const_float;
-    u8  | U8  => i8_type  | const_int (false);
-    u16 | U16 => i16_type | const_int (false);
-    u32 | U32 => i32_type | const_int (false);
-    u64 | U64 => i64_type | const_int (false);
-    i8  | I8  => i8_type  | const_int (false);
-    i16 | I16 => i16_type | const_int (false);
-    i32 | I32 => i32_type | const_int (false);
-    i64 | I64 => i64_type | const_int (false);
+    F32 | f32 => f32_type | const_float;
+    F64 | f64 => f64_type | const_float;
+    U8  | u8  => i8_type  | const_int (false);
+    U16 | u16 => i16_type | const_int (false);
+    U32 | u32 => i32_type | const_int (false);
+    U64 | u64 => i64_type | const_int (false);
+    I8  | i8  => i8_type  | const_int (false);
+    I16 | i16 => i16_type | const_int (false);
+    I32 | i32 => i32_type | const_int (false);
+    I64 | i64 => i64_type | const_int (false);
+    Bool | bool => bool_type | const_int (false);
 );
 
-pub trait IntoConstantVal {
+pub trait ConstValTy: ValTy {
+    type Assoc;
+    fn to_const(assoc: impl Into<Self::Assoc>, cx: &FnCodegen) -> Val<'_, Self>;
+}
+
+pub trait IntoConstVal {
     type Assoc: ValTy;
-    fn to_const(self, cx: &FnCodegen) -> Val<'_, Self::Assoc>;
+    fn into_const_val(self, cx: &FnCodegen) -> Val<'_, Self::Assoc>;
 }
 
 impl FnCodegen {
-    pub(crate) fn ctx(&self) -> ContextRef<'_> {
+    pub(crate) fn ctx(&self) -> ContextRef<'static> {
         self.module.get_context()
     }
-    pub(crate) fn func(&self) -> FunctionValue<'_> {
+    pub(crate) fn func(&self) -> FunctionValue<'static> {
         self.func
     }
-    fn bb(&self) -> BasicBlock<'_> {
+    pub(crate) fn bb(&self) -> BasicBlock<'static> {
         self.bb.get()
+    }
+    pub(crate) fn with_bb_as<U>(&self, bb: BasicBlock<'static>, f: impl FnOnce() -> U) -> U {
+        let curr_bb = self.bb();
+        self.set_bb(bb);
+        let ret = f();
+        self.set_bb(curr_bb);
+        ret
+    }
+    pub(crate) fn set_bb(&self, bb: BasicBlock<'static>) {
+        self.bb.set(bb);
     }
     pub fn apply_ins_opt(&self, ins: InstructionValue<'_>) {
         self.opt.get().post_process_instruction(ins);
@@ -80,8 +107,11 @@ impl FnCodegen {
     pub fn use_fast_math(&self) {
         self.change_opt(|o| o.use_all_fast_math());
     }
-    pub fn constant<C: IntoConstantVal>(&self, val: C) -> Val<'_, C::Assoc> {
+    pub fn constant<C: ConstValTy>(&self, val: impl Into<C::Assoc>) -> Val<'_, C> {
         C::to_const(val, self)
+    }
+    pub fn constant_from<CVal: IntoConstVal>(&self, val: CVal) -> Val<'_, CVal::Assoc> {
+        CVal::into_const_val(val, self)
     }
     /// # Safety:
     /// Giving access to the builder lets you emit very unsound code.

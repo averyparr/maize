@@ -1,5 +1,5 @@
 use crate::{
-    codegen::{Func, new_ptx_device, new_ptx_kernel, target::cuda::SM},
+    codegen::{Func, if_stmt::ControlFlow, new_ptx_device, new_ptx_kernel, target::cuda::SM},
     ty::cuda::{Global, Shared},
 };
 
@@ -13,10 +13,19 @@ use ty::raw::*;
 type Fl = F32;
 
 pub fn test_inner() {
-    let kernel = new_ptx_kernel::<(Global<R<&Fl>>, R<&Fl>, Shared<R<&Fl>>, Global<M<&mut Fl>>)>();
+    let kernel = new_ptx_kernel::<(Bool, Global<R<&Fl>>, Global<M<&mut Fl>>, Global<M<&mut Fl>>)>();
     kernel.use_fast_math();
-    let (a, b, c, mut d) = kernel.get_args();
-    d.store(a.load_nc() + b.load() * c.load());
+    let (a, b, mut c, mut d) = kernel.get_args();
+
+    let res = a
+        .then(|| {
+            let ret = d.load();
+            d.store(b.load());
+            ret
+        })
+        .or(a.cx().constant(100.0));
+    c.store(res);
+    kernel.cx().func().print_to_stderr();
     let res = kernel.finalize().compile_asm_optimized(SM::SM90);
     println!("{res}");
     assert!(false);

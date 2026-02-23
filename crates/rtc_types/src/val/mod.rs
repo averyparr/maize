@@ -21,7 +21,7 @@ impl<'ctx, T: ?Sized> Val<'ctx, T>
 where
     T: ValTy,
 {
-    pub(crate) fn ctx(&self) -> ContextRef<'ctx> {
+    pub(crate) fn ctx(&self) -> ContextRef<'static> {
         self.0.ctx()
     }
     pub(crate) fn cx(&self) -> &'ctx FnCodegen {

@@ -132,7 +132,7 @@ pub unsafe trait ConstPtrTy:
     unsafe fn read_with_instruction_metadata<'a>(
         ptr: Val<'a, Self>,
         metadata: impl IntoIterator<Item = (&'a str, Option<BasicMetadataValueEnum<'a>>)>,
-    ) -> Val<'_, Self::PointeeTy> {
+    ) -> Val<'a, Self::PointeeTy> {
         let pointee_ty = Self::PointeeTy::ty(ptr.ctx());
         // Safety: We have a pointer which the user guarantees is valid to read from, so it's safe to build
         // a pointer load at the end of the current BB
@@ -176,7 +176,7 @@ pub unsafe trait ConstPtrTy:
         // The user promised it's safe to load and that the pointer is aligned,
         // so it's safe to read with alignment metadata.
         let cx = ptr.cx();
-        let align = cx.constant(Self::PointeeTy::ALIGN).ll_typed().into();
+        let align = cx.constant_from(Self::PointeeTy::ALIGN).ll_typed().into();
         unsafe { Self::read_with_instruction_metadata(ptr, [("align", Some(align))]) }
     }
 
@@ -268,7 +268,7 @@ pub unsafe trait MutPtrTy: ConstPtrTy {
     where
         Self::PointeeTy: SizedTy,
     {
-        let align = ptr.cx().constant(Self::PointeeTy::ALIGN).ll_typed();
+        let align = ptr.cx().constant_from(Self::PointeeTy::ALIGN).ll_typed();
         // Safety: The user promised it was safe to do an aligned write through
         // this pointer, and we know the alignment of the type behind the pointer
         unsafe {
@@ -319,8 +319,8 @@ where
     where
         Self::PointeeTy: SizedTy,
     {
-        let size = cx.constant(Self::PointeeTy::SIZE);
-        let align = cx.constant(Self::PointeeTy::ALIGN);
+        let size = cx.constant_from(Self::PointeeTy::SIZE);
+        let align = cx.constant_from(Self::PointeeTy::ALIGN);
         [
             ("align", Some(align.ll_typed().into())),
             ("dereferenceable", Some(size.ll_typed().into())),
@@ -340,8 +340,8 @@ where
     where
         Self::PointeeTy: SizedTy,
     {
-        let size = cx.constant(Self::PointeeTy::SIZE);
-        let align = cx.constant(Self::PointeeTy::ALIGN);
+        let size = cx.constant_from(Self::PointeeTy::SIZE);
+        let align = cx.constant_from(Self::PointeeTy::ALIGN);
         [
             ("align", Some(align.ll_typed().into())),
             ("dereferenceable", Some(size.ll_typed().into())),

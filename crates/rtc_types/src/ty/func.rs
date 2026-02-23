@@ -4,7 +4,11 @@ use inkwell::{
     values::BasicValue,
 };
 
-use crate::ty::{AnyTy, IntoFuncArgs, ValTy, Void};
+use crate::{
+    codegen::FnCodegen,
+    ty::{AnyTy, IntoFuncArgs, ValTy, Void},
+    val::Val,
+};
 
 pub trait FnRetTy {
     fn raw_fn_ty<'ctx>(
@@ -17,6 +21,8 @@ pub trait FnRetTy {
         let args = Args::produce_args(ctx);
         Self::raw_fn_ty(ctx, args.as_ref(), false)
     }
+
+    fn return_from_fn(cx: &FnCodegen, val: Option<Val<'_, Self>>);
 }
 
 impl<T> FnRetTy for T
@@ -31,6 +37,11 @@ where
     ) -> FunctionType<'ctx> {
         T::ty(ctx).fn_type(param_types, is_var_args)
     }
+
+    fn return_from_fn(cx: &FnCodegen, val: Option<Val<'_, Self>>) {
+        let val = val.expect("Returning non-empty value should always pass Some(_)");
+        unsafe { cx.with_builder(|b| b.build_return(Some(&val.ll_typed()))) };
+    }
 }
 
 impl FnRetTy for Void {
@@ -40,5 +51,10 @@ impl FnRetTy for Void {
         is_var_args: bool,
     ) -> FunctionType<'ctx> {
         Self::any_ty(ctx).fn_type(param_types, is_var_args)
+    }
+
+    fn return_from_fn(cx: &FnCodegen, val: Option<Val<'_, Self>>) {
+        assert!(val.is_none(), "Cannot return a value through a void type");
+        unsafe { cx.with_builder(|b| b.build_return(None)) };
     }
 }
