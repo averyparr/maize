@@ -40,7 +40,10 @@ where
 
     fn return_from_fn(cx: &FnCodegen, val: Option<Val<'_, Self>>) {
         let val = val.expect("Returning non-empty value should always pass Some(_)");
-        unsafe { cx.with_builder(|b| b.build_return(Some(&val.ll_typed()))) };
+        unsafe {
+            cx.with_builder(|b| b.build_return(Some(&val.ll_typed())))
+                .expect("Return should always succeed")
+        };
     }
 }
 

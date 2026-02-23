@@ -8,8 +8,10 @@ mod int;
 mod ptr;
 pub mod raw;
 mod sized;
+pub mod vec;
 mod void;
 
+use crate::val::Val;
 use inkwell::{
     context::ContextRef,
     types::{AnyType, ArrayType, BasicType},

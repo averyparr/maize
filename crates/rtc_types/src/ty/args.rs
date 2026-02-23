@@ -31,7 +31,6 @@ macro_rules! impl_into_func_args {
             }
             type ArgValues<'ctx> = ($(Val<'ctx, $names>,)*);
             fn try_extract_args<'a>(cx: &'a FnCodegen) -> Option<Self::ArgValues<'a>> {
-                let align_kind_id = Attribute::get_named_enum_kind_id("align");
                 let ctx = cx.ctx();
                 let func = cx.func();
                 let types_of_params = Self::produce_args(ctx);
