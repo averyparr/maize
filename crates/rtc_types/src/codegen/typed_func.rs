@@ -181,12 +181,33 @@ pub trait Func: Sized {
         self.cx().use_fast_math();
     }
 
+    fn return_with<'a>(&self, retval: Val<'_, Self::Ret>)
+    where
+        Self::Ret: ValTy,
+    {
+        Self::Ret::return_from_fn(self.cx(), Some(retval))
+    }
+
+    fn return_void(&self)
+    where
+        Self::Ret: VoidTy,
+    {
+        Self::Ret::return_from_fn(self.cx(), None);
+    }
+
+    fn finalize_with<'a>(self, val: Val<'a, Self::Ret>) -> PreJitFunction<Self>
+    where
+        Self::Ret: ValTy,
+    {
+        self.return_with(val);
+        PreJitFunction(self)
+    }
+
     fn finalize(self) -> PreJitFunction<Self>
     where
         Self::Ret: VoidTy,
     {
-        unsafe { self.cx().with_builder(|b| b.build_return(None)) }
-            .expect("Should be possible to return nothing");
+        self.return_void();
         PreJitFunction(self)
     }
 }
