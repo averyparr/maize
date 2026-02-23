@@ -6,7 +6,6 @@ use std::marker::PhantomData;
 
 use inkwell::{
     context::ContextRef,
-    types::AnyType,
     values::{AnyValue, AnyValueEnum, PointerValue},
 };
 
@@ -55,7 +54,7 @@ impl<'ctx, T: ?Sized> Val<'ctx, T> {
                 .with_builder(|b| b.build_alloca(ty, "with_storage_alloca"))
         }
         .expect("Should be able to build alloca for type");
-        let res = unsafe {
+        let _res = unsafe {
             self.cx()
                 .with_builder(|b| b.build_store(alloca, self.ll_typed()))
         }
@@ -67,7 +66,7 @@ impl<'ctx, T: ?Sized> Val<'ctx, T> {
 pub struct S<T: ?Sized>(PhantomData<T>);
 
 impl<'ctx, T: ?Sized> Val<'ctx, S<T>> {
-    pub(crate) fn get(self) -> Val<'ctx, T>
+    pub fn get(self) -> Val<'ctx, T>
     where
         T: Ty,
     {

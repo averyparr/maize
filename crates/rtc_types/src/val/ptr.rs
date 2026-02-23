@@ -1,7 +1,5 @@
-use inkwell::values::AnyValue;
-
 use crate::{
-    ty::{AlignedTy, ConstPtrTy, MutPtrTy, MutTy, P, R, RefTy, SizedTy, ValTy},
+    ty::{ConstPtrTy, MutPtrTy, MutTy, R, RefTy, SizedTy},
     val::Val,
 };
 

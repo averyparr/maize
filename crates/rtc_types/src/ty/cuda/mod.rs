@@ -1,14 +1,15 @@
 use std::marker::PhantomData;
 
-use inkwell::{AddressSpace, values::BasicValue};
+use inkwell::values::BasicValue;
 
 use crate::{
-    ty::{AddrspacePtr, ConstPtrTy, R, RefTy, SizedTy, ValTy},
+    ty::{AddrspacePtr, ConstPtrTy, R, RefTy, SizedTy},
     val::Val,
 };
 
 macro_rules! addrspace_ptrs {
     ($($ptr: ident => $addrspace: literal;)*) => {
+        #[allow(unused)]
         $(pub struct $ptr<Ptr>(PhantomData<Ptr>);
         impl<Ptr> AddrspacePtr for $ptr<Ptr>
         where

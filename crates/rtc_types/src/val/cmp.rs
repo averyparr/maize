@@ -1,6 +1,6 @@
 use inkwell::{
     builder::Builder,
-    values::{AnyValue, AnyValueEnum, BasicValueEnum, FloatMathValue, IntMathValue},
+    values::{AnyValue, AnyValueEnum, FloatMathValue, IntMathValue},
 };
 
 use crate::{
@@ -148,8 +148,8 @@ pub unsafe trait ComparableTy: ValTy {
     type ComparisonT: ValTy;
     fn compare<'a>(
         predicate: Predicate,
-        lhs: Val<'a, Self>,
-        rhs: Val<'a, Self>,
+        lhs: &Val<'a, Self>,
+        rhs: &Val<'a, Self>,
     ) -> Val<'a, Self::ComparisonT> {
         let raw_res = unsafe {
             lhs.cx()
@@ -199,5 +199,29 @@ where
         rhs: AnyValueEnum<'static>,
     ) -> AnyValueEnum<'static> {
         T::build_comparison_raw(b, pred, lhs, rhs)
+    }
+}
+
+impl<'a, T> Val<'a, T>
+where
+    T: ComparableTy,
+{
+    pub fn eq(&self, rhs: &Self) -> Val<'a, T::ComparisonT> {
+        T::compare(Predicate::EQ, self, rhs)
+    }
+    pub fn ne(&self, rhs: &Self) -> Val<'a, T::ComparisonT> {
+        T::compare(Predicate::NE, self, rhs)
+    }
+    pub fn le(&self, rhs: &Self) -> Val<'a, T::ComparisonT> {
+        T::compare(Predicate::LE, self, rhs)
+    }
+    pub fn lt(&self, rhs: &Self) -> Val<'a, T::ComparisonT> {
+        T::compare(Predicate::LT, self, rhs)
+    }
+    pub fn ge(&self, rhs: &Self) -> Val<'a, T::ComparisonT> {
+        T::compare(Predicate::GE, self, rhs)
+    }
+    pub fn gt(&self, rhs: &Self) -> Val<'a, T::ComparisonT> {
+        T::compare(Predicate::GT, self, rhs)
     }
 }

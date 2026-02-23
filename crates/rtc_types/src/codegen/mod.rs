@@ -1,6 +1,7 @@
 pub mod calling_convention;
 pub mod if_stmt;
 pub mod instruction_opt;
+pub mod loops;
 pub mod target;
 mod typed_func;
 

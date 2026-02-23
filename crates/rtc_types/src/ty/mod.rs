@@ -15,7 +15,7 @@ use crate::val::Val;
 use inkwell::{
     context::ContextRef,
     types::{AnyType, ArrayType, BasicType},
-    values::{AnyValue, AnyValueEnum, BasicValue},
+    values::{AnyValueEnum, BasicValue},
 };
 
 pub trait AnyTy {
@@ -27,7 +27,7 @@ pub trait Ty: AnyTy {
     type Type<'ctx>: BasicType<'ctx>;
     fn ty<'ctx>(ctx: ContextRef<'ctx>) -> Self::Type<'ctx>;
     const NEEDS_DROP: bool = false;
-    fn inner_drop(val: &mut Val<'_, Self>) {}
+    fn inner_drop(_val: &mut Val<'_, Self>) {}
 }
 
 pub trait ValTy: Ty {
@@ -76,6 +76,6 @@ pub use args::IntoFuncArgs;
 pub use arithmetic::MathTy;
 pub use func::FnRetTy;
 pub use ptr::{AddrspacePtr, ConstPtrTy, MutPtrTy, MutTy, RefTy};
-pub use raw::*;
+pub use raw::{Bool, M, P, R, V, Void, float::*, int::*};
 pub use sized::{AlignedTy, SizedTy};
 pub use void::VoidTy;

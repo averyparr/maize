@@ -1,20 +1,10 @@
-use std::marker::PhantomData;
-
-use inkwell::{
-    basic_block::BasicBlock,
-    values::{AnyValue, InstructionValue},
-};
+use inkwell::{basic_block::BasicBlock, values::AnyValue};
 
 use crate::{
     codegen::FnCodegen,
-    ty::{AnyTy, Bool, FnRetTy, ValTy, Void},
+    ty::{Bool, ValTy},
     val::Val,
 };
-
-pub enum ControlFlow<Continue, Return> {
-    Continue(Continue),
-    Return(Option<Return>),
-}
 
 pub struct ThenNoVal<'a> {
     cx: &'a FnCodegen,

@@ -1,8 +1,8 @@
 use inkwell::{
-    attributes::{Attribute, AttributeLoc},
+    attributes::AttributeLoc,
     context::ContextRef,
     types::{BasicMetadataTypeEnum, BasicType},
-    values::{AnyValue, FunctionValue},
+    values::AnyValue,
 };
 
 use crate::codegen::FnCodegen;

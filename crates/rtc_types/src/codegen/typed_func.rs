@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, cell::Cell, marker::PhantomData};
+use std::{borrow::Borrow, cell::Cell};
 
 use inkwell::{
     OptimizationLevel,
@@ -7,9 +7,8 @@ use inkwell::{
     context::ContextRef,
     module::Module,
     passes::PassBuilderOptions,
-    targets::{FileType, InitializationConfig, Target, TargetMachine, TargetTriple},
-    types::{BasicType, IntType},
-    values::{AnyValue, BasicValue, BasicValueEnum, FunctionValue, InstructionValue, IntValue},
+    targets::{FileType, InitializationConfig, Target, TargetTriple},
+    values::{AnyValue, FunctionValue, InstructionValue},
 };
 
 use crate::{
@@ -22,7 +21,7 @@ use crate::{
 
 use super::instruction_opt::InstructionOpt;
 
-pub(crate) struct FnCodegen {
+pub struct FnCodegen {
     module: Module<'static>,
     func: FunctionValue<'static>,
     bb: Cell<BasicBlock<'static>>,

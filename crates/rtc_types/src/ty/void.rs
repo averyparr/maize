@@ -1,5 +1,3 @@
-use std::any::Any;
-
 use inkwell::{context::ContextRef, types::VoidType};
 
 use super::{AnyTy, raw::Void};

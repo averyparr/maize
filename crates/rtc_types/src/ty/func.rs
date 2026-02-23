@@ -58,6 +58,9 @@ impl FnRetTy for Void {
 
     fn return_from_fn(cx: &FnCodegen, val: Option<Val<'_, Self>>) {
         assert!(val.is_none(), "Cannot return a value through a void type");
-        unsafe { cx.with_builder(|b| b.build_return(None)) };
+        unsafe {
+            cx.with_builder(|b| b.build_return(None))
+                .expect("Function return should always succeed")
+        };
     }
 }

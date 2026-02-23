@@ -3,10 +3,10 @@ use crate::{
     ty::cuda::Global,
 };
 
-mod codegen;
-mod intrinsics;
-mod ty;
-mod val;
+pub mod codegen;
+pub mod intrinsics;
+pub mod ty;
+pub mod val;
 
 use ty::raw::*;
 
@@ -15,7 +15,7 @@ type Fl = F32;
 pub fn test_inner() {
     let kernel = new_ptx_kernel::<(Bool, Global<R<&Fl>>, Global<M<&mut Fl>>, Global<M<&mut Fl>>)>();
     kernel.use_fast_math();
-    let (a, b, mut c, mut d) = kernel.get_args();
+    let (a, b, c, mut d) = kernel.get_args();
 
     let res = a.then(|| b.load()).or_else(|| b.load());
     // let res = b.load();

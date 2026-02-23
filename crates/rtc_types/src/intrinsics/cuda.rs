@@ -8,12 +8,14 @@ use crate::{
 pub struct CUDA;
 
 impl CUDA {
+    #[expect(unused)]
     fn call_unary_intrinsic<Intrinsic, T: UnaryIntrinsic<Intrinsic>>(
         _: Intrinsic,
         val: Val<'_, T>,
     ) -> Val<'_, T> {
         T::call_intrinsic(val)
     }
+    #[expect(unused)]
     fn call_binary_intrinsic<'a, Intrinsic, T: BinaryIntrinsic<Intrinsic>>(
         _: Intrinsic,
         lhs: Val<'a, T>,
@@ -95,6 +97,7 @@ macro_rules! impl_binary {
     };
 }
 
+#[allow(unused)]
 fn test_unary_intrinsic<T: UnaryIntrinsic<Intrins> + SizedTy + Copy, Intrins>() -> String {
     let func = new_ptx_kernel::<(M<&mut T>,)>();
     let (mut val,) = func.get_args();
@@ -105,6 +108,7 @@ fn test_unary_intrinsic<T: UnaryIntrinsic<Intrins> + SizedTy + Copy, Intrins>() 
     return ptx;
 }
 
+#[allow(unused)]
 fn test_binary_intrinsic<T: BinaryIntrinsic<Intrins> + SizedTy + Copy, Intrins>() -> String {
     let func = new_ptx_kernel::<(R<&T>, R<&T>, M<&mut T>)>();
     let (a, b, mut c) = func.get_args();
