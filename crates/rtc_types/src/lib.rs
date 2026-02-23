@@ -4,6 +4,7 @@ use crate::{
 };
 
 mod codegen;
+mod intrinsics;
 mod ty;
 mod val;
 
@@ -20,12 +21,12 @@ pub fn test_inner() {
     let res = a
         .then(|| {
             let ret = d.load();
-            d.store(b.load());
+            d.store(b.load().__intrinsic_cos_fast());
             kernel.return_void();
             ret
         })
         .or_else(|| {
-            c.store(c.cx().constant(0.0));
+            c.store(c.cx().constant(0.0).__intrinsic_ex2_approx());
             c.cx().constant(0.0)
         });
     d.store(res);

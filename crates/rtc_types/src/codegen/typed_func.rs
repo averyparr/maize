@@ -12,6 +12,7 @@ use inkwell::{
 };
 
 use crate::{
+    intrinsics::IntrinsicsLibrary,
     ty::{
         Bool, F32, F64, FnRetTy, I8, I16, I32, I64, IntoFuncArgs, U8, U16, U32, U64, ValTy, VoidTy,
     },
@@ -86,6 +87,9 @@ impl FnCodegen {
     pub(crate) fn bb(&self) -> BasicBlock<'static> {
         self.bb.get()
     }
+    pub(crate) fn module(&self) -> &Module<'static> {
+        &self.module
+    }
     pub(crate) fn with_bb_as<U>(&self, bb: BasicBlock<'static>, f: impl FnOnce() -> U) -> U {
         let curr_bb = self.bb();
         self.set_bb(bb);
@@ -133,11 +137,13 @@ pub trait ToCPU {
 }
 
 pub trait Func: Sized {
+    type Intrinsics: IntrinsicsLibrary;
     type Args: IntoFuncArgs;
     type Ret: FnRetTy;
 
     fn new(cg: FnCodegen) -> Self;
     fn cx(&self) -> &FnCodegen;
+    fn intrinsics(&self) -> &Self::Intrinsics;
     const CALL_CONV: u32;
     type CpuConfig: ToCPU;
 
