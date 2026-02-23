@@ -73,12 +73,14 @@ impl<'a> ThenNoVal<'a> {
 }
 
 fn jump_from_block_to_other_block<'ctx>(from: BasicBlock<'ctx>, to: BasicBlock<'ctx>) {
-    let ctx = from.get_context();
-    let builder = ctx.create_builder();
-    builder.position_at_end(from);
-    builder
-        .build_unconditional_branch(to)
-        .expect("Must be able to build unconditional branch between blocks");
+    if from.get_terminator().is_none() {
+        let ctx = from.get_context();
+        let builder = ctx.create_builder();
+        builder.position_at_end(from);
+        builder
+            .build_unconditional_branch(to)
+            .expect("Must be able to build unconditional branch between blocks");
+    }
 }
 
 fn setup_branch_on<'ctx>(
