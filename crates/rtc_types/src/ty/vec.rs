@@ -4,7 +4,7 @@ use inkwell::{
     values::{AnyValueEnum, VectorValue},
 };
 
-use crate::ty::{AnyTy, Ty, V, ValTy};
+use crate::ty::{AlignedTy, AnyTy, SizedTy, Ty, V, ValTy};
 
 trait Vectorizable<'ctx> {
     fn inkwell_vec_ty(self, size: u32) -> VectorType<'ctx>;
@@ -24,13 +24,13 @@ impl<'ctx> Vectorizable<'ctx> for FloatType<'ctx> {
 
 impl<T> VectorizableTy for T
 where
-    T: ValTy,
+    T: SizedTy,
     for<'ctx> T::Type<'ctx>: Vectorizable<'ctx>,
 {
 }
 
 #[expect(private_bounds)]
-pub trait VectorizableTy: for<'ctx> ValTy<Type<'ctx>: Vectorizable<'ctx>> {
+pub trait VectorizableTy: for<'ctx> SizedTy<Type<'ctx>: Vectorizable<'ctx>> {
     fn vec_ty(ctx: ContextRef<'_>, size: usize) -> VectorType<'_> {
         Self::Type::inkwell_vec_ty(
             Self::ty(ctx),
@@ -70,4 +70,28 @@ where
             None
         }
     }
+}
+
+const fn align_of_vector<T: AlignedTy, const N: usize>() -> u32 {
+    let mut n = N;
+    let mut full_align = T::ALIGN;
+    while n % 2 == 0 {
+        full_align *= 2;
+        n /= 2;
+    }
+    full_align
+}
+
+impl<T, const N: usize> AlignedTy for V<T, N>
+where
+    T: AlignedTy + VectorizableTy,
+{
+    const ALIGN: u32 = align_of_vector::<T, N>();
+}
+
+impl<T, const N: usize> SizedTy for V<T, N>
+where
+    T: VectorizableTy,
+{
+    const SIZE: u32 = (N as u32) * T::ALIGN;
 }

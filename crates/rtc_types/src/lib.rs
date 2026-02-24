@@ -18,17 +18,20 @@ pub fn test_inner() {
         Global<R<&Fl>>,
         Global<M<&mut Fl>>,
         Global<M<&mut Fl>>,
+        Global<R<&V<Fl, 4>>>,
+        Global<M<&mut V<Fl, 4>>>,
     )>();
     kernel.use_fast_math();
-    let (a, b, mut c, mut d) = kernel.get_args();
+    let (a, b, mut c, mut d, e, mut f) = kernel.get_args();
 
     let should_store = a.load_nc().eq(b.load_nc());
     should_store.branch(|| c.store(a.load_nc()));
     let res = should_store.then(|| a.load_nc()).or_else(|| b.load_nc());
     d.store(res);
+    f.store(e.load_nc());
     let res = kernel.finalize().compile_asm_quickly(SM::SM90);
     println!("{res}");
-    assert!(false);
+    // assert!(false);
 }
 
 #[test]
