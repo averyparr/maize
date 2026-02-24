@@ -10,7 +10,7 @@ pub mod val;
 
 use ty::raw::*;
 
-type Fl = F32;
+type Fl = F16;
 
 pub fn test_inner() {
     let kernel = new_ptx_kernel::<(
@@ -19,18 +19,19 @@ pub fn test_inner() {
         Global<M<&mut Fl>>,
         Global<M<&mut Fl>>,
         Global<R<&V<Fl, 4>>>,
-        Global<M<&mut V<Fl, 4>>>,
+        Global<M<&mut V<F32, 4>>>,
     )>();
     kernel.use_fast_math();
     let (a, b, mut c, mut d, e, mut f) = kernel.get_args();
 
-    let should_store = a.load_nc().eq(b.load_nc());
-    should_store.branch(|| c.store(a.load_nc()));
-    let res = should_store.then(|| a.load_nc()).or_else(|| b.load_nc());
-    d.store(res);
-    f.store(e.load_nc());
-    let res = kernel.finalize().compile_asm_quickly(SM::SM90);
-    println!("{res}");
+    let e = e.load();
+    c.store(a.load().log2());
+    d.store(b.load().cos());
+    f.store(e.vec_cast::<BF16>().exp2().vec_cast());
+
+    kernel.cx().module().print_to_stderr();
+
+    println!("{}", kernel.finalize().compile_asm_quickly(SM::SM90));
     // assert!(false);
 }
 

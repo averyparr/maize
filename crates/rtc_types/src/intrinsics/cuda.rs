@@ -13,7 +13,7 @@ impl CUDA {
         _: Intrinsic,
         val: Val<'_, T>,
     ) -> Val<'_, T> {
-        T::call_intrinsic(val)
+        T::call_intrinsic(val, true)
     }
     #[expect(unused)]
     fn call_binary_intrinsic<'a, Intrinsic, T: BinaryIntrinsic<Intrinsic>>(
@@ -21,7 +21,7 @@ impl CUDA {
         lhs: Val<'a, T>,
         rhs: Val<'a, T>,
     ) -> Val<'a, T> {
-        T::call_intrinsic(lhs, rhs)
+        T::call_intrinsic(lhs, rhs, true)
     }
 }
 
@@ -56,7 +56,7 @@ macro_rules! impl_unary {
         impl<T: UnaryIntrinsic<$intrinsic_name>> Val<'_, T>
         {
             pub fn $intrinsic_fn_name(self) -> Self {
-                T::call_intrinsic(self)
+                T::call_intrinsic(self, true)
             }
         }
     };
@@ -91,7 +91,7 @@ macro_rules! impl_binary {
         impl<T: BinaryIntrinsic<$intrinsic_name>> Val<'_, T>
         {
             pub fn $intrinsic_fn_name(self, rhs: Self) -> Self {
-                T::call_intrinsic(self, rhs)
+                T::call_intrinsic(self, rhs, true)
             }
         }
     };
@@ -101,7 +101,7 @@ macro_rules! impl_binary {
 fn test_unary_intrinsic<T: UnaryIntrinsic<Intrins> + SizedTy + Copy, Intrins>() -> String {
     let func = new_ptx_kernel::<(M<&mut T>,)>();
     let (mut val,) = func.get_args();
-    let out = T::call_intrinsic(val.load());
+    let out = T::call_intrinsic(val.load(), true);
     val.store(out);
     let ptx = String::from_utf8(func.finalize().compile_asm_quickly(SM::SM90).into()).unwrap();
 
@@ -112,7 +112,7 @@ fn test_unary_intrinsic<T: UnaryIntrinsic<Intrins> + SizedTy + Copy, Intrins>() 
 fn test_binary_intrinsic<T: BinaryIntrinsic<Intrins> + SizedTy + Copy, Intrins>() -> String {
     let func = new_ptx_kernel::<(R<&T>, R<&T>, M<&mut T>)>();
     let (a, b, mut c) = func.get_args();
-    let out = T::call_intrinsic(a.load(), b.load());
+    let out = T::call_intrinsic(a.load(), b.load(), true);
     c.store(out);
     let ptx = String::from_utf8(func.finalize().compile_asm_quickly(SM::SM90).into()).unwrap();
     ptx

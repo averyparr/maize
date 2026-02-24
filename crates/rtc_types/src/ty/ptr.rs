@@ -304,18 +304,18 @@ where
     T: ValTy,
 {
     fn ptr_attrs(
-        cx: &FnCodegen,
+        _cx: &FnCodegen,
     ) -> impl IntoIterator<Item = (&str, Option<BasicMetadataValueEnum<'_>>)>
     where
         Self::PointeeTy: SizedTy,
     {
-        let size = cx.constant_from(Self::PointeeTy::SIZE);
-        let align = cx.constant_from(Self::PointeeTy::ALIGN);
+        // let size = cx.constant_from(Self::PointeeTy::SIZE);
+        // let align = cx.constant_from(Self::PointeeTy::ALIGN);
         [
-            ("align", Some(align.ll_typed().into())),
-            ("dereferenceable", Some(size.ll_typed().into())),
-            ("nonnull", None),
-            ("readonly", None),
+            // ("align", Some(align.ll_typed().into())),
+            // ("dereferenceable", Some(size.ll_typed().into())),
+            // ("nonnull", None),
+            // ("readonly", None),
         ]
     }
 }
@@ -325,18 +325,18 @@ where
     T: ValTy,
 {
     fn ptr_attrs(
-        cx: &FnCodegen,
+        _cx: &FnCodegen,
     ) -> impl IntoIterator<Item = (&str, Option<BasicMetadataValueEnum<'_>>)>
     where
         Self::PointeeTy: SizedTy,
     {
-        let size = cx.constant_from(Self::PointeeTy::SIZE);
-        let align = cx.constant_from(Self::PointeeTy::ALIGN);
+        // let size = cx.constant_from(Self::PointeeTy::SIZE);
+        // let align = cx.constant_from(Self::PointeeTy::ALIGN);
         [
-            ("align", Some(align.ll_typed().into())),
-            ("dereferenceable", Some(size.ll_typed().into())),
-            ("nonnull", None),
-            ("noalias", None),
+            // ("align", Some(align.ll_typed().into())),
+            // ("dereferenceable", Some(size.ll_typed().into())),
+            // ("nonnull", None),
+            // ("noalias", None),
         ]
     }
 }

@@ -40,10 +40,12 @@ where
 
     fn return_from_fn(cx: &FnCodegen, val: Option<Val<'_, Self>>) {
         let val = val.expect("Returning non-empty value should always pass Some(_)");
-        unsafe {
-            cx.with_builder(|b| b.build_return(Some(&val.ll_typed())))
-                .expect("Return should always succeed")
-        };
+        if cx.bb().get_terminator().is_none() {
+            unsafe {
+                cx.with_builder(|b| b.build_return(Some(&val.ll_typed())))
+                    .expect("Return should always succeed")
+            };
+        }
     }
 }
 
@@ -58,9 +60,11 @@ impl FnRetTy for Void {
 
     fn return_from_fn(cx: &FnCodegen, val: Option<Val<'_, Self>>) {
         assert!(val.is_none(), "Cannot return a value through a void type");
-        unsafe {
-            cx.with_builder(|b| b.build_return(None))
-                .expect("Function return should always succeed")
-        };
+        if cx.bb().get_terminator().is_none() {
+            unsafe {
+                cx.with_builder(|b| b.build_return(None))
+                    .expect("Function return should always succeed")
+            };
+        }
     }
 }

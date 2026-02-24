@@ -3,7 +3,7 @@ pub mod if_stmt;
 pub mod instruction_opt;
 pub mod loops;
 pub mod target;
-mod typed_func;
+pub mod typed_func;
 
 pub(crate) use typed_func::FnCodegen;
 pub use typed_func::Func;

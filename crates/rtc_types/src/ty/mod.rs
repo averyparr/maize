@@ -1,6 +1,7 @@
 mod args;
 mod arithmetic;
 mod bool;
+pub mod convertible;
 pub mod cuda;
 mod float;
 mod func;
@@ -73,7 +74,7 @@ where
 }
 
 pub use args::IntoFuncArgs;
-pub use arithmetic::MathTy;
+pub use arithmetic::{MathTy, MathVariant};
 pub use func::FnRetTy;
 pub use ptr::{AddrspacePtr, ConstPtrTy, MutPtrTy, MutTy, RefTy};
 pub use raw::{Bool, M, P, R, V, Void, float::*, int::*};
