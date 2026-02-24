@@ -1,3 +1,5 @@
+use std::borrow::Borrow;
+
 use inkwell::{
     builder::Builder,
     values::{AnyValue, AnyValueEnum, FloatMathValue, IntMathValue},
@@ -206,22 +208,22 @@ impl<'a, T> Val<'a, T>
 where
     T: ComparableTy,
 {
-    pub fn eq(&self, rhs: &Self) -> Val<'a, T::ComparisonT> {
-        T::compare(Predicate::EQ, self, rhs)
+    pub fn eq(&self, rhs: impl Borrow<Self>) -> Val<'a, T::ComparisonT> {
+        T::compare(Predicate::EQ, self, rhs.borrow())
     }
-    pub fn ne(&self, rhs: &Self) -> Val<'a, T::ComparisonT> {
-        T::compare(Predicate::NE, self, rhs)
+    pub fn ne(&self, rhs: impl Borrow<Self>) -> Val<'a, T::ComparisonT> {
+        T::compare(Predicate::NE, self, rhs.borrow())
     }
-    pub fn le(&self, rhs: &Self) -> Val<'a, T::ComparisonT> {
-        T::compare(Predicate::LE, self, rhs)
+    pub fn le(&self, rhs: impl Borrow<Self>) -> Val<'a, T::ComparisonT> {
+        T::compare(Predicate::LE, self, rhs.borrow())
     }
-    pub fn lt(&self, rhs: &Self) -> Val<'a, T::ComparisonT> {
-        T::compare(Predicate::LT, self, rhs)
+    pub fn lt(&self, rhs: impl Borrow<Self>) -> Val<'a, T::ComparisonT> {
+        T::compare(Predicate::LT, self, rhs.borrow())
     }
-    pub fn ge(&self, rhs: &Self) -> Val<'a, T::ComparisonT> {
-        T::compare(Predicate::GE, self, rhs)
+    pub fn ge(&self, rhs: impl Borrow<Self>) -> Val<'a, T::ComparisonT> {
+        T::compare(Predicate::GE, self, rhs.borrow())
     }
-    pub fn gt(&self, rhs: &Self) -> Val<'a, T::ComparisonT> {
-        T::compare(Predicate::GT, self, rhs)
+    pub fn gt(&self, rhs: impl Borrow<Self>) -> Val<'a, T::ComparisonT> {
+        T::compare(Predicate::GT, self, rhs.borrow())
     }
 }
