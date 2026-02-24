@@ -1,9 +1,9 @@
-use inkwell::types::FloatType;
+use inkwell::{types::FloatType, values::BasicValue};
 
 use crate::{
-    codegen::typed_func::ConstValTy,
     intrinsics::{
-        UnaryIntrinsic, call_binary_intrinsic, call_unary_intrinsic_with_fast_math, cuda::Log2Fast,
+        UnaryIntrinsic, call_binary_intrinsic, call_unary_intrinsic_with_fast_math,
+        cuda::{Log2Approx, Log2ApproxFtz},
     },
     ty::{BF16, F16, F32, MathTy, V, ValTy, vec::VectorizableTy},
     val::Val,
@@ -108,10 +108,24 @@ impl<'a, T: TranscendentalTy> Val<'a, T> {
         T::sin(self)
     }
     pub fn cos(self) -> Self {
-        T::cos(self)
+        const APPROX_FN: u32 = 1 << 6;
+        let res = T::cos(self);
+        // This is necessary because these intrinsics
+        // are _only_ available in approx variants
+        if let Some(ins) = res.ll_typed().as_basic_value_enum().as_instruction_value() {
+            ins.set_fast_math_flags(APPROX_FN);
+        }
+        res
     }
     pub fn sqrt(self) -> Self {
-        T::sqrt(self)
+        const APPROX_FN: u32 = 1 << 6;
+        let res = T::sqrt(self);
+        // This is necessary because these intrinsics
+        // are _only_ available in approx variants
+        if let Some(ins) = res.ll_typed().as_basic_value_enum().as_instruction_value() {
+            ins.set_fast_math_flags(APPROX_FN);
+        }
+        res
     }
     pub fn floor(self) -> Self {
         T::floor(self)
@@ -146,9 +160,15 @@ pub trait Log2AbleTy: ValTy {
     fn call_log2(val: Val<'_, Self>) -> Val<'_, Self>;
 }
 
-impl<T: UnaryIntrinsic<Log2Fast>> Log2AbleTy for T {
+impl<T: UnaryIntrinsic<Log2Approx> + UnaryIntrinsic<Log2ApproxFtz>> Log2AbleTy for T {
     fn call_log2(val: Val<'_, Self>) -> Val<'_, Self> {
-        val.__intrinsic_log2_fast()
+        let mut allow_ftz = false;
+        val.cx().change_opt(|o| allow_ftz = o.allow_approx_funcs());
+        if allow_ftz {
+            val.__intrinsic_log2_approx_ftz()
+        } else {
+            val.__intrinsic_log2_approx()
+        }
     }
 }
 

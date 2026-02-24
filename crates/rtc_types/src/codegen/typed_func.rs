@@ -185,6 +185,12 @@ pub trait Func: Sized {
     }
     fn use_fast_math(&self) {
         self.cx().use_fast_math();
+        self.cx().func().add_attribute(
+            inkwell::attributes::AttributeLoc::Function,
+            self.cx()
+                .ctx()
+                .create_string_attribute("denormal-fp-math-f32", "preserve-sign,preserve-sign"),
+        );
     }
 
     fn return_with<'a>(&self, retval: Val<'_, Self::Ret>)

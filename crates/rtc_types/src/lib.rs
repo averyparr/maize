@@ -26,8 +26,8 @@ pub fn test_inner() {
 
     let e = e.load();
     c.store(a.load().log2());
-    d.store(b.load().cos());
-    f.store(e.vec_cast::<BF16>().exp2().vec_cast());
+    d.store(b.load().exp2());
+    f.store(e.exp2().vec_cast());
 
     kernel.cx().module().print_to_stderr();
 
