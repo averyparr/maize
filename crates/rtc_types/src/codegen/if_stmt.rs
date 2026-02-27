@@ -103,8 +103,8 @@ fn setup_branch_on<'ctx>(
 
 impl<'a> Val<'a, Bool> {
     fn then_inner<U>(self, f: impl FnOnce() -> U) -> (ThenNoVal<'a>, U) {
-        let (then_bb, else_bb) = setup_branch_on(self);
         let cx = self.cx();
+        let (then_bb, else_bb) = setup_branch_on(self);
         let uni_bb = cx.ctx().append_basic_block(cx.func(), "post_if");
 
         let ret = cx.with_bb_as(then_bb, f);

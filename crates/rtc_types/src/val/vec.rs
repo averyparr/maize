@@ -59,7 +59,7 @@ where
     where
         T: Copy,
     {
-        Self::from_elements(::core::array::from_fn(|_| val))
+        Self::from_elements(::core::array::from_fn(|_| val.copy()))
     }
 }
 

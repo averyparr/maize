@@ -88,8 +88,11 @@ impl<C> Val<'_, C>
 where
     C: ConstValTy,
 {
-    pub fn const_like(&self, val: impl Into<C::Assoc>) -> Self {
+    pub fn const_like(&self, val: C::Assoc) -> Self {
         C::to_const(val, self.cx())
+    }
+    pub fn zero(&self) -> Self {
+        unsafe { Val::new_from_value(self.cx(), C::zeros(self.ctx()).as_basic_value_enum()) }
     }
 }
 

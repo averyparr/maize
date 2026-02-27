@@ -25,8 +25,29 @@ use crate::{
     ty::{M, R, SizedTy, Ty, ValTy},
 };
 
-#[derive(Clone, Copy)]
+/* CANNOT be Copy because eaech one owns an alloca */
 pub struct Val<'ctx, T: ?Sized>(&'ctx FnCodegen, PointerValue<'static>, PhantomData<T>);
+
+impl<'ctx, T: ?Sized> Val<'ctx, T>
+where
+    T: Ty + Copy,
+{
+    pub fn copy(&self) -> Self {
+        // This is cheap here, so we provide a different name
+        self.clone()
+    }
+}
+
+impl<'ctx, T> Clone for Val<'ctx, T>
+where
+    T: Ty,
+{
+    fn clone(&self) -> Self {
+        // This is safe and just ensures we don't just copy the underlying
+        // pointers
+        unsafe { Self::new_from_value(self.cx(), self.get_raw()) }
+    }
+}
 
 impl<'ctx, T: ?Sized> Val<'ctx, T> {
     pub(crate) fn ctx(&self) -> ContextRef<'static> {

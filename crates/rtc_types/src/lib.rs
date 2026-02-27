@@ -1,5 +1,5 @@
 use crate::{
-    codegen::{Func, new_ptx_kernel, target::cuda::SM},
+    codegen::{Func, loops::Loop, new_ptx_kernel, target::cuda::SM},
     ty::cuda::Global,
     val::Val,
 };
@@ -17,24 +17,24 @@ type FlAlt = F32;
 const VEC_LEN: usize = 4;
 
 pub fn test_inner() {
-    let kernel = new_ptx_kernel::<(
-        Global<R<&Fl>>,
-        Global<R<&Fl>>,
-        Global<M<&mut Fl>>,
-        Global<M<&mut Fl>>,
-        Global<R<&V<FlAlt, VEC_LEN>>>,
-        Global<M<&mut V<FlAlt, VEC_LEN>>>,
-    )>();
+    let kernel = new_ptx_kernel::<(Global<R<&Fl>>, Global<R<&U32>>, Global<M<&mut Fl>>)>();
     kernel.use_fast_math();
-    let (a, b, mut c, mut d, e, mut f) = kernel.get_args();
+    let (a, b, mut c) = kernel.get_args();
 
-    let e = e.load();
-    let a = a.load();
-    c.store((1.0 / a.sqrt()).log2());
-    f.store((a.const_like(2.3) + e.vec_cast().exp2() * a).vec_cast());
+    let mut a = a.load();
+    let max = b.load();
+    let mut a_prime = a.clone();
+    let mut a_prime = a_prime.as_mut();
+    for _ in Loop::new(max.const_like(4)..10 * max) {
+        let mut a_mut = a.as_mut();
+        a_mut.store(a_mut.load() * a_mut.load());
+        a_prime.store(a_mut.load() * c.load());
+    }
+
+    c.store(a_prime.load());
 
     println!("{}", kernel.finalize().compile_asm_quickly(SM::SM90));
-    assert!(false);
+    // assert!(false);
 }
 
 #[test]
