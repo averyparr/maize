@@ -9,16 +9,19 @@ use super::{FnCodegen, Func};
 
 macro_rules! calling_conv {
     ($name: ident<Args> => $call_conv: literal | $cpu_config: ty | $intrinsics: ident) => {
-        pub struct $name<Args>(FnCodegen, PhantomData<Args>, $intrinsics);
+        pub struct $name<Args>(FnCodegen, PhantomData<Args>);
         impl<Args: IntoFuncArgs> Func for $name<Args> {
             type Args = Args;
             type Ret = Void;
-            type Intrinsics = $intrinsics;
-            fn intrinsics(&self) -> &Self::Intrinsics {
-                &self.2
+            type Intrinsics<'a>
+                = $intrinsics<'a>
+            where
+                Args: 'a;
+            fn intrinsics(&self) -> Self::Intrinsics<'_> {
+                $intrinsics(&self.0)
             }
             fn new(cx: FnCodegen) -> Self {
-                Self(cx, PhantomData, $intrinsics)
+                Self(cx, PhantomData)
             }
             fn cx(&self) -> &FnCodegen {
                 &self.0
@@ -28,16 +31,20 @@ macro_rules! calling_conv {
         }
     };
     ($name: ident<Args, Ret> => $call_conv: literal | $cpu_config: ty | $intrinsics: ident) => {
-        pub struct $name<Args, Ret>(FnCodegen, PhantomData<(Args, Ret)>, $intrinsics);
+        pub struct $name<Args, Ret>(FnCodegen, PhantomData<(Args, Ret)>);
         impl<Args: IntoFuncArgs, Ret: FnRetTy> Func for $name<Args, Ret> {
             type Args = Args;
             type Ret = Ret;
-            type Intrinsics = $intrinsics;
-            fn intrinsics(&self) -> &Self::Intrinsics {
-                &self.2
+            type Intrinsics<'a>
+                = $intrinsics<'a>
+            where
+                Args: 'a,
+                Ret: 'a;
+            fn intrinsics(&self) -> Self::Intrinsics<'_> {
+                $intrinsics(&self.0)
             }
             fn new(cx: FnCodegen) -> Self {
-                Self(cx, PhantomData, $intrinsics)
+                Self(cx, PhantomData)
             }
             fn cx(&self) -> &FnCodegen {
                 &self.0

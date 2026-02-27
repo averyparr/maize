@@ -175,13 +175,15 @@ pub trait ToCPU {
 }
 
 pub trait Func: Sized {
-    type Intrinsics: IntrinsicsLibrary;
+    type Intrinsics<'a>: IntrinsicsLibrary
+    where
+        Self: 'a;
     type Args: IntoFuncArgs;
     type Ret: FnRetTy;
 
     fn new(cg: FnCodegen) -> Self;
     fn cx(&self) -> &FnCodegen;
-    fn intrinsics(&self) -> &Self::Intrinsics;
+    fn intrinsics(&self) -> Self::Intrinsics<'_>;
     const CALL_CONV: u32;
     type CpuConfig: ToCPU;
 
@@ -191,6 +193,10 @@ pub trait Func: Sized {
             "nvptx64-nvidia-cuda" => Target::initialize_nvptx(config),
             _ => panic!("Unrecognized [default-impl] target '{}'", cpu.triple()),
         }
+    }
+
+    fn intrinsic_fn<U>(&self, f: impl FnOnce(Self::Intrinsics<'_>) -> U) -> U {
+        f(self.intrinsics())
     }
 
     fn from_ctx(ctx: ContextRef<'static>) -> Self

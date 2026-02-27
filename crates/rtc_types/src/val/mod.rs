@@ -1,3 +1,4 @@
+mod array;
 mod cmp;
 mod ptr;
 mod std_ops;

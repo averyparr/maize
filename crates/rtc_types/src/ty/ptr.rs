@@ -343,11 +343,17 @@ where
     where
         Self::PointeeTy: SizedTy,
     {
-        let size = cx.constant_from(Self::PointeeTy::SIZE);
-        let align = cx.constant_from(Self::PointeeTy::ALIGN);
+        let size = cx
+            .ctx()
+            .i32_type()
+            .const_int(Self::PointeeTy::SIZE as _, false);
+        let align = cx
+            .ctx()
+            .i32_type()
+            .const_int(Self::PointeeTy::ALIGN as _, false);
         [
-            ("align", Some(align.get_ll_typed().into())),
-            ("dereferenceable", Some(size.get_ll_typed().into())),
+            ("align", Some(align.into())),
+            ("dereferenceable", Some(size.into())),
             ("nonnull", None),
             ("readonly", None),
         ]
@@ -364,11 +370,17 @@ where
     where
         Self::PointeeTy: SizedTy,
     {
-        let size = cx.constant_from(Self::PointeeTy::SIZE);
-        let align = cx.constant_from(Self::PointeeTy::ALIGN);
+        let size = cx
+            .ctx()
+            .i32_type()
+            .const_int(Self::PointeeTy::SIZE as _, false);
+        let align = cx
+            .ctx()
+            .i32_type()
+            .const_int(Self::PointeeTy::ALIGN as _, false);
         [
-            ("align", Some(align.get_ll_typed().into())),
-            ("dereferenceable", Some(size.get_ll_typed().into())),
+            ("align", Some(align.into())),
+            ("dereferenceable", Some(size.into())),
             ("nonnull", None),
             ("noalias", None),
         ]

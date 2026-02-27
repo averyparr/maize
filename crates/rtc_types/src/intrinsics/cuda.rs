@@ -1,13 +1,15 @@
+use inkwell::{AddressSpace, values::BasicValue};
+
 use crate::{
-    codegen::{Func, new_ptx_kernel, target::cuda::SM},
+    codegen::{FnCodegen, Func, new_ptx_kernel, target::cuda::SM},
     intrinsics::{BinaryIntrinsic, IntrinsicsLibrary, UnaryIntrinsic},
-    ty::{M, R, SizedTy, raw::*},
+    ty::{AddrspacePtr, M, R, SizedTy, cuda::Shared, raw::*},
     val::Val,
 };
 
-pub struct CUDA;
+pub struct CUDA<'a>(pub(crate) &'a FnCodegen);
 
-impl CUDA {
+impl<'a> CUDA<'a> {
     #[expect(unused)]
     fn call_unary_intrinsic<Intrinsic, T: UnaryIntrinsic<Intrinsic>>(
         _: Intrinsic,
@@ -16,16 +18,28 @@ impl CUDA {
         T::call_intrinsic(val, true)
     }
     #[expect(unused)]
-    fn call_binary_intrinsic<'a, Intrinsic, T: BinaryIntrinsic<Intrinsic>>(
+    fn call_binary_intrinsic<Intrinsic, T: BinaryIntrinsic<Intrinsic>>(
         _: Intrinsic,
         lhs: Val<'a, T>,
         rhs: Val<'a, T>,
     ) -> Val<'a, T> {
         T::call_intrinsic(lhs, rhs, true)
     }
+
+    pub fn shared_global<T: SizedTy>(self) -> Val<'a, Shared<M<&'a mut T>>> {
+        let ty = T::ty(self.0.ctx());
+        let global_val = self.0.module().add_global(
+            ty,
+            Some(AddressSpace::from(Shared::<M<&mut T>>::ADDRSPACE)),
+            "const_sized_shared",
+        );
+        global_val.set_initializer(&T::undef(self.0.ctx()));
+        global_val.set_alignment(T::ALIGN);
+        unsafe { Val::new_from_value(self.0, global_val.as_basic_value_enum()) }
+    }
 }
 
-impl IntrinsicsLibrary for CUDA {}
+impl<'a> IntrinsicsLibrary for CUDA<'a> {}
 
 macro_rules! impl_unary {
     (

@@ -1,5 +1,6 @@
 mod args;
 mod arithmetic;
+mod array;
 mod bool;
 pub mod convertible;
 pub mod cuda;

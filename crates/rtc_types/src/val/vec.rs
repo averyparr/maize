@@ -61,6 +61,10 @@ where
     {
         Self::from_elements(::core::array::from_fn(|_| val.copy()))
     }
+
+    pub fn to_array(self) -> Val<'a, [T; N]> {
+        Val::array_from_elements(self.elements())
+    }
 }
 
 impl<'a, 'b, T, const N: usize> Val<'a, R<&'b V<T, N>>>
