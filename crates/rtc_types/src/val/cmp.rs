@@ -2,7 +2,7 @@ use std::borrow::Borrow;
 
 use inkwell::{
     builder::Builder,
-    values::{AnyValue, AnyValueEnum, FloatMathValue, IntMathValue},
+    values::{AnyValue, AnyValueEnum, BasicValueEnum, FloatMathValue, IntMathValue},
 };
 
 use crate::{
@@ -154,19 +154,20 @@ pub unsafe trait ComparableTy: ValTy {
         rhs: &Val<'a, Self>,
     ) -> Val<'a, Self::ComparisonT> {
         let raw_res = unsafe {
-            lhs.cx()
-                .with_builder(|b| Self::build_comparison_raw(b, predicate, lhs.raw(), rhs.raw()))
+            lhs.cx().with_builder(|b| {
+                Self::build_comparison_raw(b, predicate, lhs.get_raw(), rhs.get_raw())
+            })
         };
 
-        unsafe { Val::new(lhs.cx(), raw_res) }
+        unsafe { Val::new_from_value(lhs.cx(), raw_res) }
     }
 
     fn build_comparison_raw(
         b: Builder<'static>,
         pred: Predicate,
-        lhs: AnyValueEnum<'static>,
-        rhs: AnyValueEnum<'static>,
-    ) -> AnyValueEnum<'static>;
+        lhs: BasicValueEnum<'static>,
+        rhs: BasicValueEnum<'static>,
+    ) -> BasicValueEnum<'static>;
 }
 
 macro_rules! compare_for_scalar {
@@ -176,10 +177,12 @@ macro_rules! compare_for_scalar {
             fn build_comparison_raw(
                 b: Builder<'static>,
                 pred: Predicate,
-                lhs: AnyValueEnum<'static>,
-                rhs: AnyValueEnum<'static>,
-            ) -> AnyValueEnum<'static> {
-                $raw_compare_specialization(b, pred, lhs, rhs)
+                lhs: BasicValueEnum<'static>,
+                rhs: BasicValueEnum<'static>,
+            ) -> BasicValueEnum<'static> {
+                $raw_compare_specialization(b, pred, lhs.into(), rhs.into())
+                    .try_into()
+                    .expect("This returned an any-value which was not a basic-value")
             }
         }
     };
@@ -197,9 +200,9 @@ where
     fn build_comparison_raw(
         b: Builder<'static>,
         pred: Predicate,
-        lhs: AnyValueEnum<'static>,
-        rhs: AnyValueEnum<'static>,
-    ) -> AnyValueEnum<'static> {
+        lhs: BasicValueEnum<'static>,
+        rhs: BasicValueEnum<'static>,
+    ) -> BasicValueEnum<'static> {
         T::build_comparison_raw(b, pred, lhs, rhs)
     }
 }

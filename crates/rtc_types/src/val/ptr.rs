@@ -1,5 +1,5 @@
 use crate::{
-    ty::{ConstPtrTy, MutPtrTy, MutTy, R, RefTy, SizedTy},
+    ty::{ConstPtrTy, M, MutPtrTy, MutTy, R, RefTy, SizedTy},
     val::Val,
 };
 
@@ -52,7 +52,7 @@ where
     {
         Ref::load(self)
     }
-    pub fn as_ref<'b>(&'b self) -> Val<'a, R<&'b Ref::PointeeTy>> {
+    pub fn reborrow<'b>(&'b self) -> Val<'a, R<&'b Ref::PointeeTy>> {
         Ref::reborrow(self)
     }
 }
@@ -72,5 +72,8 @@ where
         Mut::PointeeTy: SizedTy,
     {
         Mut::store(self, val);
+    }
+    pub fn reborrow_mut<'b>(&'b mut self) -> Val<'a, M<&'b mut Mut::PointeeTy>> {
+        Mut::reborrow_mut(self)
     }
 }

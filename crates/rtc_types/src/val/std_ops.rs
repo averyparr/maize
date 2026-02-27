@@ -1,47 +1,142 @@
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
-use inkwell::values::BasicValue;
-
-use crate::{ty::MathTy, val::Val};
-
-fn post_process<T: MathTy>(val: Val<'_, T>) -> Val<'_, T> {
-    if let Some(ins) = val.ll_typed().as_instruction_value() {
-        val.cx().apply_ins_opt(ins);
-    }
-    val
-}
+use crate::{
+    codegen::typed_func::{ConstValTy, IntoConstVal},
+    ty::{MathTy, raw::*, vec::VectorizableTy},
+    val::Val,
+};
 
 impl<T: MathTy> Add for Val<'_, T> {
     type Output = Self;
     fn add(self, rhs: Self) -> Self::Output {
-        post_process(T::add(self, rhs))
+        T::add(self, rhs)
     }
 }
 
 impl<T: MathTy> Sub for Val<'_, T> {
     type Output = Self;
     fn sub(self, rhs: Self) -> Self::Output {
-        post_process(T::sub(self, rhs))
+        T::sub(self, rhs)
     }
 }
 
 impl<T: MathTy> Mul for Val<'_, T> {
     type Output = Self;
     fn mul(self, rhs: Self) -> Self::Output {
-        post_process(T::mul(self, rhs))
+        T::mul(self, rhs)
     }
 }
 
 impl<T: MathTy> Div for Val<'_, T> {
     type Output = Self;
     fn div(self, rhs: Self) -> Self::Output {
-        post_process(T::div(self, rhs))
+        T::div(self, rhs)
     }
 }
 
 impl<T: MathTy> Neg for Val<'_, T> {
     type Output = Self;
     fn neg(self) -> Self::Output {
-        post_process(T::neg(self))
+        T::neg(self)
     }
 }
+
+impl<'a, T: VectorizableTy + MathTy + Copy, const N: usize> Add<Val<'a, T>> for Val<'a, V<T, N>> {
+    type Output = Self;
+    fn add(self, rhs: Val<'a, T>) -> Self::Output {
+        Add::add(self, Val::splat(rhs))
+    }
+}
+
+impl<'a, T: VectorizableTy + MathTy + Copy, const N: usize> Sub<Val<'a, T>> for Val<'a, V<T, N>> {
+    type Output = Self;
+    fn sub(self, rhs: Val<'a, T>) -> Self::Output {
+        Sub::sub(self, Val::splat(rhs))
+    }
+}
+
+impl<'a, T: VectorizableTy + MathTy + Copy, const N: usize> Mul<Val<'a, T>> for Val<'a, V<T, N>> {
+    type Output = Self;
+    fn mul(self, rhs: Val<'a, T>) -> Self::Output {
+        Mul::mul(self, Val::splat(rhs))
+    }
+}
+
+impl<'a, T: VectorizableTy + MathTy + Copy, const N: usize> Div<Val<'a, T>> for Val<'a, V<T, N>> {
+    type Output = Self;
+    fn div(self, rhs: Val<'a, T>) -> Self::Output {
+        Div::div(self, Val::splat(rhs))
+    }
+}
+
+impl<'a, T: VectorizableTy + MathTy + Copy, const N: usize> Add<Val<'a, V<T, N>>> for Val<'a, T> {
+    type Output = Val<'a, V<T, N>>;
+    fn add(self, rhs: Val<'a, V<T, N>>) -> Self::Output {
+        Add::add(Val::splat(self), rhs)
+    }
+}
+
+impl<'a, T: VectorizableTy + MathTy + Copy, const N: usize> Sub<Val<'a, V<T, N>>> for Val<'a, T> {
+    type Output = Val<'a, V<T, N>>;
+    fn sub(self, rhs: Val<'a, V<T, N>>) -> Self::Output {
+        Sub::sub(Val::splat(self), rhs)
+    }
+}
+
+impl<'a, T: VectorizableTy + MathTy + Copy, const N: usize> Mul<Val<'a, V<T, N>>> for Val<'a, T> {
+    type Output = Val<'a, V<T, N>>;
+    fn mul(self, rhs: Val<'a, V<T, N>>) -> Self::Output {
+        Mul::mul(Val::splat(self), rhs)
+    }
+}
+
+impl<'a, T: VectorizableTy + MathTy + Copy, const N: usize> Div<Val<'a, V<T, N>>> for Val<'a, T> {
+    type Output = Val<'a, V<T, N>>;
+    fn div(self, rhs: Val<'a, V<T, N>>) -> Self::Output {
+        Div::div(Val::splat(self), rhs)
+    }
+}
+
+macro_rules! impl_math_for_constants {
+    (inner: $op_ty: ident, $op_fn: ident, $trace_ty: ty, $real_ty: ty) => {
+
+        impl<'a> $op_ty<$real_ty> for Val<'a, $trace_ty> {
+            type Output = Self;
+            fn $op_fn(self, rhs: $real_ty) -> Self::Output {
+                let const_typed = self.cx().constant::<$trace_ty>(rhs);
+                $op_ty::$op_fn(self, const_typed)
+            }
+        }
+        impl<'a> $op_ty<Val<'a, $trace_ty>> for $real_ty {
+            type Output = Val<'a, $trace_ty>;
+            fn $op_fn(self, rhs: Val<'a, $trace_ty>) -> Self::Output {
+                let const_typed = rhs.cx().constant::<$trace_ty>(self);
+                $op_ty::$op_fn(const_typed, rhs)
+            }
+        }
+    };
+    ($trace_ty: ty => $real_ty: ty) => {
+        impl_math_for_constants!(inner: Add, add, $trace_ty, $real_ty);
+        impl_math_for_constants!(inner: Sub, sub, $trace_ty, $real_ty);
+        impl_math_for_constants!(inner: Mul, mul, $trace_ty, $real_ty);
+        impl_math_for_constants!(inner: Div, div, $trace_ty, $real_ty);
+    };
+}
+
+// These are here and use f32 because Rust doesn't have great support
+// so we don't want to require (or imply) excessive precision.
+impl_math_for_constants!(BF16 => f32);
+impl_math_for_constants!(F16 => f32);
+
+impl_math_for_constants!(F32 => f32);
+impl_math_for_constants!(F64 => f64);
+
+impl_math_for_constants!(U8 => u8);
+impl_math_for_constants!(U16 => u16);
+impl_math_for_constants!(U32 => u32);
+impl_math_for_constants!(U64 => u64);
+
+impl_math_for_constants!(I8 => i8);
+impl_math_for_constants!(I16 => i16);
+impl_math_for_constants!(I32 => i32);
+impl_math_for_constants!(I64 => i64);

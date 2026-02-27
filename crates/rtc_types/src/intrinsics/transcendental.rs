@@ -2,10 +2,10 @@ use inkwell::{types::FloatType, values::BasicValue};
 
 use crate::{
     intrinsics::{
-        UnaryIntrinsic, call_binary_intrinsic, call_unary_intrinsic_with_fast_math,
+        UnaryIntrinsic, call_binary_intrinsic, call_unary_intrinsic,
         cuda::{Log2Approx, Log2ApproxFtz},
     },
-    ty::{BF16, F16, F32, MathTy, V, ValTy, vec::VectorizableTy},
+    ty::{BF16, F16, F32, MathTy, V, vec::VectorizableTy},
     val::Val,
 };
 
@@ -15,49 +15,49 @@ impl Transcendental for FloatType<'_> {}
 
 pub trait TranscendentalTy: MathTy {
     fn exp(val: Val<'_, Self>) -> Val<'_, Self> {
-        call_unary_intrinsic_with_fast_math(val, "llvm.exp", false)
+        call_unary_intrinsic(val, "llvm.exp", false)
     }
     fn exp2(val: Val<'_, Self>) -> Val<'_, Self> {
-        call_unary_intrinsic_with_fast_math(val, "llvm.exp2", false)
+        call_unary_intrinsic(val, "llvm.exp2", false)
     }
     fn exp10(val: Val<'_, Self>) -> Val<'_, Self> {
-        call_unary_intrinsic_with_fast_math(val, "llvm.exp10", false)
+        call_unary_intrinsic(val, "llvm.exp10", false)
     }
     fn log(val: Val<'_, Self>) -> Val<'_, Self> {
-        call_unary_intrinsic_with_fast_math(val, "llvm.log", false)
+        call_unary_intrinsic(val, "llvm.log", false)
     }
     fn log2(val: Val<'_, Self>) -> Val<'_, Self> {
-        call_unary_intrinsic_with_fast_math(val, "llvm.log2", false)
+        call_unary_intrinsic(val, "llvm.log2", false)
     }
     fn log10(val: Val<'_, Self>) -> Val<'_, Self> {
-        call_unary_intrinsic_with_fast_math(val, "llvm.log10", false)
+        call_unary_intrinsic(val, "llvm.log10", false)
     }
     fn sin(val: Val<'_, Self>) -> Val<'_, Self> {
-        call_unary_intrinsic_with_fast_math(val, "llvm.sin", false)
+        call_unary_intrinsic(val, "llvm.sin", false)
     }
     fn cos(val: Val<'_, Self>) -> Val<'_, Self> {
-        call_unary_intrinsic_with_fast_math(val, "llvm.cos", false)
+        call_unary_intrinsic(val, "llvm.cos", false)
     }
     fn sqrt(val: Val<'_, Self>) -> Val<'_, Self> {
-        call_unary_intrinsic_with_fast_math(val, "llvm.sqrt", false)
+        call_unary_intrinsic(val, "llvm.sqrt", false)
     }
     fn fabs(val: Val<'_, Self>) -> Val<'_, Self> {
-        call_unary_intrinsic_with_fast_math(val, "llvm.fabs", false)
+        call_unary_intrinsic(val, "llvm.fabs", false)
     }
     fn floor(val: Val<'_, Self>) -> Val<'_, Self> {
-        call_unary_intrinsic_with_fast_math(val, "llvm.floor", false)
+        call_unary_intrinsic(val, "llvm.floor", false)
     }
     fn ceil(val: Val<'_, Self>) -> Val<'_, Self> {
-        call_unary_intrinsic_with_fast_math(val, "llvm.ceil", false)
+        call_unary_intrinsic(val, "llvm.ceil", false)
     }
     fn trunc(val: Val<'_, Self>) -> Val<'_, Self> {
-        call_unary_intrinsic_with_fast_math(val, "llvm.trunc", false)
+        call_unary_intrinsic(val, "llvm.trunc", false)
     }
     fn rint(val: Val<'_, Self>) -> Val<'_, Self> {
-        call_unary_intrinsic_with_fast_math(val, "llvm.rint", false)
+        call_unary_intrinsic(val, "llvm.rint", false)
     }
     fn round(val: Val<'_, Self>) -> Val<'_, Self> {
-        call_unary_intrinsic_with_fast_math(val, "llvm.round", false)
+        call_unary_intrinsic(val, "llvm.round", false)
     }
     fn minnum<'a>(lhs: Val<'a, Self>, rhs: Val<'a, Self>) -> Val<'a, Self> {
         call_binary_intrinsic(lhs, rhs, "llvm.minnum", false)
@@ -112,7 +112,11 @@ impl<'a, T: TranscendentalTy> Val<'a, T> {
         let res = T::cos(self);
         // This is necessary because these intrinsics
         // are _only_ available in approx variants
-        if let Some(ins) = res.ll_typed().as_basic_value_enum().as_instruction_value() {
+        if let Some(ins) = res
+            .get_ll_typed()
+            .as_basic_value_enum()
+            .as_instruction_value()
+        {
             ins.set_fast_math_flags(APPROX_FN);
         }
         res
@@ -122,7 +126,11 @@ impl<'a, T: TranscendentalTy> Val<'a, T> {
         let res = T::sqrt(self);
         // This is necessary because these intrinsics
         // are _only_ available in approx variants
-        if let Some(ins) = res.ll_typed().as_basic_value_enum().as_instruction_value() {
+        if let Some(ins) = res
+            .get_ll_typed()
+            .as_basic_value_enum()
+            .as_instruction_value()
+        {
             ins.set_fast_math_flags(APPROX_FN);
         }
         res
@@ -156,11 +164,13 @@ impl<'a, T: TranscendentalTy> Val<'a, T> {
     }
 }
 
-pub trait Log2AbleTy: ValTy {
+pub trait Log2AbleTy: TranscendentalTy {
     fn call_log2(val: Val<'_, Self>) -> Val<'_, Self>;
 }
 
-impl<T: UnaryIntrinsic<Log2Approx> + UnaryIntrinsic<Log2ApproxFtz>> Log2AbleTy for T {
+impl<T: UnaryIntrinsic<Log2Approx> + UnaryIntrinsic<Log2ApproxFtz> + TranscendentalTy> Log2AbleTy
+    for T
+{
     fn call_log2(val: Val<'_, Self>) -> Val<'_, Self> {
         let mut allow_ftz = false;
         val.cx().change_opt(|o| allow_ftz = o.allow_approx_funcs());
@@ -181,6 +191,15 @@ impl Log2AbleTy for BF16 {
 impl Log2AbleTy for F16 {
     fn call_log2(val: Val<'_, Self>) -> Val<'_, Self> {
         val.cast::<F32>().log2().cast::<Self>()
+    }
+}
+
+impl<T, const N: usize> Log2AbleTy for V<T, N>
+where
+    T: Log2AbleTy + VectorizableTy,
+{
+    fn call_log2(val: Val<'_, Self>) -> Val<'_, Self> {
+        Val::from_elements(val.elements().map(|e| e.log2()))
     }
 }
 

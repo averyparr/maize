@@ -52,13 +52,13 @@ fn call_vector_reduction_intrinsic<'a, T: VectorizableTy, const N: usize>(
     val: Val<'a, V<T, N>>,
 ) -> Val<'a, T> {
     let intrinsic = Intrinsic::find(intrinsic_name).expect("Should have an intrinsic of this name");
-    let vector_ty = val.ll_typed().get_type();
+    let vector_ty = val.get_ll_typed().get_type();
     let function = intrinsic
         .get_declaration(val.cx().module(), &[vector_ty.into()])
         .expect("There should be a function with this type");
     let raw_ret = unsafe {
         val.cx()
-            .with_builder(|b| b.build_call(function, &[val.ll_typed().into()], "vec_red"))
+            .with_builder(|b| b.build_call(function, &[val.get_ll_typed().into()], "vec_red"))
     }
     .expect("Build call should always succeed");
 
@@ -71,7 +71,7 @@ fn call_vector_reduction_intrinsic<'a, T: VectorizableTy, const N: usize>(
         val.cx().apply_ins_opt(ins);
     }
 
-    unsafe { Val::new(val.cx(), raw_ret.as_any_value_enum()) }
+    unsafe { Val::new_from_value(val.cx(), raw_ret.try_as_basic_value().unwrap_basic()) }
 }
 
 fn call_float_vector_reduction_with_init<'a, T: VectorizableTy, const N: usize>(
@@ -80,7 +80,7 @@ fn call_float_vector_reduction_with_init<'a, T: VectorizableTy, const N: usize>(
     val: Val<'a, V<T, N>>,
 ) -> Val<'a, T> {
     let intrinsic = Intrinsic::find(intrinsic_name).expect("Should have an intrinsic of this name");
-    let vector_ty = val.ll_typed().get_type();
+    let vector_ty = val.get_ll_typed().get_type();
     // NOTE: This _looks_ incorrect as the signature is typically (elt, [elt x N]),
     // but in pratice this is how you actually look it up.
     let function = intrinsic
@@ -90,7 +90,7 @@ fn call_float_vector_reduction_with_init<'a, T: VectorizableTy, const N: usize>(
         val.cx().with_builder(|b| {
             b.build_call(
                 function,
-                &[init.into(), val.ll_typed().into()],
+                &[init.into(), val.get_ll_typed().into()],
                 "float_reduction",
             )
         })
@@ -106,14 +106,14 @@ fn call_float_vector_reduction_with_init<'a, T: VectorizableTy, const N: usize>(
         val.cx().apply_ins_opt(ins);
     }
 
-    unsafe { Val::new(val.cx(), raw_ret.as_any_value_enum()) }
+    unsafe { Val::new_from_value(val.cx(), raw_ret.try_as_basic_value().unwrap_basic()) }
 }
 
 trait SumProdReducableTy:
     MathTy + VectorizableTy + for<'a> ValTy<Type<'a>: SumProdReducable> + Sized
 {
     fn call_sum<const N: usize>(val: Val<'_, V<Self, N>>) -> Val<'_, Self> {
-        let ty = val.ll_typed();
+        let ty = val.get_ll_typed();
         let element_ty = ty.get_type().get_element_type();
         match Self::MATH_VARIANT {
             MathVariant::Float => call_float_vector_reduction_with_init(
@@ -130,7 +130,7 @@ trait SumProdReducableTy:
         }
     }
     fn call_prod<const N: usize>(val: Val<'_, V<Self, N>>) -> Val<'_, Self> {
-        let ty = val.ll_typed();
+        let ty = val.get_ll_typed();
         let element_ty = ty.get_type().get_element_type();
         match Self::MATH_VARIANT {
             MathVariant::Float => call_float_vector_reduction_with_init(

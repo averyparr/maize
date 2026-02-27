@@ -54,25 +54,18 @@ fn call_unary_intrinsic<'a, T: ValTy + ?Sized>(
             .with_builder(|b| {
                 b.build_call(
                     fn_val,
-                    &[val.ll_typed().as_basic_value_enum().into()],
+                    &[val.get_ll_typed().as_basic_value_enum().into()],
                     intrinsic_name,
                 )
             })
             .expect("Unary call should succeed")
-    };
-    unsafe { Val::new(val.cx(), call_site.as_any_value_enum()) }
-}
-
-fn call_unary_intrinsic_with_fast_math<'a, T: ValTy + ?Sized>(
-    val: Val<'a, T>,
-    intrinsic_name: &str,
-    literal_name: bool,
-) -> Val<'a, T> {
-    let res = call_unary_intrinsic(val, intrinsic_name, literal_name);
-    if let Some(ins) = res.ll_typed().as_basic_value_enum().as_instruction_value() {
-        res.cx().apply_ins_opt(ins);
     }
-    res
+    .try_as_basic_value()
+    .unwrap_basic();
+    if let Some(ins) = call_site.as_instruction_value() {
+        val.cx().apply_ins_opt(ins);
+    }
+    unsafe { Val::new_from_value(val.cx(), call_site) }
 }
 
 fn call_binary_intrinsic<'a, T: ValTy + ?Sized>(
@@ -97,13 +90,18 @@ fn call_binary_intrinsic<'a, T: ValTy + ?Sized>(
             b.build_call(
                 fn_val,
                 &[
-                    lhs.ll_typed().as_basic_value_enum().into(),
-                    rhs.ll_typed().as_basic_value_enum().into(),
+                    lhs.get_ll_typed().as_basic_value_enum().into(),
+                    rhs.get_ll_typed().as_basic_value_enum().into(),
                 ],
                 intrinsic_name,
             )
         })
     }
-    .expect("Binary call should succeed");
-    unsafe { Val::new(lhs.cx(), call_site.as_any_value_enum()) }
+    .expect("Binary call should succeed")
+    .try_as_basic_value()
+    .unwrap_basic();
+    if let Some(ins) = call_site.as_instruction_value() {
+        lhs.cx().apply_ins_opt(ins);
+    }
+    unsafe { Val::new_from_value(lhs.cx(), call_site) }
 }

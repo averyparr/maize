@@ -40,14 +40,14 @@ impl<'a, Ret: ValTy> Then<'a, Ret> {
                     .expect("phi from if/then/else should be able to be created")
             };
             phi_val.add_incoming(&[
-                (&self.val_from_if.ll_typed(), self.raw.then_bb),
-                (&else_ret.ll_typed(), self.raw.else_bb),
+                (&self.val_from_if.get_ll_typed(), self.raw.then_bb),
+                (&else_ret.get_ll_typed(), self.raw.else_bb),
             ]);
             phi_val
         });
 
         // Should drop self which drops ThenNoVal which in turn unconditionally jumps from else to uni
-        unsafe { Val::new(else_ret.cx(), raw_ret.as_any_value_enum()) }
+        unsafe { Val::new_from_value(else_ret.cx(), raw_ret.as_basic_value()) }
     }
 }
 
@@ -85,8 +85,8 @@ fn setup_branch_on<'ctx>(
         cx.with_builder(|b| {
             b.build_int_compare(
                 inkwell::IntPredicate::NE,
-                cond.ll_typed(),
-                false_val.ll_typed(),
+                cond.get_ll_typed(),
+                false_val.get_ll_typed(),
                 "icmp",
             )
         })

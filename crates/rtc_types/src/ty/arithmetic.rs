@@ -1,6 +1,7 @@
 use inkwell::builder::Builder;
-use inkwell::values::AnyValue;
 use inkwell::values::AnyValueEnum;
+use inkwell::values::BasicValue;
+use inkwell::values::BasicValueEnum;
 use inkwell::values::FloatMathValue;
 use inkwell::values::IntMathValue;
 
@@ -8,6 +9,7 @@ use crate::ty::ValTy;
 use crate::ty::raw::*;
 use crate::ty::vec::VectorizableTy;
 use crate::val::Val;
+use crate::val::post_process;
 
 pub enum MathVariant {
     Float,
@@ -24,12 +26,12 @@ pub unsafe trait MathTy: ValTy {
     const MATH_VARIANT: MathVariant;
     /// Secondary customization point: are we using default float types,
     /// or [scalable] vector values?
-    fn type_as_float(raw: AnyValueEnum<'_>) -> impl FloatMathValue<'_> {
+    fn type_as_float(raw: BasicValueEnum<'_>) -> impl FloatMathValue<'_> {
         raw.into_float_value()
     }
     /// Secondary customization point: are we using default float types,
     /// or [scalable] vector values?
-    fn type_as_int(raw: AnyValueEnum<'_>) -> impl IntMathValue<'_> {
+    fn type_as_int(raw: BasicValueEnum<'_>) -> impl IntMathValue<'_> {
         raw.into_int_value()
     }
 
@@ -38,115 +40,116 @@ pub unsafe trait MathTy: ValTy {
         let build = |b: Builder<'static>| match Self::MATH_VARIANT {
             MathVariant::Float => b
                 .build_float_add(
-                    Self::type_as_float(lhs.raw()),
-                    Self::type_as_float(rhs.raw()),
+                    Self::type_as_float(lhs.get_raw()),
+                    Self::type_as_float(rhs.get_raw()),
                     "fadd",
                 )
-                .map(|v| v.as_any_value_enum()),
+                .map(|v| v.as_basic_value_enum()),
             MathVariant::SignedInt | MathVariant::UnsignedInt => b
                 .build_int_add(
-                    Self::type_as_int(lhs.raw()),
-                    Self::type_as_int(rhs.raw()),
+                    Self::type_as_int(lhs.get_raw()),
+                    Self::type_as_int(rhs.get_raw()),
                     "add",
                 )
-                .map(|v| v.as_any_value_enum()),
+                .map(|v| v.as_basic_value_enum()),
         };
-        let raw: inkwell::values::AnyValueEnum<'_> =
-            unsafe { lhs.cx().with_builder(build) }.expect("Should be able to build an add");
+        let raw = unsafe { lhs.cx().with_builder(build) }.expect("Should be able to build an add");
+
+        let raw = post_process(lhs.cx(), raw);
 
         // Safety: add is (T, T) -> T
-        unsafe { Val::new(lhs.cx(), raw) }
+        unsafe { Val::new_from_value(lhs.cx(), raw) }
     }
     fn sub<'a>(lhs: Val<'a, Self>, rhs: Val<'a, Self>) -> Val<'a, Self> {
         let build = |b: Builder<'static>| match Self::MATH_VARIANT {
             MathVariant::Float => b
                 .build_float_sub(
-                    Self::type_as_float(lhs.raw()),
-                    Self::type_as_float(rhs.raw()),
+                    Self::type_as_float(lhs.get_raw()),
+                    Self::type_as_float(rhs.get_raw()),
                     "fsub",
                 )
-                .map(|v| v.as_any_value_enum()),
+                .map(|v| v.as_basic_value_enum()),
             MathVariant::SignedInt | MathVariant::UnsignedInt => b
                 .build_int_sub(
-                    Self::type_as_int(lhs.raw()),
-                    Self::type_as_int(rhs.raw()),
+                    Self::type_as_int(lhs.get_raw()),
+                    Self::type_as_int(rhs.get_raw()),
                     "sub",
                 )
-                .map(|v| v.as_any_value_enum()),
+                .map(|v| v.as_basic_value_enum()),
         };
-        let raw: inkwell::values::AnyValueEnum<'_> =
-            unsafe { lhs.cx().with_builder(build) }.expect("Should be able to build an sub");
+        let raw = unsafe { lhs.cx().with_builder(build) }.expect("Should be able to build an sub");
+        let raw = post_process(lhs.cx(), raw);
 
         // Safety: sub is (T, T) -> T
-        unsafe { Val::new(lhs.cx(), raw) }
+        unsafe { Val::new_from_value(lhs.cx(), raw) }
     }
     fn mul<'a>(lhs: Val<'a, Self>, rhs: Val<'a, Self>) -> Val<'a, Self> {
         let build = |b: Builder<'static>| match Self::MATH_VARIANT {
             MathVariant::Float => b
                 .build_float_mul(
-                    Self::type_as_float(lhs.raw()),
-                    Self::type_as_float(rhs.raw()),
+                    Self::type_as_float(lhs.get_raw()),
+                    Self::type_as_float(rhs.get_raw()),
                     "fmul",
                 )
-                .map(|v| v.as_any_value_enum()),
+                .map(|v| v.as_basic_value_enum()),
             MathVariant::SignedInt | MathVariant::UnsignedInt => b
                 .build_int_mul(
-                    Self::type_as_int(lhs.raw()),
-                    Self::type_as_int(rhs.raw()),
+                    Self::type_as_int(lhs.get_raw()),
+                    Self::type_as_int(rhs.get_raw()),
                     "mul",
                 )
-                .map(|v| v.as_any_value_enum()),
+                .map(|v| v.as_basic_value_enum()),
         };
-        let raw: inkwell::values::AnyValueEnum<'_> =
-            unsafe { lhs.cx().with_builder(build) }.expect("Should be able to build an mul");
+        let raw = unsafe { lhs.cx().with_builder(build) }.expect("Should be able to build an mul");
+        let raw = post_process(lhs.cx(), raw);
 
         // Safety: mul is (T, T) -> T
-        unsafe { Val::new(lhs.cx(), raw) }
+        unsafe { Val::new_from_value(lhs.cx(), raw) }
     }
     fn div<'a>(lhs: Val<'a, Self>, rhs: Val<'a, Self>) -> Val<'a, Self> {
         let build = |b: Builder<'static>| match Self::MATH_VARIANT {
             MathVariant::Float => b
                 .build_float_div(
-                    Self::type_as_float(lhs.raw()),
-                    Self::type_as_float(rhs.raw()),
+                    Self::type_as_float(lhs.get_raw()),
+                    Self::type_as_float(rhs.get_raw()),
                     "fadd",
                 )
-                .map(|v| v.as_any_value_enum()),
+                .map(|v| v.as_basic_value_enum()),
             MathVariant::SignedInt => b
                 .build_int_signed_div(
-                    Self::type_as_int(lhs.raw()),
-                    Self::type_as_int(rhs.raw()),
+                    Self::type_as_int(lhs.get_raw()),
+                    Self::type_as_int(rhs.get_raw()),
                     "sdiv",
                 )
-                .map(|v| v.as_any_value_enum()),
+                .map(|v| v.as_basic_value_enum()),
             MathVariant::UnsignedInt => b
                 .build_int_unsigned_div(
-                    Self::type_as_int(lhs.raw()),
-                    Self::type_as_int(rhs.raw()),
+                    Self::type_as_int(lhs.get_raw()),
+                    Self::type_as_int(rhs.get_raw()),
                     "sdiv",
                 )
-                .map(|v| v.as_any_value_enum()),
+                .map(|v| v.as_basic_value_enum()),
         };
-        let raw: inkwell::values::AnyValueEnum<'_> =
-            unsafe { lhs.cx().with_builder(build) }.expect("Should be able to build a div");
+        let raw = unsafe { lhs.cx().with_builder(build) }.expect("Should be able to build a div");
+        let raw = post_process(lhs.cx(), raw);
 
         // Safety: div is (T, T) -> T
-        unsafe { Val::new(lhs.cx(), raw) }
+        unsafe { Val::new_from_value(lhs.cx(), raw) }
     }
     fn neg<'a>(val: Val<'a, Self>) -> Val<'a, Self> {
         let build = |b: Builder<'static>| match Self::MATH_VARIANT {
             MathVariant::Float => b
-                .build_float_neg(Self::type_as_float(val.raw()), "fneg")
-                .map(|v| v.as_any_value_enum()),
+                .build_float_neg(Self::type_as_float(val.get_raw()), "fneg")
+                .map(|v| v.as_basic_value_enum()),
             MathVariant::SignedInt | MathVariant::UnsignedInt => b
-                .build_int_neg(Self::type_as_int(val.raw()), "neg")
-                .map(|v| v.as_any_value_enum()),
+                .build_int_neg(Self::type_as_int(val.get_raw()), "neg")
+                .map(|v| v.as_basic_value_enum()),
         };
-        let raw: inkwell::values::AnyValueEnum<'_> =
-            unsafe { val.cx().with_builder(build) }.expect("Should be able to build an neg");
+        let raw = unsafe { val.cx().with_builder(build) }.expect("Should be able to build an neg");
+        let raw = post_process(val.cx(), raw);
 
         // Safety: neg is (T) -> T
-        unsafe { Val::new(val.cx(), raw) }
+        unsafe { Val::new_from_value(val.cx(), raw) }
     }
 }
 
@@ -176,10 +179,10 @@ impl_math_ty!(
 
 unsafe impl<T: MathTy + VectorizableTy, const N: usize> MathTy for V<T, N> {
     const MATH_VARIANT: MathVariant = T::MATH_VARIANT;
-    fn type_as_float(raw: AnyValueEnum<'_>) -> impl FloatMathValue<'_> {
+    fn type_as_float(raw: BasicValueEnum<'_>) -> impl FloatMathValue<'_> {
         raw.into_vector_value()
     }
-    fn type_as_int(raw: AnyValueEnum<'_>) -> impl IntMathValue<'_> {
+    fn type_as_int(raw: BasicValueEnum<'_>) -> impl IntMathValue<'_> {
         raw.into_vector_value()
     }
 }

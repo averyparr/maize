@@ -8,13 +8,14 @@ use inkwell::{
     module::Module,
     passes::PassBuilderOptions,
     targets::{FileType, InitializationConfig, Target, TargetTriple},
-    values::{AnyValue, FunctionValue, InstructionValue},
+    values::{BasicValue, FunctionValue, InstructionValue},
 };
 
 use crate::{
     intrinsics::IntrinsicsLibrary,
     ty::{
-        Bool, F32, F64, FnRetTy, I8, I16, I32, I64, IntoFuncArgs, U8, U16, U32, U64, ValTy, VoidTy,
+        BF16, Bool, F16, F32, F64, FnRetTy, I8, I16, I32, I64, IntoFuncArgs, U8, U16, U32, U64, V,
+        ValTy, VoidTy, vec::VectorizableTy,
     },
     val::Val,
 };
@@ -38,7 +39,7 @@ macro_rules! impl_into_constant {
                 fn to_const(assoc: impl Into<Self::Assoc>, cx: &FnCodegen) -> Val<'_, Self> {
                     let val_as_assoc = assoc.into();
                     let raw = cx.ctx().$ty_fn().$val_fn(val_as_assoc as _, $($($args,)*)?);
-                    unsafe {Val::new(cx, raw.as_any_value_enum())}
+                    unsafe {Val::new_from_value(cx, raw.as_basic_value_enum())}
                 }
             }
 
@@ -46,7 +47,7 @@ macro_rules! impl_into_constant {
                 type Assoc = $trace_ty;
                 fn into_const_val(self, cx: &FnCodegen) -> Val<'_, Self::Assoc> {
                     let raw = cx.ctx().$ty_fn().$val_fn(self as _, $($($args,)*)?);
-                    unsafe {Val::new(cx, raw.as_any_value_enum())}
+                    unsafe {Val::new_from_value(cx, raw.as_basic_value_enum())}
                 }
             }
         )*
@@ -66,6 +67,40 @@ impl_into_constant!(
     I64 | i64 => i64_type | const_int (false);
     Bool | bool => bool_type | const_int (false);
 );
+
+impl ConstValTy for BF16 {
+    type Assoc = f32;
+    fn to_const(assoc: impl Into<Self::Assoc>, cx: &FnCodegen) -> Val<'_, Self> {
+        let raw = cx.ctx().bf16_type().const_float(assoc.into() as _);
+        unsafe { Val::new_from_value(cx, raw.as_basic_value_enum()) }
+    }
+}
+
+impl ConstValTy for F16 {
+    type Assoc = f32;
+    fn to_const(assoc: impl Into<Self::Assoc>, cx: &FnCodegen) -> Val<'_, Self> {
+        let raw = cx.ctx().f16_type().const_float(assoc.into() as _);
+        unsafe { Val::new_from_value(cx, raw.as_basic_value_enum()) }
+    }
+}
+
+impl<C> Val<'_, C>
+where
+    C: ConstValTy,
+{
+    pub fn const_like(&self, val: impl Into<C::Assoc>) -> Self {
+        C::to_const(val, self.cx())
+    }
+}
+
+impl<C, const N: usize> Val<'_, V<C, N>>
+where
+    C: ConstValTy + VectorizableTy + Copy,
+{
+    pub fn const_like(&self, val: impl Into<C::Assoc>) -> Self {
+        Val::splat(C::to_const(val, self.cx()))
+    }
+}
 
 pub trait ConstValTy: ValTy {
     type Assoc;

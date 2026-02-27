@@ -53,11 +53,10 @@ macro_rules! impl_into_func_args {
                 // so we can be confident that the type-unsafe cast here is nonetheless correct
                 unsafe {
                     Some(($(
-                        Val::<'a, $names>::new(
+                        Val::<'a, $names>::new_from_value(
                             cx,
                             func.get_nth_param($idx)
                                 .expect("Param number mismatch")
-                                .as_any_value_enum(),
                         ),
                     )*))
                 }
