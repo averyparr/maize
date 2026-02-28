@@ -16,12 +16,14 @@ where
     pub fn array_from_elements(arr: [Val<'a, T>; N]) -> Self {
         <[T; N]>::from_elements(arr)
     }
+}
 
-    pub fn array_splat(val: Val<'a, T>) -> Self
+impl<'a, T> Val<'a, T> {
+    pub fn array_splat<const N: usize>(self) -> Val<'a, [T; N]>
     where
-        T: Copy,
+        T: Copy + ValTy,
     {
-        <[T; N]>::splat::<T>(val)
+        <[T; N]>::splat(self)
     }
 }
 

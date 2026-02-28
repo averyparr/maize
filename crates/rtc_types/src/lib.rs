@@ -26,10 +26,9 @@ pub fn test_inner() {
     let (a, b, mut c) = kernel.get_args();
 
     let a = a.load();
-    let mut idx_mut = c_shared.index_mut(10);
-    idx_mut.store(a);
+    c_shared.store(a.array_splat());
 
-    kernel.cx().module().print_to_stderr();
+    // kernel.cx().module().print_to_stderr();
 
     println!("{}", kernel.finalize().compile_asm_quickly(SM::SM90));
     // assert!(false);

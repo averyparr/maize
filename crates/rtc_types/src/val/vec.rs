@@ -55,18 +55,23 @@ where
         unsafe { Val::new_from_value(cx, vec_val.as_basic_value_enum()) }
     }
 
-    pub fn splat(val: Val<'a, T>) -> Self
-    where
-        T: Copy,
-    {
-        Self::from_elements(::core::array::from_fn(|_| val.copy()))
-    }
-
     pub fn to_array(self) -> Val<'a, [T; N]> {
         Val::array_from_elements(self.elements())
     }
 
     pub fn from_array(val: Val<'a, [T; N]>) -> Self {
         Val::from_elements(val.elements())
+    }
+}
+
+impl<'a, T> Val<'a, T>
+where
+    T: VectorizableTy,
+{
+    pub fn splat<const N: usize>(self) -> Val<'a, V<T, N>>
+    where
+        T: Copy,
+    {
+        V::splat(self)
     }
 }

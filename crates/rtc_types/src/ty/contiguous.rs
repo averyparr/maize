@@ -242,7 +242,7 @@ pub unsafe trait ConstSizeContiguousTy<const SIZE: usize>: ValTy {
         unsafe { Val::new_from_value(val.cx(), ptr.as_basic_value_enum()) }
     }
 
-    fn splat<'a, T>(val: Val<'a, Self::ElemT>) -> Val<'a, Self>
+    fn splat<'a>(val: Val<'a, Self::ElemT>) -> Val<'a, Self>
     where
         Self::ElemT: Copy,
     {
