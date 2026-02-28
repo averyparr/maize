@@ -2,6 +2,7 @@ mod args;
 mod arithmetic;
 mod array;
 mod bool;
+mod contiguous;
 pub mod convertible;
 pub mod cuda;
 mod float;
@@ -43,7 +44,7 @@ pub trait ValTy: Ty {
     }
 }
 
-impl<T> Ty for T
+impl<T: ?Sized> Ty for T
 where
     T: AnyTy,
     for<'ctx> T::AnyType<'ctx>: BasicType<'ctx>,
@@ -64,18 +65,9 @@ where
     }
 }
 
-impl<T> Ty for [T]
-where
-    T: Ty,
-{
-    type Type<'ctx> = ArrayType<'ctx>;
-    fn ty<'ctx>(ctx: ContextRef<'ctx>) -> Self::Type<'ctx> {
-        T::ty(ctx).array_type(0)
-    }
-}
-
 pub use args::IntoFuncArgs;
 pub use arithmetic::{MathTy, MathVariant};
+pub use contiguous::ConstSizeContiguousTy;
 pub use func::FnRetTy;
 pub use ptr::{AddrspacePtr, ConstPtrTy, MutPtrTy, MutTy, RefTy};
 pub use raw::{Bool, M, P, R, V, Void, float::*, int::*};

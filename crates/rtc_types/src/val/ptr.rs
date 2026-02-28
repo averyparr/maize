@@ -52,7 +52,7 @@ where
     {
         Ref::load(self)
     }
-    pub fn reborrow<'b>(&'b self) -> Val<'a, R<&'b Ref::PointeeTy>> {
+    pub fn reborrow<'b>(&'b self) -> Val<'a, Ref::Ref<'b, Ref::PointeeTy>> {
         Ref::reborrow(self)
     }
 }
@@ -73,7 +73,11 @@ where
     {
         Mut::store(self, val);
     }
-    pub fn reborrow_mut<'b>(&'b mut self) -> Val<'a, M<&'b mut Mut::PointeeTy>> {
+    pub fn reborrow_mut<'b>(&self) -> Val<'a, Mut::Mut<'b, Mut::PointeeTy>>
+    where
+        Mut: 'b,
+        'a: 'b,
+    {
         Mut::reborrow_mut(self)
     }
 }

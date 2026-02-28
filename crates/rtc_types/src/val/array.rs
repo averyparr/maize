@@ -1,7 +1,7 @@
 use inkwell::values::{AggregateValue, BasicValue};
 
 use crate::{
-    ty::{SizedTy, Ty},
+    ty::{ConstSizeContiguousTy, M, MutTy, R, RefTy, SizedTy, Ty, ValTy},
     val::Val,
 };
 
@@ -10,48 +10,46 @@ where
     T: SizedTy,
 {
     pub fn elements(self) -> [Val<'a, T>; N] {
-        let raw = self.get_ll_typed();
-        // Safety:
-        //  - We extract elements from the vector using indices
-        //          which are below the size of the vector, so
-        //          the call to `.build_extract_element` are valid.
-        //  - Similarly, each element is of type T, so the final
-        //          cast is valid.
-        ::core::array::from_fn(|index| unsafe {
-            let element = self
-                .cx()
-                .with_builder(|b| b.build_extract_value(raw, index as u32, "get_value_i"))
-                .expect("extract_element failed");
-            Val::new_from_value(self.cx(), element.into())
-        })
+        <[T; N]>::elements(self)
     }
 
     pub fn array_from_elements(arr: [Val<'a, T>; N]) -> Self {
-        let cx = arr[0].cx();
-        let vec_ty = <[T; N]>::ty(cx.ctx());
-        let mut arr_val = vec_ty.get_undef().as_aggregate_value_enum();
-
-        for (i, scalar) in arr.iter().enumerate() {
-            arr_val = unsafe {
-                cx.with_builder(|b| {
-                    b.build_insert_value(
-                        arr_val.as_aggregate_value_enum(),
-                        scalar.get_ll_typed(),
-                        i as u32,
-                        "insert",
-                    )
-                })
-                .expect("Insert element should succeed")
-            };
-        }
-
-        unsafe { Val::new_from_value(cx, arr_val.as_basic_value_enum()) }
+        <[T; N]>::from_elements(arr)
     }
 
     pub fn array_splat(val: Val<'a, T>) -> Self
     where
         T: Copy,
     {
-        Self::array_from_elements(::core::array::from_fn(|_| val.copy()))
+        <[T; N]>::splat::<T>(val)
+    }
+}
+
+impl<'a, 'b, Ref, T, const N: usize> Val<'a, Ref>
+where
+    Ref: RefTy<PointeeTy = [T; N]>,
+    T: ValTy + 'a,
+{
+    pub fn index_ref<'c>(&'c self, index: usize) -> Val<'a, R<&'c T>> {
+        <[T; N]>::element_ref::<Ref>(Ref::reborrow(self), index.try_into().expect("u32 overflow"))
+    }
+    pub fn elements_ref<'c>(&'c self) -> [Val<'a, Ref::Ref<'c, T>>; N] {
+        <[T; N]>::elements_ref::<Ref>(self.reborrow())
+    }
+}
+
+impl<'a, 'b, Mut, T, const N: usize> Val<'a, Mut>
+where
+    Mut: MutTy<PointeeTy = [T; N]>,
+    T: ValTy + 'a,
+{
+    pub fn index_mut<'c>(&'c mut self, index: usize) -> Val<'a, Mut::Mut<'c, T>>
+    where
+        'a: 'c,
+    {
+        <[T; N]>::element_mut::<Mut>(self.reborrow_mut(), index.try_into().expect("u32 overflow"))
+    }
+    pub fn elements_mut<'c>(&'c mut self) -> [Val<'a, Mut::Mut<'c, T>>; N] {
+        <[T; N]>::elements_mut::<Mut>(self.reborrow_mut())
     }
 }

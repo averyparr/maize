@@ -105,7 +105,7 @@ where
 pub unsafe trait ConstPtrTy:
     for<'a> ValTy<Value<'a> = PointerValue<'a>, Type<'a> = PointerType<'a>> + SizedTy
 {
-    type PointeeTy: ValTy;
+    type PointeeTy: ValTy + ?Sized;
 
     fn instance_in_addrspace<'ctx>(
         ctx: ContextRef<'ctx>,
@@ -196,25 +196,25 @@ pub unsafe trait ConstPtrTy:
     }
 }
 
-unsafe impl<T> ConstPtrTy for P<*const T>
+unsafe impl<T: ?Sized> ConstPtrTy for P<*const T>
 where
     T: ValTy,
 {
     type PointeeTy = T;
 }
-unsafe impl<T> ConstPtrTy for P<*mut T>
+unsafe impl<T: ?Sized> ConstPtrTy for P<*mut T>
 where
     T: ValTy,
 {
     type PointeeTy = T;
 }
-unsafe impl<T> ConstPtrTy for R<&T>
+unsafe impl<T: ?Sized> ConstPtrTy for R<&T>
 where
     T: ValTy,
 {
     type PointeeTy = T;
 }
-unsafe impl<T> ConstPtrTy for M<&mut T>
+unsafe impl<T: ?Sized> ConstPtrTy for M<&mut T>
 where
     T: ValTy,
 {
@@ -237,13 +237,13 @@ pub unsafe trait MutPtrTy: ConstPtrTy {
         ptr: Val<'_, Self>,
         val: Val<'_, Self::PointeeTy>,
         metadata: impl IntoIterator<Item = (&'a str, Option<BasicMetadataValueEnum<'a>>)>,
-        typing_fn: impl Fn(ContextRef<'static>) -> Self::Type<'static>,
     ) {
         let raw_ptr_to_ptr = ptr.raw_ptr();
+
         let ptr_to_val = unsafe {
             ptr.cx()
                 .with_builder(|b| {
-                    b.build_load(typing_fn(ptr.ctx()), raw_ptr_to_ptr, "read_for_write")
+                    b.build_load(Self::ty(ptr.ctx()), raw_ptr_to_ptr, "read_for_write")
                 })
                 .expect("Load read_for_write should succeed")
         }
@@ -272,7 +272,7 @@ pub unsafe trait MutPtrTy: ConstPtrTy {
         // Safety: The user promised it was safe to write (unaligned) to this pointer,
         // and we are not introducing any metadata to the instruction.
         unsafe {
-            Self::write_with_instruction_metadata(ptr, val, [], Self::ty);
+            Self::write_with_instruction_metadata(ptr, val, []);
         }
     }
 
@@ -291,23 +291,22 @@ pub unsafe trait MutPtrTy: ConstPtrTy {
         // Safety: The user promised it was safe to do an aligned write through
         // this pointer, and we know the alignment of the type behind the pointer
         unsafe {
-            Self::write_with_instruction_metadata(
-                ptr,
-                val,
-                [("align", Some(align.into()))],
-                Self::ty,
-            );
+            Self::write_with_instruction_metadata(ptr, val, [("align", Some(align.into()))]);
         }
     }
 }
 
-unsafe impl<T> MutPtrTy for P<*mut T> where T: ValTy {}
-unsafe impl<T> MutPtrTy for M<&mut T> where T: ValTy {}
+unsafe impl<T: ?Sized> MutPtrTy for P<*mut T> where T: ValTy {}
+unsafe impl<T: ?Sized> MutPtrTy for M<&mut T> where T: ValTy {}
 
 /// # Safety:
 /// In order for this to be safe, a `Ty` must trace-like a &'a T
 /// and be interconvertible with a R<&'a T>
 pub unsafe trait RefTy: ConstPtrTy {
+    type Ref<'r, PT: ValTy + ?Sized>: RefTy<PointeeTy = PT>
+    where
+        Self: 'r,
+        PT: 'r;
     fn ptr_attrs(
         cx: &FnCodegen,
     ) -> impl IntoIterator<Item = (&str, Option<BasicMetadataValueEnum<'_>>)>
@@ -320,9 +319,9 @@ pub unsafe trait RefTy: ConstPtrTy {
     {
         let cx = ptr.cx();
         let ptr = Self::reborrow(ptr);
-        unsafe { R::read_with_instruction_metadata(ptr, Self::ptr_attrs(cx), Self::ty) }
+        unsafe { Self::Ref::read_with_instruction_metadata(ptr, Self::ptr_attrs(cx), Self::ty) }
     }
-    fn reborrow<'a, 'b>(ptr: &'b Val<'a, Self>) -> Val<'a, R<&'b Self::PointeeTy>>
+    fn reborrow<'a, 'b>(ptr: &'b Val<'a, Self>) -> Val<'a, Self::Ref<'b, Self::PointeeTy>>
     where
         'a: 'b,
     {
@@ -333,10 +332,15 @@ pub unsafe trait RefTy: ConstPtrTy {
     }
 }
 
-unsafe impl<'a, T> RefTy for R<&'a T>
+unsafe impl<'a, T: ?Sized> RefTy for R<&'a T>
 where
     T: ValTy,
 {
+    type Ref<'r, PT: ValTy + ?Sized>
+        = R<&'r PT>
+    where
+        Self: 'r,
+        PT: 'r;
     fn ptr_attrs(
         cx: &FnCodegen,
     ) -> impl IntoIterator<Item = (&str, Option<BasicMetadataValueEnum<'_>>)>
@@ -360,10 +364,15 @@ where
     }
 }
 
-unsafe impl<'a, T> RefTy for M<&'a mut T>
+unsafe impl<'a, T: ?Sized> RefTy for M<&'a mut T>
 where
     T: ValTy,
 {
+    type Ref<'r, PT: ValTy + ?Sized>
+        = R<&'r PT>
+    where
+        Self: 'r,
+        PT: 'r;
     fn ptr_attrs(
         cx: &FnCodegen,
     ) -> impl IntoIterator<Item = (&str, Option<BasicMetadataValueEnum<'_>>)>
@@ -388,8 +397,13 @@ where
 }
 
 pub unsafe trait MutTy: RefTy + MutPtrTy {
-    fn reborrow_mut<'a, 'b>(ptr: &'b mut Val<'a, Self>) -> Val<'a, M<&'b mut Self::PointeeTy>>
+    type Mut<'r, PT: ValTy + ?Sized>: MutTy<PointeeTy = PT>
     where
+        Self: 'r,
+        PT: 'r;
+    fn reborrow_mut<'a, 'b>(ptr: &Val<'a, Self>) -> Val<'a, Self::Mut<'b, Self::PointeeTy>>
+    where
+        Self: 'b,
         'a: 'b,
     {
         // Safety: we are shortening the lifetime from '_ to 'a
@@ -405,14 +419,13 @@ pub unsafe trait MutTy: RefTy + MutPtrTy {
         let ptr = Self::reborrow(ptr_);
         // Safety: We hold a (short-lived) reference and can read with it. The
         // user asserted reads with these metadata were safe when they implemented `RefTy`.
-        let at_ptr = unsafe { R::read_with_instruction_metadata(ptr, metadata, Self::ty) };
+        let at_ptr = unsafe { Self::Ref::read_with_instruction_metadata(ptr, metadata, Self::ty) };
 
         let metadata = Self::ptr_attrs(ptr_.cx());
         let to_write = Self::reborrow_mut(ptr_);
         // Safety: We hold a (short-lived) exclusive reference and can write through it. The
         // user asserted reads with these metadata were safe when they implemented `RefTy`.
-        let _: () =
-            unsafe { M::write_with_instruction_metadata(to_write, val, metadata, Self::ty) };
+        let _: () = unsafe { Self::Mut::write_with_instruction_metadata(to_write, val, metadata) };
         at_ptr
     }
     fn store<'a>(ptr: &mut Val<'a, Self>, val: Val<'a, Self::PointeeTy>)
@@ -425,19 +438,36 @@ pub unsafe trait MutTy: RefTy + MutPtrTy {
         } else {
             let ptr = Self::reborrow_mut(ptr);
             let metadata = Self::ptr_attrs(ptr.cx());
-            let _: () = unsafe { M::write_with_instruction_metadata(ptr, val, metadata, Self::ty) };
+            let _: () = unsafe { Self::Mut::write_with_instruction_metadata(ptr, val, metadata) };
         }
     }
 }
 
-unsafe impl<T> MutTy for M<&mut T> where T: ValTy {}
+unsafe impl<T: ?Sized> MutTy for M<&mut T>
+where
+    T: ValTy,
+{
+    type Mut<'r, PT: ValTy + ?Sized>
+        = M<&'r mut PT>
+    where
+        Self: 'r,
+        PT: 'r;
+}
 
 pub trait AddrspacePtr {
     type Inner: ConstPtrTy;
     const ADDRSPACE: u16;
+    type Ref<'r, PT: ValTy + ?Sized>: RefTy<PointeeTy = PT>
+    where
+        Self::Inner: RefTy + 'r,
+        PT: 'r;
+    type Mut<'r, PT: ValTy + ?Sized>: MutTy<PointeeTy = PT>
+    where
+        Self::Inner: MutTy + 'r,
+        PT: 'r;
 }
 
-impl<T> AnyTy for T
+impl<T: ?Sized> AnyTy for T
 where
     T: AddrspacePtr,
 {
@@ -447,7 +477,7 @@ where
     }
 }
 
-impl<T> ValTy for T
+impl<T: ?Sized> ValTy for T
 where
     T: AddrspacePtr,
 {
@@ -507,6 +537,11 @@ where
     T: AddrspacePtr,
     T::Inner: RefTy,
 {
+    type Ref<'r, PT: ValTy + ?Sized>
+        = T::Ref<'r, PT>
+    where
+        Self: 'r,
+        PT: 'r;
     fn ptr_attrs(
         cx: &FnCodegen,
     ) -> impl IntoIterator<Item = (&str, Option<BasicMetadataValueEnum<'_>>)>
@@ -522,4 +557,9 @@ where
     T: AddrspacePtr,
     T::Inner: MutTy,
 {
+    type Mut<'r, PT: ValTy + ?Sized>
+        = T::Mut<'r, PT>
+    where
+        Self: 'r,
+        PT: 'r;
 }

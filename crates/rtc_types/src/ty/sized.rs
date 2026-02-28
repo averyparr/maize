@@ -57,49 +57,49 @@ impl_size_align!(
     U128 => u128,
 );
 
-impl<T> AlignedTy for P<*const T>
+impl<T: ?Sized> AlignedTy for P<*const T>
 where
     T: AnyTy,
 {
     const ALIGN: u32 = ::std::mem::align_of::<*const ()>() as _;
 }
 
-impl<T> AlignedTy for P<*mut T>
+impl<T: ?Sized> AlignedTy for P<*mut T>
 where
     T: AnyTy,
 {
     const ALIGN: u32 = ::std::mem::align_of::<*const ()>() as _;
 }
 
-impl<T> AlignedTy for R<&T>
+impl<T: ?Sized> AlignedTy for R<&T>
 where
     T: Ty,
 {
     const ALIGN: u32 = ::std::mem::align_of::<&()>() as _;
 }
 
-impl<T> AlignedTy for M<&mut T>
+impl<T: ?Sized> AlignedTy for M<&mut T>
 where
     T: Ty,
 {
     const ALIGN: u32 = ::std::mem::align_of::<&mut ()>() as _;
 }
 
-impl<T> SizedTy for P<*const T>
+impl<T: ?Sized> SizedTy for P<*const T>
 where
     T: AnyTy,
 {
     const SIZE: u32 = ::std::mem::size_of::<*const ()>() as _;
 }
 
-impl<T> SizedTy for P<*mut T>
+impl<T: ?Sized> SizedTy for P<*mut T>
 where
     T: AnyTy,
 {
     const SIZE: u32 = ::std::mem::size_of::<*const ()>() as _;
 }
 
-impl<T> SizedTy for R<&T>
+impl<T: ?Sized> SizedTy for R<&T>
 where
     T: Ty,
 {
@@ -116,7 +116,7 @@ where
     }
 }
 
-impl<T> SizedTy for M<&mut T>
+impl<T: ?Sized> SizedTy for M<&mut T>
 where
     T: Ty,
 {

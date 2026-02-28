@@ -26,7 +26,24 @@ impl<'a> CUDA<'a> {
         T::call_intrinsic(lhs, rhs, true)
     }
 
-    pub fn shared_global<T: SizedTy>(self) -> Val<'a, Shared<M<&'a mut T>>> {
+    pub fn alloc_aligned_shared<T: SizedTy>(self, align: u32) -> Val<'a, Shared<M<&'a mut T>>> {
+        assert!(
+            align % T::ALIGN == 0,
+            "must be able to align properly to {}",
+            std::any::type_name::<T>()
+        );
+        let ty = T::ty(self.0.ctx());
+        let global_val = self.0.module().add_global(
+            ty,
+            Some(AddressSpace::from(Shared::<M<&mut T>>::ADDRSPACE)),
+            "const_sized_shared",
+        );
+        global_val.set_initializer(&T::undef(self.0.ctx()));
+        global_val.set_alignment(T::ALIGN);
+        unsafe { Val::new_from_value(self.0, global_val.as_basic_value_enum()) }
+    }
+
+    pub fn alloc_shared<T: SizedTy>(self) -> Val<'a, Shared<M<&'a mut T>>> {
         let ty = T::ty(self.0.ctx());
         let global_val = self.0.module().add_global(
             ty,

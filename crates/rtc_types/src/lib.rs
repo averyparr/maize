@@ -11,29 +11,28 @@ pub mod val;
 
 use ty::raw::*;
 
-type Fl = F16;
+type Fl = F32;
 type FlAlt = F32;
 
 const VEC_LEN: usize = 4;
 
 pub fn test_inner() {
-    let kernel = new_ptx_kernel::<(Global<R<&Fl>>, Global<R<&U32>>, Global<M<&mut U32>>)>();
-    let mut c_shared = kernel.intrinsics().shared_global::<V<U32, 4>>();
+    let kernel = new_ptx_kernel::<(Global<R<&Fl>>, Global<R<&U32>>, Global<M<&mut Fl>>)>();
+    const LDSM_SIZE: usize = 8 * 8;
+    let mut c_shared = kernel
+        .intrinsics()
+        .alloc_aligned_shared::<[Fl; LDSM_SIZE]>(16);
     kernel.use_fast_math();
     let (a, b, mut c) = kernel.get_args();
 
-    let mut c_local = c.load();
+    let a = a.load();
+    let mut idx_mut = c_shared.index_mut(10);
+    idx_mut.store(a);
 
-    let max = b.load();
-    for idx in Loop::new(max.const_like(4)..10 * max.copy()) {
-        c_local.as_mut().store(idx.copy());
-        c_shared.store(Val::splat(c.load()));
-    }
-
-    c.store(c_local);
+    kernel.cx().module().print_to_stderr();
 
     println!("{}", kernel.finalize().compile_asm_quickly(SM::SM90));
-    assert!(false);
+    // assert!(false);
 }
 
 #[test]
