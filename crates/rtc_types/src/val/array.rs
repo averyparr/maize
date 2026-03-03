@@ -1,7 +1,5 @@
-use inkwell::values::{AggregateValue, BasicValue};
-
 use crate::{
-    ty::{ConstSizeContiguousTy, M, MutTy, R, RefTy, SizedTy, Ty, ValTy},
+    ty::{ConstSizeContiguousTy, MutTy, R, RefTy, SizedTy, ValTy},
     val::Val,
 };
 

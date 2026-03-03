@@ -1,16 +1,11 @@
-use rtc_tile::{BF16_8x8, BF16_16x16, Tile, WarpLoadTileTy, WarpTileTy};
+use rtc_tile::{Tile, WarpLoadTileTy, WarpTileTy};
 use rtc_types::{
-    codegen::{Func, new_ptx_kernel, target::cuda::SM, typed_func::FnCodegen},
+    codegen::{Func, new_ptx_kernel, target_cpu::cuda::SM, typed_func::FnCodegen},
     inkwell::OptimizationLevel,
-    ty::{F32, M, cuda::Global},
+    ty::{M, cuda::Global},
 };
 
-type Fl = F32;
-type FlAlt = F32;
-
-const VEC_LEN: usize = 4;
-
-type TileT = BF16_16x16;
+type TileT = rtc_tile::BF16_16x16;
 
 pub fn test_inner() {
     let kernel = new_ptx_kernel::<(Global<M<&mut <TileT as WarpTileTy>::FragT>>,)>();

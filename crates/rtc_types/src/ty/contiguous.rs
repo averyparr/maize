@@ -1,15 +1,11 @@
 use inkwell::{
     builder::Builder,
     context::ContextRef,
-    types::PointerType,
-    values::{
-        AggregateValue, AggregateValueEnum, AnyValue, AnyValueEnum, BasicValue, BasicValueEnum,
-        PointerValue, VectorBaseValue,
-    },
+    values::{AnyValue, BasicValue, BasicValueEnum, PointerValue},
 };
 
 use crate::{
-    ty::{M, MutTy, R, RefTy, Ty, V, ValTy, vec::VectorizableTy},
+    ty::{MutTy, R, RefTy, Ty, V, ValTy, vec::VectorizableTy},
     val::Val,
 };
 

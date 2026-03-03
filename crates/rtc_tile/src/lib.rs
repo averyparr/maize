@@ -6,10 +6,8 @@ use rtc_types::{
         types::{ArrayType, BasicType},
         values::{AnyValueEnum, ArrayValue},
     },
-    intrinsics::cuda::ldsm::{call_ldsm_x1, call_ldsm_x2, call_ldsm_x4},
-    ty::{
-        AlignedTy, AnyTy, BF16, I32, M, MutTy, P, SizedTy, Ty, U32, U128, V, ValTy, cuda::Shared,
-    },
+    intrinsics::cuda::ldsm::{call_ldsm_x1, call_ldsm_x4},
+    ty::{AlignedTy, AnyTy, BF16, M, MutTy, SizedTy, Ty, U32, U128, V, ValTy, cuda::Shared},
     val::Val,
 };
 

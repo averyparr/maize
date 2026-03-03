@@ -7,7 +7,7 @@ use inkwell::{
 
 use crate::{
     codegen::FnCodegen,
-    ty::{Bool, M, SizedTy, Ty, U32},
+    ty::{Bool, M, SizedTy, U32},
     val::Val,
 };
 
@@ -31,35 +31,35 @@ impl<'a> Looper<'a> for Range<Val<'a, U32>> {
     }
 }
 
-fn gen_loop_from_looper<'a, L: Looper<'a>>(
-    looper: L,
-    for_each_fn: impl Fn(Val<'_, L::ItemT>) -> Val<'_, L::ItemT>,
-) {
-    let mut init_val = looper.init_fn();
-    let cx = init_val.cx();
-    let mut init_mut = init_val.as_mut();
+// fn gen_loop_from_looper<'a, L: Looper<'a>>(
+//     looper: L,
+//     for_each_fn: impl Fn(Val<'_, L::ItemT>) -> Val<'_, L::ItemT>,
+// ) {
+//     let mut init_val = looper.init_fn();
+//     let cx = init_val.cx();
+//     let mut init_mut = init_val.as_mut();
 
-    let header_block = cx.ctx().append_basic_block(cx.func(), "loop_header");
-    let _jmp_header = unsafe { cx.with_builder(|b| b.build_unconditional_branch(header_block)) }
-        .expect("pre -> header uni branch should work");
-    cx.set_bb(header_block);
-    let decision = looper.decision_fn(&init_mut.load());
+//     let header_block = cx.ctx().append_basic_block(cx.func(), "loop_header");
+//     let _jmp_header = unsafe { cx.with_builder(|b| b.build_unconditional_branch(header_block)) }
+//         .expect("pre -> header uni branch should work");
+//     cx.set_bb(header_block);
+//     let decision = looper.decision_fn(&init_mut.load());
 
-    let loop_block = cx.ctx().append_basic_block(cx.func(), "loop_block");
-    let done_block = cx.ctx().append_basic_block(cx.func(), "done_block");
-    let _jne = unsafe {
-        cx.with_builder(|b| {
-            b.build_conditional_branch(decision.get_ll_typed(), loop_block, done_block)
-        })
-    }
-    .expect("conditional jump should work");
+//     let loop_block = cx.ctx().append_basic_block(cx.func(), "loop_block");
+//     let done_block = cx.ctx().append_basic_block(cx.func(), "done_block");
+//     let _jne = unsafe {
+//         cx.with_builder(|b| {
+//             b.build_conditional_branch(decision.get_ll_typed(), loop_block, done_block)
+//         })
+//     }
+//     .expect("conditional jump should work");
 
-    cx.set_bb(loop_block);
-    init_mut.store(for_each_fn(init_mut.load()));
-    let _jmp = unsafe { cx.with_builder(|b| b.build_unconditional_branch(header_block)) }
-        .expect("Unconditional jump should work");
-    cx.set_bb(done_block);
-}
+//     cx.set_bb(loop_block);
+//     init_mut.store(for_each_fn(init_mut.load()));
+//     let _jmp = unsafe { cx.with_builder(|b| b.build_unconditional_branch(header_block)) }
+//         .expect("Unconditional jump should work");
+//     cx.set_bb(done_block);
+// }
 
 pub enum Loop<'a, L: Looper<'a>> {
     PreLoop(L),

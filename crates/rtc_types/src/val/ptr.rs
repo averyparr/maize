@@ -1,12 +1,7 @@
-use inkwell::{
-    types::{IntType, PointerType},
-    values::{BasicValue, PointerValue},
-};
+use inkwell::{types::IntType, values::BasicValue};
 
 use crate::{
-    ty::{
-        ConstPtrTy, MutPtrTy, MutTy, P, R, RawPtrTy, RefTy, SizedTy, Ty, U8, U16, U32, U64, ValTy,
-    },
+    ty::{ConstPtrTy, MutPtrTy, MutTy, RawPtrTy, RefTy, SizedTy, Ty, U8, U16, U32, U64, ValTy},
     val::Val,
 };
 

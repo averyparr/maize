@@ -2,7 +2,7 @@ use inkwell::{
     AddressSpace,
     context::ContextRef,
     types::PointerType,
-    values::{AnyValue, AnyValueEnum, BasicMetadataValueEnum, BasicValue, PointerValue},
+    values::{AnyValueEnum, BasicMetadataValueEnum, BasicValue, PointerValue},
 };
 
 use crate::{

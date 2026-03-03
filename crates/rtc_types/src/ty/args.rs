@@ -1,3 +1,5 @@
+#![allow(non_snake_case)]
+
 use inkwell::{
     attributes::AttributeLoc,
     context::ContextRef,

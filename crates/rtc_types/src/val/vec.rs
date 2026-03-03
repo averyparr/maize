@@ -1,7 +1,7 @@
-use inkwell::values::{AnyValue, BasicValue};
+use inkwell::values::BasicValue;
 
 use crate::{
-    ty::{ConstSizeContiguousTy, M, MutTy, R, RefTy, V, ValTy, vec::VectorizableTy},
+    ty::{ConstSizeContiguousTy, V, vec::VectorizableTy},
     val::Val,
 };
 

@@ -1,7 +1,7 @@
 use inkwell::{
     builder::Builder,
-    types::{AnyType, AnyTypeEnum, FloatType, IntType},
-    values::{AnyValue, AnyValueEnum, BasicValue, BasicValueEnum, FloatValue, IntValue},
+    types::{AnyType, AnyTypeEnum},
+    values::{BasicValue, BasicValueEnum, FloatValue, IntValue},
 };
 
 use crate::{

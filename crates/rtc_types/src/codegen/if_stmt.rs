@@ -1,4 +1,4 @@
-use inkwell::{basic_block::BasicBlock, values::AnyValue};
+use inkwell::basic_block::BasicBlock;
 
 use crate::{
     codegen::FnCodegen,

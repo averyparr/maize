@@ -1,7 +1,6 @@
 use inkwell::{intrinsics::Intrinsic, types::BasicType, values::BasicValue};
 
 use crate::{
-    codegen::FnCodegen,
     ty::{Bool, ValTy},
     val::Val,
 };

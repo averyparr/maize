@@ -4,7 +4,7 @@ use crate::intrinsics::cuda::CUDA;
 use crate::ty::Void;
 use crate::ty::{FnRetTy, IntoFuncArgs};
 
-use super::target::cuda::SM;
+use super::target_cpu::cuda::SM;
 use super::{FnCodegen, Func};
 
 macro_rules! calling_conv {

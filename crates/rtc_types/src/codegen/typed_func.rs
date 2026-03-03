@@ -11,10 +11,7 @@ use inkwell::{
     support::LLVMString,
     targets::{FileType, InitializationConfig, Target, TargetTriple},
     types::{BasicType, StructType},
-    values::{
-        AggregateValue, BasicValue, BasicValueEnum, FunctionValue, InstructionValue, PointerValue,
-        StructValue,
-    },
+    values::{BasicValue, FunctionValue, InstructionValue, StructValue},
 };
 
 use crate::{

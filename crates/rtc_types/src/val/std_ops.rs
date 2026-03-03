@@ -1,9 +1,8 @@
 use std::ops::{Add, Div, Mul, Neg, Not, Rem, Shl, Shr, Sub};
 
-use inkwell::{types::IntMathType, values::BasicValue};
+use inkwell::values::BasicValue;
 
 use crate::{
-    codegen::typed_func::{ConstValTy, IntoConstVal},
     ty::{IntMathTy, MathTy, raw::*, vec::VectorizableTy},
     val::Val,
 };

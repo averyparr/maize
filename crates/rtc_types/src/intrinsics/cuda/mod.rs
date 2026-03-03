@@ -3,14 +3,13 @@ pub mod ldsm;
 use inkwell::{
     AddressSpace,
     attributes::{Attribute, AttributeLoc},
-    context::ContextRef,
     intrinsics::Intrinsic,
-    module::{Linkage, Module},
+    module::Linkage,
     values::{BasicValue, IntValue},
 };
 
 use crate::{
-    codegen::{FnCodegen, Func, new_ptx_kernel, target::cuda::SM},
+    codegen::{FnCodegen, Func, new_ptx_kernel, target_cpu::cuda::SM},
     intrinsics::{
         BinaryIntrinsic, ConstructibleIntrinsicsLibrary, IntrinsicsLibrary, UnaryIntrinsic,
     },

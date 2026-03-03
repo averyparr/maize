@@ -1,7 +1,7 @@
 use inkwell::{
     intrinsics::Intrinsic,
     types::{FloatType, IntType},
-    values::{AnyValue, AnyValueEnum, BasicValue, FloatValue},
+    values::{AnyValueEnum, BasicValue, FloatValue},
 };
 
 use crate::{
