@@ -153,6 +153,80 @@ pub unsafe trait MathTy: ValTy {
     }
 }
 
+pub unsafe trait IntMathTy: MathTy {
+    fn rem<'a>(lhs: Val<'a, Self>, rhs: Val<'a, Self>) -> Val<'a, Self> {
+        let cx = lhs.cx();
+
+        let build = |b: Builder<'static>| match Self::MATH_VARIANT {
+            MathVariant::Float => {
+                let lhs = Self::type_as_float(lhs.get_raw());
+                let rhs = Self::type_as_float(rhs.get_raw());
+                b.build_float_rem(lhs, rhs, "float_rem")
+                    .expect("Build float rem should work")
+            }
+            .as_basic_value_enum(),
+            MathVariant::SignedInt => {
+                let lhs = Self::type_as_int(lhs.get_raw());
+                let rhs = Self::type_as_int(rhs.get_raw());
+                b.build_int_signed_rem(lhs, rhs, "sint_rem")
+                    .expect("Build sint rem should work")
+                    .as_basic_value_enum()
+            }
+            MathVariant::UnsignedInt => {
+                let lhs = Self::type_as_int(lhs.get_raw());
+                let rhs = Self::type_as_int(rhs.get_raw());
+                b.build_int_unsigned_rem(lhs, rhs, "sint_rem")
+                    .expect("Build uint rem should work")
+                    .as_basic_value_enum()
+            }
+        };
+
+        let raw_ret = unsafe { cx.with_builder(build) };
+        let raw = post_process(cx, raw_ret);
+        unsafe { Val::new_from_value(cx, raw) }
+    }
+    fn left_shift<'a>(lhs: Val<'a, Self>, rhs: Val<'a, Self>) -> Val<'a, Self> {
+        let cx = lhs.cx();
+
+        let build = |b: Builder<'static>| match Self::MATH_VARIANT {
+            MathVariant::Float => {
+                panic!("Float left/right shifts are not supported");
+            }
+            MathVariant::SignedInt | MathVariant::UnsignedInt => {
+                let lhs = Self::type_as_int(lhs.get_raw());
+                let rhs = Self::type_as_int(rhs.get_raw());
+                b.build_left_shift(lhs, rhs, "left_shift")
+                    .expect("Build left shift should work")
+                    .as_basic_value_enum()
+            }
+        };
+
+        let raw_ret = unsafe { cx.with_builder(build) };
+        let raw = post_process(cx, raw_ret);
+        unsafe { Val::new_from_value(cx, raw) }
+    }
+    fn right_shift<'a>(lhs: Val<'a, Self>, rhs: Val<'a, Self>) -> Val<'a, Self> {
+        let cx = lhs.cx();
+
+        let sign_extend = match Self::MATH_VARIANT {
+            MathVariant::Float => panic!("Float left/right shifts are not supported"),
+            MathVariant::SignedInt => true,
+            MathVariant::UnsignedInt => false,
+        };
+
+        let build = |b: Builder<'static>| {
+            let lhs = Self::type_as_int(lhs.get_raw());
+            let rhs = Self::type_as_int(rhs.get_raw());
+            b.build_right_shift(lhs, rhs, sign_extend, "left_shift")
+                .expect("Build left shift should work")
+        };
+
+        let raw_ret = unsafe { cx.with_builder(build) };
+        let raw = post_process(cx, raw_ret.as_basic_value_enum());
+        unsafe { Val::new_from_value(cx, raw) }
+    }
+}
+
 macro_rules! impl_math_ty {
     (
         $($tipes: ty),*: $math_variant: ident;
@@ -176,6 +250,16 @@ impl_math_ty!(
 impl_math_ty!(
     U8, U16, U32, U64, U128: UnsignedInt;
 );
+
+macro_rules! impl_int_math_ty {
+    ($($tipes: ty),*) => {
+        $(
+            unsafe impl IntMathTy for $tipes {}
+        )*
+    };
+}
+
+impl_int_math_ty!(I8, I16, I32, I64, U8, U16, U32, U64);
 
 unsafe impl<T: MathTy + VectorizableTy, const N: usize> MathTy for V<T, N> {
     const MATH_VARIANT: MathVariant = T::MATH_VARIANT;

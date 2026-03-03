@@ -1,8 +1,10 @@
-use std::ops::{Add, Div, Mul, Neg, Sub};
+use std::ops::{Add, Div, Mul, Neg, Not, Rem, Shl, Shr, Sub};
+
+use inkwell::{types::IntMathType, values::BasicValue};
 
 use crate::{
     codegen::typed_func::{ConstValTy, IntoConstVal},
-    ty::{MathTy, raw::*, vec::VectorizableTy},
+    ty::{IntMathTy, MathTy, raw::*, vec::VectorizableTy},
     val::Val,
 };
 
@@ -140,3 +142,69 @@ impl_math_for_constants!(I8 => i8);
 impl_math_for_constants!(I16 => i16);
 impl_math_for_constants!(I32 => i32);
 impl_math_for_constants!(I64 => i64);
+
+impl Not for Val<'_, Bool> {
+    type Output = Self;
+    fn not(self) -> Self::Output {
+        let value = self.get_ll_typed();
+        let raw_val = unsafe { self.cx().with_builder(|b| b.build_not(value, "not")) }
+            .expect("Build not should succed");
+        unsafe { Val::new_from_value(self.cx(), raw_val.as_basic_value_enum()) }
+    }
+}
+
+impl<'a, IntT: IntMathTy> Rem<Self> for Val<'a, IntT> {
+    type Output = Self;
+    fn rem(self, rhs: Self) -> Self::Output {
+        IntT::rem(self, rhs)
+    }
+}
+
+impl<'a, IntT: IntMathTy> Shl<Self> for Val<'a, IntT> {
+    type Output = Self;
+    fn shl(self, rhs: Self) -> Self::Output {
+        IntT::left_shift(self, rhs)
+    }
+}
+
+impl<'a, IntT: IntMathTy> Shr<Self> for Val<'a, IntT> {
+    type Output = Self;
+    fn shr(self, rhs: Self) -> Self::Output {
+        IntT::right_shift(self, rhs)
+    }
+}
+
+macro_rules! impl_int_math_for_constants {
+    (inner: $op_ty: ident, $op_fn: ident, $trace_ty: ty, $real_ty: ty) => {
+
+        impl<'a> $op_ty<$real_ty> for Val<'a, $trace_ty> {
+            type Output = Self;
+            fn $op_fn(self, rhs: $real_ty) -> Self::Output {
+                let const_typed = self.cx().constant::<$trace_ty>(rhs);
+                $op_ty::$op_fn(self, const_typed)
+            }
+        }
+        impl<'a> $op_ty<Val<'a, $trace_ty>> for $real_ty {
+            type Output = Val<'a, $trace_ty>;
+            fn $op_fn(self, rhs: Val<'a, $trace_ty>) -> Self::Output {
+                let const_typed = rhs.cx().constant::<$trace_ty>(self);
+                $op_ty::$op_fn(const_typed, rhs)
+            }
+        }
+    };
+    ($trace_ty: ty => $real_ty: ty) => {
+        impl_int_math_for_constants!(inner: Rem, rem, $trace_ty, $real_ty);
+        impl_int_math_for_constants!(inner: Shr, shr, $trace_ty, $real_ty);
+        impl_int_math_for_constants!(inner: Shl, shl, $trace_ty, $real_ty);
+    };
+}
+
+impl_int_math_for_constants!(U8 => u8);
+impl_int_math_for_constants!(U16 => u16);
+impl_int_math_for_constants!(U32 => u32);
+impl_int_math_for_constants!(U64 => u64);
+
+impl_int_math_for_constants!(I8 => i8);
+impl_int_math_for_constants!(I16 => i16);
+impl_int_math_for_constants!(I32 => i32);
+impl_int_math_for_constants!(I64 => i64);

@@ -1,15 +1,123 @@
-use inkwell::{AddressSpace, values::BasicValue};
+pub mod ldsm;
+
+use inkwell::{
+    AddressSpace,
+    attributes::{Attribute, AttributeLoc},
+    context::ContextRef,
+    intrinsics::Intrinsic,
+    module::{Linkage, Module},
+    values::{BasicValue, IntValue},
+};
 
 use crate::{
     codegen::{FnCodegen, Func, new_ptx_kernel, target::cuda::SM},
-    intrinsics::{BinaryIntrinsic, IntrinsicsLibrary, UnaryIntrinsic},
+    intrinsics::{
+        BinaryIntrinsic, ConstructibleIntrinsicsLibrary, IntrinsicsLibrary, UnaryIntrinsic,
+    },
     ty::{AddrspacePtr, M, R, SizedTy, cuda::Shared, raw::*},
     val::Val,
 };
 
-pub struct CUDA<'a>(pub(crate) &'a FnCodegen);
+pub struct CUDA;
 
-impl<'a> CUDA<'a> {
+impl CUDA {
+    fn call_assume(&self, cond: IntValue<'_>, cx: &FnCodegen) {
+        let fn_ty = cx
+            .ctx()
+            .void_type()
+            .fn_type(&[cx.ctx().bool_type().into()], false);
+        let assume_fn = "llvm.assume";
+        let fn_val = cx
+            .module()
+            .get_function(assume_fn)
+            .unwrap_or_else(|| cx.module().add_function(assume_fn, fn_ty, None));
+        let _assume_call = unsafe {
+            cx.with_builder(|b| b.build_call(fn_val, &[cond.into()], "call_assume"))
+                .expect("Assume call should succeed")
+        };
+    }
+    fn call_assert_fail(cx: &FnCodegen, msg: &str, file: &str, line: u32, func: &str) {
+        let ctx = cx.ctx();
+        let generic_ptr_ty = ctx.ptr_type(AddressSpace::default());
+        let fn_type = ctx.void_type().fn_type(
+            &[
+                generic_ptr_ty.into(), // message
+                generic_ptr_ty.into(), // file
+                ctx.i32_type().into(), // line
+                generic_ptr_ty.into(), // function
+                ctx.i64_type().into(), // charSize
+            ],
+            false,
+        );
+        let assertfail = cx.module().get_function("__assertfail").unwrap_or_else(|| {
+            cx.module()
+                .add_function("__assertfail", fn_type, Some(Linkage::External))
+        });
+        for attr in ["noreturn", "nounwind", "cold"] {
+            let attr = Attribute::get_named_enum_kind_id(attr);
+            let attr = ctx.create_enum_attribute(attr, 0);
+            assertfail.add_attribute(AttributeLoc::Function, attr);
+        }
+
+        let add_global_str = |s: &str, name| {
+            let i8_ty = ctx.i8_type();
+            let ty = i8_ty.array_type(s.len().try_into().expect("usize -> u32 overflow"));
+            let mapped_chars = s
+                .bytes()
+                .map(|b| ctx.i8_type().const_int(b.into(), false))
+                .collect::<Vec<_>>();
+            let address_space = Some(AddressSpace::from(1));
+            let global = cx.module().add_global(ty, address_space, name);
+            global.set_initializer(&i8_ty.const_array(mapped_chars.as_slice()));
+            global.set_linkage(Linkage::Internal);
+            global.set_unnamed_addr(true);
+            let zero = ctx.i32_type().const_zero();
+            let ptr_to_char = unsafe {
+                cx.with_builder(|b| {
+                    let gep_ptr = b
+                        .build_in_bounds_gep(
+                            ty,
+                            global.as_pointer_value(),
+                            &[zero, zero],
+                            "str_gep",
+                        )
+                        .expect("GEP for const char array should succeed");
+                    let generic_ptr = b
+                        .build_address_space_cast(
+                            gep_ptr,
+                            generic_ptr_ty,
+                            "string_global_to_generic_cast",
+                        )
+                        .expect("string addrspace cast should succeed");
+                    generic_ptr
+                })
+            };
+            ptr_to_char
+        };
+
+        let msg_ptr = add_global_str(msg, "msg");
+        let file_ptr = add_global_str(file, "file");
+        let func_ptr = add_global_str(func, "func");
+        unsafe {
+            cx.with_builder(|b| {
+                let _call = b
+                    .build_call(
+                        assertfail,
+                        &[
+                            msg_ptr.into(),
+                            file_ptr.into(),
+                            ctx.i32_type().const_int(line as _, false).into(),
+                            func_ptr.into(),
+                            ctx.i64_type().const_int(1, false).into(),
+                        ],
+                        "call_assert_fail",
+                    )
+                    .expect("Call assert fail should succeed");
+                b.build_unreachable()
+                    .expect("build unreachable should work");
+            });
+        };
+    }
     #[expect(unused)]
     fn call_unary_intrinsic<Intrinsic, T: UnaryIntrinsic<Intrinsic>>(
         _: Intrinsic,
@@ -18,7 +126,7 @@ impl<'a> CUDA<'a> {
         T::call_intrinsic(val, true)
     }
     #[expect(unused)]
-    fn call_binary_intrinsic<Intrinsic, T: BinaryIntrinsic<Intrinsic>>(
+    fn call_binary_intrinsic<'a, Intrinsic, T: BinaryIntrinsic<Intrinsic>>(
         _: Intrinsic,
         lhs: Val<'a, T>,
         rhs: Val<'a, T>,
@@ -26,37 +134,71 @@ impl<'a> CUDA<'a> {
         T::call_intrinsic(lhs, rhs, true)
     }
 
-    pub fn alloc_aligned_shared<T: SizedTy>(self, align: u32) -> Val<'a, Shared<M<&'a mut T>>> {
+    pub fn alloc_aligned_shared<'a, T: SizedTy>(
+        &self,
+        cg: &'a FnCodegen,
+        align: u32,
+    ) -> Val<'a, Shared<M<&'a mut T>>> {
         assert!(
             align % T::ALIGN == 0,
             "must be able to align properly to {}",
             std::any::type_name::<T>()
         );
-        let ty = T::ty(self.0.ctx());
-        let global_val = self.0.module().add_global(
+        let ty = T::ty(cg.ctx());
+        let global_val = cg.module().add_global(
             ty,
             Some(AddressSpace::from(Shared::<M<&mut T>>::ADDRSPACE)),
             "const_sized_shared",
         );
-        global_val.set_initializer(&T::undef(self.0.ctx()));
+        global_val.set_initializer(&T::undef(cg.ctx()));
         global_val.set_alignment(T::ALIGN);
-        unsafe { Val::new_from_value(self.0, global_val.as_basic_value_enum()) }
+        unsafe { Val::new_from_value(cg, global_val.as_basic_value_enum()) }
     }
 
-    pub fn alloc_shared<T: SizedTy>(self) -> Val<'a, Shared<M<&'a mut T>>> {
-        let ty = T::ty(self.0.ctx());
-        let global_val = self.0.module().add_global(
+    pub fn alloc_shared<'a, T: SizedTy>(&self, cg: &'a FnCodegen) -> Val<'a, Shared<M<&'a mut T>>> {
+        let ty = T::ty(cg.ctx());
+        let global_val = cg.module().add_global(
             ty,
             Some(AddressSpace::from(Shared::<M<&mut T>>::ADDRSPACE)),
             "const_sized_shared",
         );
-        global_val.set_initializer(&T::undef(self.0.ctx()));
+        global_val.set_initializer(&T::undef(cg.ctx()));
         global_val.set_alignment(T::ALIGN);
-        unsafe { Val::new_from_value(self.0, global_val.as_basic_value_enum()) }
+        unsafe { Val::new_from_value(cg, global_val.as_basic_value_enum()) }
+    }
+
+    fn nullary_u32_intrinsic<'a>(cx: &'a FnCodegen, name: &str) -> Val<'a, U32> {
+        let intrinsic = Intrinsic::find(name).expect("Should exist");
+        let function = intrinsic
+            .get_declaration(cx.module(), &[])
+            .expect("Declaration should exist");
+        let raw_ret = unsafe {
+            cx.with_builder(|b| b.build_call(function, &[], "call_nullary_u32_intrins"))
+                .expect("Call should succeed")
+        }
+        .try_as_basic_value()
+        .unwrap_basic();
+        unsafe { Val::new_from_value(cx, raw_ret) }
+    }
+    pub fn laneid<'a>(&self, cx: &'a FnCodegen) -> Val<'a, U32> {
+        Self::nullary_u32_intrinsic(cx, "llvm.nvvm.read.ptx.sreg.laneid")
     }
 }
 
-impl<'a> IntrinsicsLibrary for CUDA<'a> {}
+impl IntrinsicsLibrary for CUDA {
+    fn assert(&self, cond: Val<'_, Bool>, message: &str, file: &str, line: u32, function: &str) {
+        let raw_val = cond.get_ll_typed();
+        let not_cond = !cond.copy();
+        (not_cond).branch(|| Self::call_assert_fail(&cond.cx(), message, file, line, function));
+        self.call_assume(raw_val, cond.cx())
+    }
+}
+
+impl ConstructibleIntrinsicsLibrary for CUDA {
+    fn new() -> Self {
+        Self
+    }
+}
 
 macro_rules! impl_unary {
     (

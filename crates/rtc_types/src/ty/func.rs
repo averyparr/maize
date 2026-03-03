@@ -10,7 +10,7 @@ use crate::{
     val::Val,
 };
 
-pub trait FnRetTy {
+pub trait FnRetTy: AnyTy {
     fn raw_fn_ty<'ctx>(
         ctx: ContextRef<'ctx>,
         param_types: &[BasicMetadataTypeEnum<'ctx>],
@@ -18,7 +18,7 @@ pub trait FnRetTy {
     ) -> FunctionType<'ctx>;
 
     fn fn_ty<Args: IntoFuncArgs>(ctx: ContextRef<'_>) -> FunctionType<'_> {
-        let args = Args::produce_args(ctx);
+        let args = Args::produce_metadata_args(ctx);
         Self::raw_fn_ty(ctx, args.as_ref(), false)
     }
 

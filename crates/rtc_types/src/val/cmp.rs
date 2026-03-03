@@ -6,6 +6,7 @@ use inkwell::{
 };
 
 use crate::{
+    codegen::typed_func::ConstValTy,
     ty::{Bool, ValTy, raw::*, vec::VectorizableTy},
     val::Val,
 };
@@ -228,5 +229,29 @@ where
     }
     pub fn gt(&self, rhs: impl Borrow<Self>) -> Val<'a, T::ComparisonT> {
         T::compare(Predicate::GT, self, rhs.borrow())
+    }
+}
+
+impl<'a, C> Val<'a, C>
+where
+    C: ConstValTy + ComparableTy,
+{
+    pub fn eq_const(&self, rhs: C::Assoc) -> Val<'a, C::ComparisonT> {
+        C::compare(Predicate::EQ, self, &C::to_const(rhs, self.cx()))
+    }
+    pub fn ne_const(&self, rhs: C::Assoc) -> Val<'a, C::ComparisonT> {
+        C::compare(Predicate::NE, self, &C::to_const(rhs, self.cx()))
+    }
+    pub fn le_const(&self, rhs: C::Assoc) -> Val<'a, C::ComparisonT> {
+        C::compare(Predicate::LE, self, &C::to_const(rhs, self.cx()))
+    }
+    pub fn lt_const(&self, rhs: C::Assoc) -> Val<'a, C::ComparisonT> {
+        C::compare(Predicate::LT, self, &C::to_const(rhs, self.cx()))
+    }
+    pub fn ge_const(&self, rhs: C::Assoc) -> Val<'a, C::ComparisonT> {
+        C::compare(Predicate::GE, self, &C::to_const(rhs, self.cx()))
+    }
+    pub fn gt_const(&self, rhs: C::Assoc) -> Val<'a, C::ComparisonT> {
+        C::compare(Predicate::GT, self, &C::to_const(rhs, self.cx()))
     }
 }

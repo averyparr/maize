@@ -1,6 +1,7 @@
 mod args;
 mod arithmetic;
 mod array;
+mod bitcast;
 mod bool;
 mod contiguous;
 pub mod convertible;
@@ -11,6 +12,7 @@ mod int;
 mod ptr;
 pub mod raw;
 mod sized;
+mod struct_ty;
 pub mod vec;
 mod void;
 
@@ -66,10 +68,11 @@ where
 }
 
 pub use args::IntoFuncArgs;
-pub use arithmetic::{MathTy, MathVariant};
+pub use arithmetic::{IntMathTy, MathTy, MathVariant};
 pub use contiguous::ConstSizeContiguousTy;
 pub use func::FnRetTy;
-pub use ptr::{AddrspacePtr, ConstPtrTy, MutPtrTy, MutTy, RefTy};
+pub use ptr::{AddrspacePtr, ConstPtrTy, MutPtrTy, MutTy, RawPtrTy, RefTy};
 pub use raw::{Bool, M, P, R, V, Void, float::*, int::*};
 pub use sized::{AlignedTy, SizedTy};
+pub use struct_ty::{AccessibleStructTy, StructReflectTy};
 pub use void::VoidTy;
