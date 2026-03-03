@@ -2,7 +2,7 @@ pub mod calling_convention;
 pub mod if_stmt;
 pub mod instruction_opt;
 pub mod loops;
-pub mod target;
+pub mod target_cpu;
 pub mod typed_func;
 
 pub(crate) use typed_func::FnCodegen;
