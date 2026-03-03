@@ -1,8 +1,8 @@
 use inkwell::{
     attributes::AttributeLoc,
     context::ContextRef,
-    types::{BasicMetadataTypeEnum, BasicType},
-    values::AnyValue,
+    types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum},
+    values::{BasicMetadataValueEnum, BasicValue},
 };
 
 use crate::codegen::FnCodegen;
@@ -10,9 +10,13 @@ use crate::{ty::SizedTy, val::Val};
 
 pub trait IntoFuncArgs {
     fn arg_aligns() -> impl AsRef<[u32]>;
-    fn produce_args<'ctx>(ctx: ContextRef<'ctx>) -> impl AsRef<[BasicMetadataTypeEnum<'ctx>]>;
+    fn produce_args<'ctx>(ctx: ContextRef<'ctx>) -> impl AsRef<[BasicTypeEnum<'ctx>]>;
+    fn produce_metadata_args<'ctx>(
+        ctx: ContextRef<'ctx>,
+    ) -> impl AsRef<[BasicMetadataTypeEnum<'ctx>]>;
     type ArgValues<'ctx>;
     fn try_extract_args<'a>(cx: &'a FnCodegen) -> Option<Self::ArgValues<'a>>;
+    fn args_to_raw(args: Self::ArgValues<'_>) -> impl AsRef<[BasicMetadataValueEnum<'static>]>;
 }
 
 macro_rules! impl_into_func_args {
@@ -24,7 +28,12 @@ macro_rules! impl_into_func_args {
             fn arg_aligns() -> impl AsRef<[u32]> {
                 [$($names::ALIGN,)*]
             }
-            fn produce_args<'ctx>(ctx: ContextRef<'ctx>) -> impl AsRef<[BasicMetadataTypeEnum<'ctx>]> {
+            fn produce_args<'ctx>(ctx: ContextRef<'ctx>) -> impl AsRef<[BasicTypeEnum<'ctx>]> {
+                [$(
+                    $names::ty(ctx).as_basic_type_enum(),
+                )*]
+            }
+            fn produce_metadata_args<'ctx>(ctx: ContextRef<'ctx>) -> impl AsRef<[BasicMetadataTypeEnum<'ctx>]> {
                 [$(
                     $names::ty(ctx).as_basic_type_enum().into(),
                 )*]
@@ -35,7 +44,7 @@ macro_rules! impl_into_func_args {
                 let func = cx.func();
                 let types_of_params = Self::produce_args(ctx);
                 for (param, proposed_type) in func.get_param_iter().zip(types_of_params.as_ref().iter()) {
-                    if BasicMetadataTypeEnum::from(param.get_type()) != *proposed_type {
+                    if BasicMetadataTypeEnum::from(param.get_type()) != (*proposed_type).into() {
                         return None;
                     }
                 }
@@ -60,6 +69,12 @@ macro_rules! impl_into_func_args {
                         ),
                     )*))
                 }
+            }
+            fn args_to_raw(args: Self::ArgValues<'_>) -> impl AsRef<[BasicMetadataValueEnum<'static>]> {
+                let ($($names,)*) = args;
+                [$(
+                    $names.get_ll_typed().as_basic_value_enum().into(),
+                )*]
             }
         }
     };

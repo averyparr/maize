@@ -1,4 +1,5 @@
 mod array;
+mod assert;
 mod cmp;
 mod ptr;
 mod std_ops;
@@ -18,6 +19,7 @@ use std::marker::PhantomData;
 
 use inkwell::{
     context::ContextRef,
+    types::{BasicType, BasicTypeEnum},
     values::{AnyValue, BasicValue, BasicValueEnum, PointerValue},
 };
 
@@ -54,8 +56,14 @@ impl<'ctx, T: ?Sized> Val<'ctx, T> {
     pub(crate) fn ctx(&self) -> ContextRef<'static> {
         self.0.ctx()
     }
-    pub(crate) fn cx(&self) -> &'ctx FnCodegen {
+    pub fn cx(&self) -> &'ctx FnCodegen {
         self.0
+    }
+    pub fn get_type(&self) -> BasicTypeEnum<'static>
+    where
+        T: Ty,
+    {
+        T::ty(self.ctx()).as_basic_type_enum()
     }
     pub(crate) unsafe fn new_from_value(cx: &'ctx FnCodegen, val: BasicValueEnum<'static>) -> Self
     where

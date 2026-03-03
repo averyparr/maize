@@ -1,17 +1,23 @@
-use inkwell::{
-    intrinsics::Intrinsic,
-    types::BasicType,
-    values::{AnyValue, BasicValue},
-};
+use inkwell::{intrinsics::Intrinsic, types::BasicType, values::BasicValue};
 
-use crate::{ty::ValTy, val::Val};
+use crate::{
+    codegen::FnCodegen,
+    ty::{Bool, ValTy},
+    val::Val,
+};
 
 pub mod abs;
 pub mod cuda;
 mod transcendental;
 pub mod vector;
 
-pub trait IntrinsicsLibrary {}
+pub trait IntrinsicsLibrary {
+    fn assert(&self, cond: Val<'_, Bool>, message: &str, file: &str, line: u32, function: &str);
+}
+
+pub trait ConstructibleIntrinsicsLibrary: IntrinsicsLibrary {
+    fn new() -> Self;
+}
 
 pub unsafe trait UnaryIntrinsic<Intrins>: ValTy {
     const INTRINSIC_NAME: &str;

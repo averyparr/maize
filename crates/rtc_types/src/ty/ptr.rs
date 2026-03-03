@@ -106,6 +106,7 @@ pub unsafe trait ConstPtrTy:
     for<'a> ValTy<Value<'a> = PointerValue<'a>, Type<'a> = PointerType<'a>> + SizedTy
 {
     type PointeeTy: ValTy + ?Sized;
+    type PtrConst<PT: ValTy + ?Sized>: ConstPtrTy;
 
     fn instance_in_addrspace<'ctx>(
         ctx: ContextRef<'ctx>,
@@ -177,7 +178,7 @@ pub unsafe trait ConstPtrTy:
         // so it's safe to read with alignment metadata.
         let cx = ptr.cx();
         let align = cx
-            .constant_from(Self::PointeeTy::ALIGN)
+            .constant_from(Self::PointeeTy::ALIGN as u64)
             .get_ll_typed()
             .into();
         unsafe { Self::read_with_instruction_metadata(ptr, [("align", Some(align))], Self::ty) }
@@ -200,24 +201,28 @@ unsafe impl<T: ?Sized> ConstPtrTy for P<*const T>
 where
     T: ValTy,
 {
+    type PtrConst<PT: ValTy + ?Sized> = P<*const PT>;
     type PointeeTy = T;
 }
 unsafe impl<T: ?Sized> ConstPtrTy for P<*mut T>
 where
     T: ValTy,
 {
+    type PtrConst<PT: ValTy + ?Sized> = P<*const PT>;
     type PointeeTy = T;
 }
 unsafe impl<T: ?Sized> ConstPtrTy for R<&T>
 where
     T: ValTy,
 {
+    type PtrConst<PT: ValTy + ?Sized> = P<*const PT>;
     type PointeeTy = T;
 }
 unsafe impl<T: ?Sized> ConstPtrTy for M<&mut T>
 where
     T: ValTy,
 {
+    type PtrConst<PT: ValTy + ?Sized> = P<*const PT>;
     type PointeeTy = T;
 }
 
@@ -227,6 +232,7 @@ where
 /// support the (unsafe) equivalents of ::std::ptr::read[_unaligned]
 /// and casts to P<*const T::PointeeTy> and P<*mut T::PointeeTy>.
 pub unsafe trait MutPtrTy: ConstPtrTy {
+    type PtrMut<PT: ValTy + ?Sized>: MutPtrTy;
     /// # Safety:
     /// This function is unsafe in the same way that `::std::ptr::write_unaligned`
     /// is -- it just bitwise-copies to the address. It does not drop the value at
@@ -286,7 +292,7 @@ pub unsafe trait MutPtrTy: ConstPtrTy {
     {
         let align = ptr
             .cx()
-            .constant_from(Self::PointeeTy::ALIGN)
+            .constant_from(Self::PointeeTy::ALIGN as u64)
             .get_ll_typed();
         // Safety: The user promised it was safe to do an aligned write through
         // this pointer, and we know the alignment of the type behind the pointer
@@ -296,8 +302,18 @@ pub unsafe trait MutPtrTy: ConstPtrTy {
     }
 }
 
-unsafe impl<T: ?Sized> MutPtrTy for P<*mut T> where T: ValTy {}
-unsafe impl<T: ?Sized> MutPtrTy for M<&mut T> where T: ValTy {}
+unsafe impl<T: ?Sized> MutPtrTy for P<*mut T>
+where
+    T: ValTy,
+{
+    type PtrMut<PT: ValTy + ?Sized> = P<*mut PT>;
+}
+unsafe impl<T: ?Sized> MutPtrTy for M<&mut T>
+where
+    T: ValTy,
+{
+    type PtrMut<PT: ValTy + ?Sized> = P<*mut PT>;
+}
 
 /// # Safety:
 /// In order for this to be safe, a `Ty` must trace-like a &'a T
@@ -330,6 +346,9 @@ pub unsafe trait RefTy: ConstPtrTy {
         // promised was OK
         unsafe { Val::new(ptr.cx(), ptr.raw_ptr()) }
     }
+    fn as_ptr<'a>(ptr: Val<'a, Self>) -> Val<'a, Self::PtrConst<Self::PointeeTy>> {
+        unsafe { Val::new(ptr.cx(), ptr.raw_ptr()) }
+    }
 }
 
 unsafe impl<'a, T: ?Sized> RefTy for R<&'a T>
@@ -349,11 +368,11 @@ where
     {
         let size = cx
             .ctx()
-            .i32_type()
+            .i64_type()
             .const_int(Self::PointeeTy::SIZE as _, false);
         let align = cx
             .ctx()
-            .i32_type()
+            .i64_type()
             .const_int(Self::PointeeTy::ALIGN as _, false);
         [
             ("align", Some(align.into())),
@@ -381,11 +400,11 @@ where
     {
         let size = cx
             .ctx()
-            .i32_type()
+            .i64_type()
             .const_int(Self::PointeeTy::SIZE as _, false);
         let align = cx
             .ctx()
-            .i32_type()
+            .i64_type()
             .const_int(Self::PointeeTy::ALIGN as _, false);
         [
             ("align", Some(align.into())),
@@ -441,6 +460,9 @@ pub unsafe trait MutTy: RefTy + MutPtrTy {
             let _: () = unsafe { Self::Mut::write_with_instruction_metadata(ptr, val, metadata) };
         }
     }
+    fn as_mut_ptr<'a>(ptr: Val<'a, Self>) -> Val<'a, Self::PtrMut<Self::PointeeTy>> {
+        unsafe { Val::new(ptr.cx(), ptr.raw_ptr()) }
+    }
 }
 
 unsafe impl<T: ?Sized> MutTy for M<&mut T>
@@ -454,6 +476,21 @@ where
         PT: 'r;
 }
 
+pub unsafe trait RawPtrTy: ConstPtrTy {
+    fn ptr_cast<'a, U: ValTy + ?Sized>(val: Val<'a, Self>) -> Val<'a, Self::PtrConst<U>> {
+        unsafe { Val::new_from_value(val.cx(), val.get_raw()) }
+    }
+    fn ptr_cast_mut<'a, U: ValTy + ?Sized>(val: Val<'a, Self>) -> Val<'a, Self::PtrMut<U>>
+    where
+        Self: MutPtrTy,
+    {
+        unsafe { Val::new_from_value(val.cx(), val.get_raw()) }
+    }
+}
+
+unsafe impl<T: ValTy + ?Sized> RawPtrTy for P<*const T> {}
+unsafe impl<T: ValTy + ?Sized> RawPtrTy for P<*mut T> {}
+
 pub trait AddrspacePtr {
     type Inner: ConstPtrTy;
     const ADDRSPACE: u16;
@@ -464,102 +501,5 @@ pub trait AddrspacePtr {
     type Mut<'r, PT: ValTy + ?Sized>: MutTy<PointeeTy = PT>
     where
         Self::Inner: MutTy + 'r,
-        PT: 'r;
-}
-
-impl<T: ?Sized> AnyTy for T
-where
-    T: AddrspacePtr,
-{
-    type AnyType<'ctx> = <T::Inner as Ty>::Type<'ctx>;
-    fn any_ty<'ctx>(ctx: ContextRef<'ctx>) -> Self::AnyType<'ctx> {
-        ctx.ptr_type(AddressSpace::from(Self::ADDRSPACE))
-    }
-}
-
-impl<T: ?Sized> ValTy for T
-where
-    T: AddrspacePtr,
-{
-    type Value<'ctx> = <T::Inner as ValTy>::Value<'ctx>;
-
-    fn undef<'ctx>(ctx: ContextRef<'ctx>) -> Self::Value<'ctx> {
-        Self::ty(ctx).get_undef()
-    }
-
-    fn zeros<'ctx>(ctx: ContextRef<'ctx>) -> Self::Value<'ctx> {
-        Self::ty(ctx).const_null()
-    }
-
-    fn try_type_val<'ctx>(val: AnyValueEnum<'ctx>) -> Option<Self::Value<'ctx>> {
-        T::Inner::try_type_val(val)
-    }
-}
-
-impl<T> AlignedTy for T
-where
-    T: AddrspacePtr,
-    T::Inner: AlignedTy,
-{
-    const ALIGN: u32 = T::Inner::ALIGN;
-}
-
-impl<T> SizedTy for T
-where
-    T: AddrspacePtr,
-    T::Inner: SizedTy,
-{
-    const SIZE: u32 = T::Inner::SIZE;
-    fn fn_arg_attrs(
-        ctx: ContextRef<'_>,
-    ) -> impl IntoIterator<Item = inkwell::attributes::Attribute> {
-        T::Inner::fn_arg_attrs(ctx)
-    }
-}
-
-unsafe impl<T> ConstPtrTy for T
-where
-    T: AddrspacePtr,
-    T::Inner: ConstPtrTy,
-{
-    type PointeeTy = <T::Inner as ConstPtrTy>::PointeeTy;
-}
-
-unsafe impl<T> MutPtrTy for T
-where
-    T: AddrspacePtr,
-    T::Inner: MutPtrTy,
-{
-}
-
-unsafe impl<T> RefTy for T
-where
-    T: AddrspacePtr,
-    T::Inner: RefTy,
-{
-    type Ref<'r, PT: ValTy + ?Sized>
-        = T::Ref<'r, PT>
-    where
-        Self: 'r,
-        PT: 'r;
-    fn ptr_attrs(
-        cx: &FnCodegen,
-    ) -> impl IntoIterator<Item = (&str, Option<BasicMetadataValueEnum<'_>>)>
-    where
-        Self::PointeeTy: SizedTy,
-    {
-        T::Inner::ptr_attrs(cx)
-    }
-}
-
-unsafe impl<T> MutTy for T
-where
-    T: AddrspacePtr,
-    T::Inner: MutTy,
-{
-    type Mut<'r, PT: ValTy + ?Sized>
-        = T::Mut<'r, PT>
-    where
-        Self: 'r,
         PT: 'r;
 }

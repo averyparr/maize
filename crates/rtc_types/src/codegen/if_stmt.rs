@@ -28,12 +28,12 @@ impl<'a, Ret: ValTy> Then<'a, Ret> {
     pub fn or(self, val: Val<'a, Ret>) -> Val<'a, Ret> {
         self.or_else(|| val)
     }
-    pub fn or_else(self, f: impl FnOnce() -> Val<'a, Ret>) -> Val<'a, Ret> {
+    pub fn or_else(mut self, f: impl FnOnce() -> Val<'a, Ret>) -> Val<'a, Ret> {
         let cx = self.val_from_if.cx();
 
-        let else_ret = cx.with_bb_as(self.raw.else_bb, f);
+        let (else_end_bb, else_ret) = cx.with_bb_as(self.raw.else_bb, f);
 
-        let raw_ret = cx.with_bb_as(self.raw.uni_bb, || {
+        let (uni_bb, raw_ret) = cx.with_bb_as(self.raw.uni_bb, || {
             let phi_ty = Ret::ty(cx.ctx());
             let phi_val = unsafe {
                 cx.with_builder(|b| b.build_phi(phi_ty, "if_else_phi"))
@@ -41,10 +41,15 @@ impl<'a, Ret: ValTy> Then<'a, Ret> {
             };
             phi_val.add_incoming(&[
                 (&self.val_from_if.get_ll_typed(), self.raw.then_bb),
-                (&else_ret.get_ll_typed(), self.raw.else_bb),
+                (&else_ret.get_ll_typed(), else_end_bb),
             ]);
             phi_val
         });
+
+        // The else function may have changed the basic blocks at the "end" of each of these,
+        // so update
+        self.raw.else_bb = else_end_bb;
+        self.raw.uni_bb = uni_bb;
 
         // Should drop self which drops ThenNoVal which in turn unconditionally jumps from else to uni
         unsafe { Val::new_from_value(else_ret.cx(), raw_ret.as_basic_value()) }
@@ -55,9 +60,10 @@ impl<'a> ThenNoVal<'a> {
     pub fn or(self) {
         // Drop self
     }
-    pub fn or_else(self, f: impl FnOnce()) {
+    pub fn or_else(mut self, f: impl FnOnce()) {
         let cx = self.cx;
-        cx.with_bb_as(self.else_bb, f)
+        let (end_else_bb, _) = cx.with_bb_as(self.else_bb, f);
+        self.else_bb = end_else_bb;
         // Should drop self which unconditionally jumps from else to uni
     }
 }
@@ -102,12 +108,13 @@ fn setup_branch_on<'ctx>(
 }
 
 impl<'a> Val<'a, Bool> {
-    fn then_inner<U>(self, f: impl FnOnce() -> U) -> (ThenNoVal<'a>, U) {
+    fn then_inner<U>(&self, f: impl FnOnce() -> U) -> (ThenNoVal<'a>, U) {
         let cx = self.cx();
-        let (then_bb, else_bb) = setup_branch_on(self);
+        let (then_bb, else_bb) = setup_branch_on(self.copy());
         let uni_bb = cx.ctx().append_basic_block(cx.func(), "post_if");
 
-        let ret = cx.with_bb_as(then_bb, f);
+        // `f` is allowed to change the basic block so we must get a new copy
+        let (then_bb, ret) = cx.with_bb_as(then_bb, f);
         jump_from_block_to_other_block(then_bb, uni_bb);
         cx.set_bb(uni_bb);
 
@@ -120,7 +127,7 @@ impl<'a> Val<'a, Bool> {
         (then_obj, ret)
     }
 
-    pub fn branch<If: FnOnce()>(self, f: If) -> ThenNoVal<'a> {
+    pub fn branch<If: FnOnce()>(&self, f: If) -> ThenNoVal<'a> {
         let (ret, _rest) = self.then_inner(f);
         ret
     }

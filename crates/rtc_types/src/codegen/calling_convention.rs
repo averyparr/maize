@@ -13,12 +13,9 @@ macro_rules! calling_conv {
         impl<Args: IntoFuncArgs> Func for $name<Args> {
             type Args = Args;
             type Ret = Void;
-            type Intrinsics<'a>
-                = $intrinsics<'a>
-            where
-                Args: 'a;
-            fn intrinsics(&self) -> Self::Intrinsics<'_> {
-                $intrinsics(&self.0)
+            type Intrinsics = $intrinsics;
+            fn intrinsics(&self) -> Self::Intrinsics {
+                $intrinsics
             }
             fn new(cx: FnCodegen) -> Self {
                 Self(cx, PhantomData)
@@ -35,13 +32,9 @@ macro_rules! calling_conv {
         impl<Args: IntoFuncArgs, Ret: FnRetTy> Func for $name<Args, Ret> {
             type Args = Args;
             type Ret = Ret;
-            type Intrinsics<'a>
-                = $intrinsics<'a>
-            where
-                Args: 'a,
-                Ret: 'a;
-            fn intrinsics(&self) -> Self::Intrinsics<'_> {
-                $intrinsics(&self.0)
+            type Intrinsics = $intrinsics;
+            fn intrinsics(&self) -> Self::Intrinsics {
+                $intrinsics
             }
             fn new(cx: FnCodegen) -> Self {
                 Self(cx, PhantomData)
