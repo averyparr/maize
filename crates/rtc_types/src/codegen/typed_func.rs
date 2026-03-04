@@ -95,9 +95,6 @@ where
     pub fn const_like(&self, val: C::Assoc) -> Self {
         C::to_const(val, self.cx())
     }
-    pub fn zero(&self) -> Self {
-        unsafe { Val::new_from_value(self.cx(), C::zeros(self.ctx()).as_basic_value_enum()) }
-    }
 }
 
 impl<C, const N: usize> Val<'_, V<C, N>>
@@ -127,6 +124,9 @@ impl<Ret: FnRetTy, Args: IntoFuncArgs> RawFunc<Ret, Args> {
         let typed_fn_ty = Ret::fn_ty::<Args>(ctx);
         assert_eq!(fn_ty, typed_fn_ty);
         Self(fn_val, PhantomData)
+    }
+    pub fn raw(self) -> FunctionValue<'static> {
+        self.0
     }
 }
 
@@ -190,13 +190,22 @@ impl FnCodegen {
     pub fn get_intrinsic<Ret: FnRetTy, Args: IntoFuncArgs>(
         &self,
         name: &str,
+        use_raw_name: bool,
     ) -> RawFunc<Ret, Args> {
-        let intrinsic = Intrinsic::find(name).expect("Intrinsic should exist");
+        let Some(intrinsic) = Intrinsic::find(name) else {
+            panic!("Unable to find intrinsic '{name}'");
+        };
         let param_types = Args::produce_args(self.ctx());
         let ret = intrinsic
             .get_declaration(self.module(), param_types.as_ref())
             .expect("Should be a function with this declaration");
-        RawFunc::new(ret)
+        // Do this so that we get intrinsic type checking
+        let should_ret = RawFunc::new(ret);
+        if use_raw_name {
+            self.declare_function(name)
+        } else {
+            should_ret
+        }
     }
     pub fn declare_function<Ret: FnRetTy, Args: IntoFuncArgs>(
         &self,

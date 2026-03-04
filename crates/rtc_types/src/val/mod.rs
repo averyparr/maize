@@ -52,6 +52,28 @@ where
     }
 }
 
+pub mod __structreflect {
+    use super::*;
+    pub fn _ctx<T>(val: &Val<'_, T>) -> ContextRef<'static> {
+        val.ctx()
+    }
+    pub fn _get_lltyped<T: ValTy>(val: &Val<'_, T>) -> T::Value<'static> {
+        val.get_ll_typed()
+    }
+    pub unsafe fn _new<'a, T: ValTy>(cx: &'a FnCodegen, val: PointerValue<'static>) -> Val<'a, T> {
+        unsafe { Val::new(cx, val) }
+    }
+    pub unsafe fn _new_from_value<'a, T: ValTy>(
+        cx: &'a FnCodegen,
+        val: BasicValueEnum<'static>,
+    ) -> Val<'a, T> {
+        unsafe { Val::new_from_value(cx, val) }
+    }
+    pub unsafe fn _raw_ptr<T>(val: &Val<'_, T>) -> PointerValue<'static> {
+        val.raw_ptr()
+    }
+}
+
 impl<'ctx, T: ?Sized> Val<'ctx, T> {
     pub(crate) fn ctx(&self) -> ContextRef<'static> {
         self.0.ctx()
@@ -81,6 +103,14 @@ impl<'ctx, T: ?Sized> Val<'ctx, T> {
     pub(crate) unsafe fn new(cx: &'ctx FnCodegen, val: PointerValue<'static>) -> Self {
         Self(cx, val, PhantomData)
     }
+    pub fn zero(&self) -> Self
+    where
+        T: ValTy,
+    {
+        let t = T::zeros(self.ctx());
+        unsafe { Self::new_from_value(self.cx(), t.as_basic_value_enum()) }
+    }
+
     /// # Safety: This is identical to ::std::mem::transmute.
     pub unsafe fn transmute<U: ?Sized>(val: Self) -> Val<'ctx, U>
     where

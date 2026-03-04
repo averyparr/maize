@@ -1,4 +1,4 @@
-use std::ops::{Add, Div, Mul, Neg, Not, Rem, Shl, Shr, Sub};
+use std::ops::{Add, BitXor, Div, Mul, Neg, Not, Rem, Shl, Shr, Sub};
 
 use inkwell::values::BasicValue;
 
@@ -173,6 +173,13 @@ impl<'a, IntT: IntMathTy> Shr<Self> for Val<'a, IntT> {
     }
 }
 
+impl<'a, IntT: IntMathTy> BitXor<Self> for Val<'a, IntT> {
+    type Output = Self;
+    fn bitxor(self, rhs: Self) -> Self::Output {
+        IntT::xor(self, rhs)
+    }
+}
+
 macro_rules! impl_int_math_for_constants {
     (inner: $op_ty: ident, $op_fn: ident, $trace_ty: ty, $real_ty: ty) => {
 
@@ -195,6 +202,7 @@ macro_rules! impl_int_math_for_constants {
         impl_int_math_for_constants!(inner: Rem, rem, $trace_ty, $real_ty);
         impl_int_math_for_constants!(inner: Shr, shr, $trace_ty, $real_ty);
         impl_int_math_for_constants!(inner: Shl, shl, $trace_ty, $real_ty);
+        impl_int_math_for_constants!(inner: BitXor, bitxor, $trace_ty, $real_ty);
     };
 }
 

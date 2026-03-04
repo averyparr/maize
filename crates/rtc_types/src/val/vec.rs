@@ -60,7 +60,7 @@ where
     }
 
     pub fn from_array(val: Val<'a, [T; N]>) -> Self {
-        Val::from_elements(val.elements())
+        Val::from_elements(val.array_elements())
     }
 }
 

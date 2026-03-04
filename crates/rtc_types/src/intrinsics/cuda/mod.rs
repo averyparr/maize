@@ -180,8 +180,8 @@ impl<'a> IntrinsicCodegen<'a, CUDA> {
         global_val.set_alignment(T::ALIGN);
         unsafe { Val::new_from_value(cx, global_val.as_basic_value_enum()) }
     }
-    pub fn laneid(&self, cx: &'a FnCodegen) -> Val<'a, U32> {
-        CUDA::nullary_u32_intrinsic(cx, "llvm.nvvm.read.ptx.sreg.laneid")
+    pub fn laneid(&self) -> Val<'a, U32> {
+        CUDA::nullary_u32_intrinsic(self.cx(), "llvm.nvvm.read.ptx.sreg.laneid")
     }
 }
 

@@ -7,7 +7,7 @@ impl<'a, T, const N: usize> Val<'a, [T; N]>
 where
     T: SizedTy,
 {
-    pub fn elements(self) -> [Val<'a, T>; N] {
+    pub fn array_elements(self) -> [Val<'a, T>; N] {
         <[T; N]>::elements(self)
     }
 

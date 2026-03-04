@@ -1,3 +1,4 @@
+pub mod bf16_tile;
 mod ldsm;
 use std::marker::PhantomData;
 
@@ -8,7 +9,7 @@ use rtc_types::{
         values::{AnyValueEnum, ArrayValue},
     },
     intrinsics::cuda::ldsm::{call_ldsm_x1, call_ldsm_x4},
-    ty::{AlignedTy, AnyTy, BF16, M, MutTy, SizedTy, Ty, U32, U128, V, ValTy, cuda::Shared},
+    ty::{AlignedTy, AnyTy, BF16, M, SizedTy, Ty, U32, U128, V, ValTy, cuda::Shared},
     val::Val,
 };
 
@@ -24,7 +25,7 @@ impl WarpTileTy for BF16_16x16 {
     const COLS: u32 = 16;
     const ROWS: u32 = 16;
     type ElemT = BF16;
-    type FragT = V<BF16, 8>;
+    type FragT = V<BF16, { Self::COLS as usize / 2 }>;
 }
 pub struct BF16_8x8;
 impl WarpTileTy for BF16_8x8 {
@@ -34,18 +35,16 @@ impl WarpTileTy for BF16_8x8 {
     type FragT = V<BF16, 2>;
 }
 
-pub trait WarpLoadTileTy: WarpTileTy {
-    type RefForLoad<'a>: MutTy;
+pub trait WarpSmemLoadTileTy: WarpTileTy + Sized {
     fn collective_load<'a, 'b>(
-        ptr: &mut Val<'a, Self::RefForLoad<'b>>,
+        ptr: &mut Val<'a, Shared<M<&'b mut Tile<Self>>>>,
         lane: Val<'a, U32>,
     ) -> Val<'a, Self::FragT>;
 }
 
-impl WarpLoadTileTy for BF16_16x16 {
-    type RefForLoad<'b> = Shared<M<&'b mut Tile<Self>>>;
+impl WarpSmemLoadTileTy for BF16_16x16 {
     fn collective_load<'a, 'b>(
-        ptr: &mut Val<'a, Self::RefForLoad<'b>>,
+        ptr: &mut Val<'a, Shared<M<&'b mut Tile<Self>>>>,
         lane: Val<'a, U32>,
     ) -> Val<'a, Self::FragT> {
         let tile_ptr = ptr.reborrow_mut().as_mut_ptr();
@@ -60,10 +59,9 @@ impl WarpLoadTileTy for BF16_16x16 {
     }
 }
 
-impl WarpLoadTileTy for BF16_8x8 {
-    type RefForLoad<'b> = Shared<M<&'b mut Tile<Self>>>;
+impl WarpSmemLoadTileTy for BF16_8x8 {
     fn collective_load<'a, 'b>(
-        ptr: &mut Val<'a, Self::RefForLoad<'b>>,
+        ptr: &mut Val<'a, Shared<M<&'b mut Tile<Self>>>>,
         lane: Val<'a, U32>,
     ) -> Val<'a, Self::FragT> {
         let tile_ptr = ptr.reborrow_mut().as_mut_ptr();

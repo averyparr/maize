@@ -224,6 +224,17 @@ pub unsafe trait IntMathTy: MathTy {
         let raw = post_process(cx, raw_ret.as_basic_value_enum());
         unsafe { Val::new_from_value(cx, raw) }
     }
+    fn xor<'a>(lhs: Val<'a, Self>, rhs: Val<'a, Self>) -> Val<'a, Self> {
+        let cx = lhs.cx();
+
+        let lhs = Self::type_as_int(lhs.get_raw());
+        let rhs = Self::type_as_int(rhs.get_raw());
+
+        let raw_ret = unsafe { cx.with_builder(|b| b.build_xor(lhs, rhs, "xor_values")) }
+            .expect("XOR should have built");
+        let raw = post_process(cx, raw_ret.as_basic_value_enum());
+        unsafe { Val::new_from_value(cx, raw) }
+    }
 }
 
 macro_rules! impl_math_ty {
