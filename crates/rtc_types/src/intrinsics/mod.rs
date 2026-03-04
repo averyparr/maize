@@ -1,6 +1,7 @@
 use inkwell::{intrinsics::Intrinsic, types::BasicType, values::BasicValue};
 
 use crate::{
+    codegen::FnCodegen,
     ty::{Bool, ValTy},
     val::Val,
 };
@@ -10,11 +11,30 @@ pub mod cuda;
 mod transcendental;
 pub mod vector;
 
+pub struct IntrinsicCodegen<'a, Intrins>(&'a FnCodegen, Intrins);
+
+impl<'a, Intrins: StatelessIntrinsicsLibrary> IntrinsicCodegen<'a, Intrins> {
+    pub fn new(cx: &'a FnCodegen) -> Self {
+        Self(cx, Intrins::new())
+    }
+}
+impl<'a, I> IntrinsicCodegen<'a, I> {
+    pub fn cx(&self) -> &'a FnCodegen {
+        self.0
+    }
+}
+
 pub trait IntrinsicsLibrary {
     fn assert(&self, cond: Val<'_, Bool>, message: &str, file: &str, line: u32, function: &str);
 }
 
-pub trait ConstructibleIntrinsicsLibrary: IntrinsicsLibrary {
+impl<Intrinsic: IntrinsicsLibrary> IntrinsicsLibrary for IntrinsicCodegen<'_, Intrinsic> {
+    fn assert(&self, cond: Val<'_, Bool>, message: &str, file: &str, line: u32, function: &str) {
+        self.1.assert(cond, message, file, line, function);
+    }
+}
+
+pub trait StatelessIntrinsicsLibrary: IntrinsicsLibrary {
     fn new() -> Self;
 }
 

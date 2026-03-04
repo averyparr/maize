@@ -15,7 +15,7 @@ use inkwell::{
 };
 
 use crate::{
-    intrinsics::{ConstructibleIntrinsicsLibrary, IntrinsicsLibrary},
+    intrinsics::{IntrinsicCodegen, IntrinsicsLibrary, StatelessIntrinsicsLibrary},
     ty::{
         BF16, Bool, F16, F32, F64, FnRetTy, I8, I16, I32, I64, IntoFuncArgs, U8, U16, U32, U64, V,
         ValTy, Void, VoidTy, vec::VectorizableTy,
@@ -271,13 +271,12 @@ pub trait ToCPU {
 }
 
 pub trait Func: Sized {
-    type Intrinsics: ConstructibleIntrinsicsLibrary + 'static;
+    type Intrinsics: StatelessIntrinsicsLibrary + 'static;
     type Args: IntoFuncArgs;
     type Ret: FnRetTy;
 
     fn new(cg: FnCodegen) -> Self;
     fn cx(&self) -> &FnCodegen;
-    fn intrinsics(&self) -> Self::Intrinsics;
     const CALL_CONV: u32;
     type CpuConfig: ToCPU;
 
@@ -289,8 +288,8 @@ pub trait Func: Sized {
         }
     }
 
-    fn intrinsic_fn<U>(&self, f: impl FnOnce(Self::Intrinsics) -> U) -> U {
-        f(self.intrinsics())
+    fn intrinsics(&self) -> IntrinsicCodegen<'_, Self::Intrinsics> {
+        IntrinsicCodegen::new(self.cx())
     }
 
     fn from_ctx(ctx: ContextRef<'static>) -> Self

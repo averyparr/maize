@@ -9,8 +9,7 @@ type TileT = rtc_tile::BF16_16x16;
 
 pub fn test_inner() {
     let kernel = new_ptx_kernel::<(Global<M<&mut <TileT as WarpTileTy>::FragT>>,)>();
-    let mut c_shared =
-        kernel.intrinsic_fn(|i| i.alloc_aligned_shared::<Tile<TileT>>(kernel.cx(), 16));
+    let mut c_shared = kernel.intrinsics().alloc_aligned_shared::<Tile<TileT>>(16);
     kernel.use_fast_math();
     let (mut c,) = kernel.get_args();
 
@@ -24,7 +23,7 @@ pub fn test_inner() {
 
     let asm = kernel.finalize().compile_asm_at_opt_with_hooks(
         &SM::SM90,
-        OptimizationLevel::Aggressive,
+        OptimizationLevel::Default,
         print_at,
         |arg| {
             print_at(arg);

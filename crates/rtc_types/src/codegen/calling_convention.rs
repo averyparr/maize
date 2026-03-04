@@ -14,9 +14,6 @@ macro_rules! calling_conv {
             type Args = Args;
             type Ret = Void;
             type Intrinsics = $intrinsics;
-            fn intrinsics(&self) -> Self::Intrinsics {
-                $intrinsics
-            }
             fn new(cx: FnCodegen) -> Self {
                 Self(cx, PhantomData)
             }
@@ -33,9 +30,6 @@ macro_rules! calling_conv {
             type Args = Args;
             type Ret = Ret;
             type Intrinsics = $intrinsics;
-            fn intrinsics(&self) -> Self::Intrinsics {
-                $intrinsics
-            }
             fn new(cx: FnCodegen) -> Self {
                 Self(cx, PhantomData)
             }

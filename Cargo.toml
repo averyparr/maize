@@ -4,5 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-rtc_core = { path = "./crates/rtc_core" }
+rtc_tile = { path = "./crates/rtc_tile" }
 rtc_types = { path = "./crates/rtc_types" }
+
+[profile.release]
+debug = true

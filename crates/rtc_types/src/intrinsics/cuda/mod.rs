@@ -11,7 +11,8 @@ use inkwell::{
 use crate::{
     codegen::{FnCodegen, Func, new_ptx_kernel, target_cpu::cuda::SM},
     intrinsics::{
-        BinaryIntrinsic, ConstructibleIntrinsicsLibrary, IntrinsicsLibrary, UnaryIntrinsic,
+        BinaryIntrinsic, IntrinsicCodegen, IntrinsicsLibrary, StatelessIntrinsicsLibrary,
+        UnaryIntrinsic,
     },
     ty::{AddrspacePtr, M, R, SizedTy, cuda::Shared, raw::*},
     val::Val,
@@ -133,39 +134,6 @@ impl CUDA {
         T::call_intrinsic(lhs, rhs, true)
     }
 
-    pub fn alloc_aligned_shared<'a, T: SizedTy>(
-        &self,
-        cg: &'a FnCodegen,
-        align: u32,
-    ) -> Val<'a, Shared<M<&'a mut T>>> {
-        assert!(
-            align % T::ALIGN == 0,
-            "must be able to align properly to {}",
-            std::any::type_name::<T>()
-        );
-        let ty = T::ty(cg.ctx());
-        let global_val = cg.module().add_global(
-            ty,
-            Some(AddressSpace::from(Shared::<M<&mut T>>::ADDRSPACE)),
-            "const_sized_shared",
-        );
-        global_val.set_initializer(&T::undef(cg.ctx()));
-        global_val.set_alignment(T::ALIGN);
-        unsafe { Val::new_from_value(cg, global_val.as_basic_value_enum()) }
-    }
-
-    pub fn alloc_shared<'a, T: SizedTy>(&self, cg: &'a FnCodegen) -> Val<'a, Shared<M<&'a mut T>>> {
-        let ty = T::ty(cg.ctx());
-        let global_val = cg.module().add_global(
-            ty,
-            Some(AddressSpace::from(Shared::<M<&mut T>>::ADDRSPACE)),
-            "const_sized_shared",
-        );
-        global_val.set_initializer(&T::undef(cg.ctx()));
-        global_val.set_alignment(T::ALIGN);
-        unsafe { Val::new_from_value(cg, global_val.as_basic_value_enum()) }
-    }
-
     fn nullary_u32_intrinsic<'a>(cx: &'a FnCodegen, name: &str) -> Val<'a, U32> {
         let intrinsic = Intrinsic::find(name).expect("Should exist");
         let function = intrinsic
@@ -179,8 +147,41 @@ impl CUDA {
         .unwrap_basic();
         unsafe { Val::new_from_value(cx, raw_ret) }
     }
-    pub fn laneid<'a>(&self, cx: &'a FnCodegen) -> Val<'a, U32> {
-        Self::nullary_u32_intrinsic(cx, "llvm.nvvm.read.ptx.sreg.laneid")
+}
+
+impl<'a> IntrinsicCodegen<'a, CUDA> {
+    pub fn alloc_aligned_shared<T: SizedTy>(self, align: u32) -> Val<'a, Shared<M<&'a mut T>>> {
+        let cx = self.cx();
+        assert!(
+            align % T::ALIGN == 0,
+            "must be able to align properly to {}",
+            std::any::type_name::<T>()
+        );
+        let ty = T::ty(cx.ctx());
+        let global_val = cx.module().add_global(
+            ty,
+            Some(AddressSpace::from(Shared::<M<&mut T>>::ADDRSPACE)),
+            "const_sized_shared",
+        );
+        global_val.set_initializer(&T::undef(cx.ctx()));
+        global_val.set_alignment(T::ALIGN);
+        unsafe { Val::new_from_value(cx, global_val.as_basic_value_enum()) }
+    }
+
+    pub fn alloc_shared<T: SizedTy>(self) -> Val<'a, Shared<M<&'a mut T>>> {
+        let cx = self.cx();
+        let ty = T::ty(cx.ctx());
+        let global_val = cx.module().add_global(
+            ty,
+            Some(AddressSpace::from(Shared::<M<&mut T>>::ADDRSPACE)),
+            "const_sized_shared",
+        );
+        global_val.set_initializer(&T::undef(cx.ctx()));
+        global_val.set_alignment(T::ALIGN);
+        unsafe { Val::new_from_value(cx, global_val.as_basic_value_enum()) }
+    }
+    pub fn laneid(&self, cx: &'a FnCodegen) -> Val<'a, U32> {
+        CUDA::nullary_u32_intrinsic(cx, "llvm.nvvm.read.ptx.sreg.laneid")
     }
 }
 
@@ -193,7 +194,7 @@ impl IntrinsicsLibrary for CUDA {
     }
 }
 
-impl ConstructibleIntrinsicsLibrary for CUDA {
+impl StatelessIntrinsicsLibrary for CUDA {
     fn new() -> Self {
         Self
     }
