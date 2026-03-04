@@ -69,6 +69,7 @@ where
 
 pub use args::IntoFuncArgs;
 pub use arithmetic::{IntMathTy, MathTy, MathVariant};
+pub use bitcast::BitcastableTy;
 pub use contiguous::ConstSizeContiguousTy;
 pub use func::FnRetTy;
 pub use ptr::{AddrspacePtr, ConstPtrTy, MutPtrTy, MutTy, RawPtrTy, RefTy};

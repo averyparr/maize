@@ -18,7 +18,8 @@ macro_rules! declare_zst_types {
 }
 
 declare_zst_types!(
-    I8, I16, I32, I64, I128, U8, U16, U32, U64, U128, F16, BF16, F32, F64, F128, Void, Bool
+    I8, I16, I32, I64, I128, U8, U16, U32, U64, U128, F16, BF16, F32, F64, F128, Void, Bool, E4M3,
+    E5M2
 );
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
@@ -58,5 +59,6 @@ pub mod int {
 
 pub mod float {
     pub use super::{BF16, F16, F128};
+    pub use super::{E4M3, E5M2};
     pub use super::{F32, F64};
 }

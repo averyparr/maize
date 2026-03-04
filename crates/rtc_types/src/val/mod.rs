@@ -107,8 +107,13 @@ impl<'ctx, T: ?Sized> Val<'ctx, T> {
     where
         T: ValTy,
     {
-        let t = T::zeros(self.ctx());
-        unsafe { Self::new_from_value(self.cx(), t.as_basic_value_enum()) }
+        Self::zeros(self.cx())
+    }
+    pub fn zeros(cx: &'ctx FnCodegen) -> Self
+    where
+        T: ValTy,
+    {
+        unsafe { Self::new_from_value(cx, T::zeros(cx.ctx()).as_basic_value_enum()) }
     }
 
     /// # Safety: This is identical to ::std::mem::transmute.

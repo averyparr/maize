@@ -1,5 +1,6 @@
 pub mod bf16_tile;
 mod ldsm;
+pub mod mma;
 use std::marker::PhantomData;
 
 use rtc_types::{

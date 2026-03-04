@@ -1,4 +1,7 @@
-use inkwell::{types::FloatType, values::BasicValue};
+use inkwell::{
+    types::FloatType,
+    values::{BasicValue, FastMathFlags},
+};
 
 use crate::{
     intrinsics::{
@@ -108,7 +111,6 @@ impl<'a, T: TranscendentalTy> Val<'a, T> {
         T::sin(self)
     }
     pub fn cos(self) -> Self {
-        const APPROX_FN: u32 = 1 << 6;
         let res = T::cos(self);
         // This is necessary because these intrinsics
         // are _only_ available in approx variants
@@ -117,12 +119,12 @@ impl<'a, T: TranscendentalTy> Val<'a, T> {
             .as_basic_value_enum()
             .as_instruction_value()
         {
-            ins.set_fast_math_flags(APPROX_FN);
+            ins.set_fast_math_flags(FastMathFlags::ApproxFunc)
+                .expect("Setting approx function should not fail on a fn ret val");
         }
         res
     }
     pub fn sqrt(self) -> Self {
-        const APPROX_FN: u32 = 1 << 6;
         let res = T::sqrt(self);
         // This is necessary because these intrinsics
         // are _only_ available in approx variants
@@ -131,7 +133,8 @@ impl<'a, T: TranscendentalTy> Val<'a, T> {
             .as_basic_value_enum()
             .as_instruction_value()
         {
-            ins.set_fast_math_flags(APPROX_FN);
+            ins.set_fast_math_flags(FastMathFlags::ApproxFunc)
+                .expect("Setting approx function should not fail on a fn ret val");
         }
         res
     }

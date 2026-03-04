@@ -43,6 +43,8 @@ impl_size_align!(
     F64 => f64,
     F128 => u128,
     BF16 => u16,
+    E5M2 => u8,
+    E4M3 => u8,
 
     I8 => i8,
     I16 => i16,

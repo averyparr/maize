@@ -293,6 +293,13 @@ impl_reflect_for_primitive!(
     F64 => f64;
 );
 
+#[expect(unused)]
+pub struct V2F16(u32);
+
+impl StructReflectTy for V<F16, 2> {
+    type RealStruct = V2F16;
+}
+
 pub trait AccessibleStructTy: StructReflectTy {
     type Accessor<'a>;
     type AccessorRef<'a, 'b, Ref: RefTy + 'b>

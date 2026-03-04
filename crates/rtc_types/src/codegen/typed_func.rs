@@ -121,8 +121,8 @@ impl<Ret: FnRetTy, Args: IntoFuncArgs> RawFunc<Ret, Args> {
     pub fn new(fn_val: FunctionValue<'static>) -> Self {
         let fn_ty = fn_val.get_type();
         let ctx = fn_ty.get_context();
-        let typed_fn_ty = Ret::fn_ty::<Args>(ctx);
-        assert_eq!(fn_ty, typed_fn_ty);
+        let type_system_fn_ty = Ret::fn_ty::<Args>(ctx);
+        assert_eq!(fn_ty, type_system_fn_ty);
         Self(fn_val, PhantomData)
     }
     pub fn raw(self) -> FunctionValue<'static> {
@@ -195,6 +195,7 @@ impl FnCodegen {
         let Some(intrinsic) = Intrinsic::find(name) else {
             panic!("Unable to find intrinsic '{name}'");
         };
+
         let param_types = Args::produce_args(self.ctx());
         let ret = intrinsic
             .get_declaration(self.module(), param_types.as_ref())
