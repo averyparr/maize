@@ -85,29 +85,29 @@ struct_reflect!(pub struct WarpRetF64_16x8 {
 
 impl WarpRetF32_16x8 {
     fn unpack(val: Val<'_, Self>) -> Val<'_, V<F32, 4>> {
-        let a = val.as_ref().accessor();
-        Val::from_elements([a.d0.load(), a.d1.load(), a.d2.load(), a.d3.load()])
+        let a = val.into_accessor();
+        Val::from_elements([a.d0, a.d1, a.d2, a.d3])
     }
 }
 impl WarpRetF16_16x8 {
     fn unpack(val: Val<'_, Self>) -> Val<'_, V<F16, 4>> {
-        let a = val.as_ref().accessor();
-        let [d0, d1] = a.d01.load().elements();
-        let [d2, d3] = a.d23.load().elements();
+        let a = val.into_accessor();
+        let [d0, d1] = a.d01.elements();
+        let [d2, d3] = a.d23.elements();
         Val::from_elements([d0, d1, d2, d3])
     }
 }
 
 impl WarpRetF64_8x8 {
     fn unpack(val: Val<'_, Self>) -> Val<'_, V<F64, 2>> {
-        let a = val.as_ref().accessor();
-        Val::from_elements([a.d0.load(), a.d1.load()])
+        let a = val.into_accessor();
+        Val::from_elements([a.d0, a.d1])
     }
 }
 
 impl WarpRetF64_16x8 {
     fn unpack(val: Val<'_, Self>) -> Val<'_, V<F64, 4>> {
-        let a = val.as_ref().accessor();
-        Val::from_elements([a.d0.load(), a.d1.load(), a.d2.load(), a.d3.load()])
+        let a = val.into_accessor();
+        Val::from_elements([a.d0, a.d1, a.d2, a.d3])
     }
 }

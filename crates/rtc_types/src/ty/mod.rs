@@ -70,7 +70,7 @@ where
 pub use args::IntoFuncArgs;
 pub use arithmetic::{IntMathTy, MathTy, MathVariant};
 pub use bitcast::BitcastableTy;
-pub use contiguous::ConstSizeContiguousTy;
+pub use contiguous::{ContiguousUniformTy, HowToExtractElements, UniformTy};
 pub use func::FnRetTy;
 pub use ptr::{AddrspacePtr, ConstPtrTy, MutPtrTy, MutTy, RawPtrTy, RefTy};
 pub use raw::{Bool, M, P, R, V, Void, float::*, int::*};

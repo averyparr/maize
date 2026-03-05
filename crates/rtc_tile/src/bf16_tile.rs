@@ -20,9 +20,9 @@ impl WarpSmemLoadTileTy for MmaBf16_16x16 {
         ptr: &mut Val<'a, Shared<M<&'b mut Tile<Self>>>>,
         lane: Val<'a, U32>,
     ) -> Val<'a, Self::FragT> {
-        let row = lane.copy() % 16;
-        let col_xormask = row.copy() % 2;
-        let col_block = (lane.copy() / 16) ^ col_xormask;
+        let row = lane % 16;
+        let col_xormask = row % 2;
+        let col_block = (lane / 16) ^ col_xormask;
         let tile_ptr = ptr.reborrow_mut().as_mut_ptr();
         let elem_ptr = tile_ptr.ptr_cast::<U128>();
         let offset_per_row = Self::COLS / (U128::SIZE / BF16::SIZE);

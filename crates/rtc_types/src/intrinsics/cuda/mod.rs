@@ -145,7 +145,7 @@ impl CUDA {
         }
         .try_as_basic_value()
         .unwrap_basic();
-        unsafe { Val::new_from_value(cx, raw_ret) }
+        unsafe { Val::new(cx, raw_ret) }
     }
 }
 
@@ -165,7 +165,7 @@ impl<'a> IntrinsicCodegen<'a, CUDA> {
         );
         global_val.set_initializer(&T::undef(cx.ctx()));
         global_val.set_alignment(T::ALIGN);
-        unsafe { Val::new_from_value(cx, global_val.as_basic_value_enum()) }
+        unsafe { Val::new(cx, global_val.as_basic_value_enum()) }
     }
 
     pub fn alloc_shared<T: SizedTy>(self) -> Val<'a, Shared<M<&'a mut T>>> {
@@ -178,7 +178,7 @@ impl<'a> IntrinsicCodegen<'a, CUDA> {
         );
         global_val.set_initializer(&T::undef(cx.ctx()));
         global_val.set_alignment(T::ALIGN);
-        unsafe { Val::new_from_value(cx, global_val.as_basic_value_enum()) }
+        unsafe { Val::new(cx, global_val.as_basic_value_enum()) }
     }
     pub fn laneid(&self) -> Val<'a, U32> {
         CUDA::nullary_u32_intrinsic(self.cx(), "llvm.nvvm.read.ptx.sreg.laneid")
@@ -187,8 +187,8 @@ impl<'a> IntrinsicCodegen<'a, CUDA> {
 
 impl IntrinsicsLibrary for CUDA {
     fn assert(&self, cond: Val<'_, Bool>, message: &str, file: &str, line: u32, function: &str) {
-        let raw_val = cond.get_ll_typed();
-        let not_cond = !cond.copy();
+        let raw_val = cond.ll_typed();
+        let not_cond = !cond;
         (not_cond).branch(|| Self::call_assert_fail(&cond.cx(), message, file, line, function));
         self.call_assume(raw_val, cond.cx())
     }

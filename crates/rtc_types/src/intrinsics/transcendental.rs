@@ -114,11 +114,7 @@ impl<'a, T: TranscendentalTy> Val<'a, T> {
         let res = T::cos(self);
         // This is necessary because these intrinsics
         // are _only_ available in approx variants
-        if let Some(ins) = res
-            .get_ll_typed()
-            .as_basic_value_enum()
-            .as_instruction_value()
-        {
+        if let Some(ins) = res.ll_typed().as_basic_value_enum().as_instruction_value() {
             ins.set_fast_math_flags(FastMathFlags::ApproxFunc)
                 .expect("Setting approx function should not fail on a fn ret val");
         }
@@ -128,11 +124,7 @@ impl<'a, T: TranscendentalTy> Val<'a, T> {
         let res = T::sqrt(self);
         // This is necessary because these intrinsics
         // are _only_ available in approx variants
-        if let Some(ins) = res
-            .get_ll_typed()
-            .as_basic_value_enum()
-            .as_instruction_value()
-        {
+        if let Some(ins) = res.ll_typed().as_basic_value_enum().as_instruction_value() {
             ins.set_fast_math_flags(FastMathFlags::ApproxFunc)
                 .expect("Setting approx function should not fail on a fn ret val");
         }

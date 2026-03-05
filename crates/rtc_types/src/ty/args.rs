@@ -64,7 +64,7 @@ macro_rules! impl_into_func_args {
                 // so we can be confident that the type-unsafe cast here is nonetheless correct
                 unsafe {
                     Some(($(
-                        Val::<'a, $names>::new_from_value(
+                        Val::<'a, $names>::new(
                             cx,
                             func.get_nth_param($idx)
                                 .expect("Param number mismatch")
@@ -75,7 +75,7 @@ macro_rules! impl_into_func_args {
             fn args_to_raw(args: Self::ArgValues<'_>) -> impl AsRef<[BasicMetadataValueEnum<'static>]> {
                 let ($($names,)*) = args;
                 [$(
-                    $names.get_ll_typed().as_basic_value_enum().into(),
+                    $names.ll_typed().as_basic_value_enum().into(),
                 )*]
             }
         }

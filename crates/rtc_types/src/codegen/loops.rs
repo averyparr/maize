@@ -21,10 +21,10 @@ pub trait Looper<'a> {
 impl<'a> Looper<'a> for Range<Val<'a, U32>> {
     type ItemT = U32;
     fn init_fn(&self) -> Val<'a, Self::ItemT> {
-        self.start.copy()
+        self.start
     }
     fn decision_fn(&self, val: &Val<'a, Self::ItemT>) -> Val<'a, Bool> {
-        val.lt(self.end.copy())
+        val.lt(self.end)
     }
     fn update_fn(val: Val<'a, Self::ItemT>) -> Val<'a, U32> {
         val.const_like(1) + val
@@ -86,9 +86,9 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         match self {
             Self::PreLoop(looper) => {
-                let mut init_val = looper.init_fn();
+                let mut init_val = looper.init_fn().with_storage();
                 let cx = init_val.cx();
-                let raw_ptr = init_val.raw_ptr();
+                let ptr_to_val = init_val.alloca_ptr();
                 let init_mut = init_val.as_mut();
 
                 let header_block = cx.ctx().append_basic_block(cx.func(), "loop_header");
@@ -102,7 +102,7 @@ where
                 let done_block = cx.ctx().append_basic_block(cx.func(), "done_block");
                 let _jne = unsafe {
                     cx.with_builder(|b| {
-                        b.build_conditional_branch(decision.get_ll_typed(), loop_block, done_block)
+                        b.build_conditional_branch(decision.ll_typed(), loop_block, done_block)
                     })
                 }
                 .expect("conditional jump should work");
@@ -110,16 +110,13 @@ where
                 cx.set_bb(loop_block);
 
                 let ret = init_mut.load();
-                *self = Loop::AfterLoop(cx, raw_ptr, done_block, header_block);
+                *self = Loop::AfterLoop(cx, ptr_to_val, done_block, header_block);
 
                 Some(ret)
             }
             Loop::AfterLoop(cx, ptr_to_val, done_block, header_block) => {
                 let mut mut_ptr = unsafe {
-                    Val::<'_, M<&mut L::ItemT>>::new_from_value(
-                        cx,
-                        ptr_to_val.as_basic_value_enum(),
-                    )
+                    Val::<'_, M<&mut L::ItemT>>::new(cx, ptr_to_val.as_basic_value_enum())
                 };
                 mut_ptr.store(L::update_fn(mut_ptr.load()));
 

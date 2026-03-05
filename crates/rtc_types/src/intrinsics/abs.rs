@@ -62,7 +62,7 @@ trait AbsAbleTy: for<'a> ValTy<Type<'a>: AbsAble> {
                 val.cx().with_builder(|b| {
                     b.build_call(
                         function,
-                        &[val.get_ll_typed().as_basic_value_enum().into()],
+                        &[val.ll_typed().as_basic_value_enum().into()],
                         "call_abs",
                     )
                 })
@@ -75,7 +75,7 @@ trait AbsAbleTy: for<'a> ValTy<Type<'a>: AbsAble> {
             val.cx().apply_ins_opt(ins);
         }
 
-        unsafe { Val::new_from_value(val.cx(), raw_ret.as_basic_value_enum()) }
+        unsafe { Val::new(val.cx(), raw_ret.as_basic_value_enum()) }
     }
 }
 

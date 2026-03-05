@@ -12,10 +12,10 @@ pub trait BitcastableTy: SizedTy {
     unsafe fn bitcast_to<To: BitcastableTy>(val: Val<'_, Self>) -> Val<'_, To> {
         let raw_val = unsafe {
             val.cx()
-                .with_builder(|b| b.build_bit_cast(val.get_raw(), To::ty(val.ctx()), "bitcast"))
+                .with_builder(|b| b.build_bit_cast(val.raw(), To::ty(val.ctx()), "bitcast"))
         }
         .expect("Bitcast should succeed here");
-        unsafe { Val::new_from_value(val.cx(), raw_val) }
+        unsafe { Val::new(val.cx(), raw_val) }
     }
 }
 

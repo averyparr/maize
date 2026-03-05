@@ -10,17 +10,21 @@ use inkwell::{
     passes::PassBuilderOptions,
     support::LLVMString,
     targets::{FileType, InitializationConfig, Target, TargetTriple},
-    types::{BasicType, StructType},
-    values::{BasicValue, FunctionValue, InstructionValue, StructValue},
+    types::{BasicType, StructType, VectorType},
+    values::{
+        AggregateValue, AnyValue, BasicValue, BasicValueEnum, FunctionValue, InstructionValue,
+        PointerValue, StructValue, VectorBaseValue, VectorValue,
+    },
 };
 
 use crate::{
     intrinsics::{IntrinsicCodegen, IntrinsicsLibrary, StatelessIntrinsicsLibrary},
     ty::{
-        BF16, Bool, F16, F32, F64, FnRetTy, I8, I16, I32, I64, IntoFuncArgs, U8, U16, U32, U64, V,
-        ValTy, Void, VoidTy, vec::VectorizableTy,
+        BF16, Bool, ConstPtrTy, F16, F32, F64, FnRetTy, HowToExtractElements, I8, I16, I32, I64,
+        IntoFuncArgs, Ty, U8, U16, U32, U64, UniformTy, V, ValTy, Void, VoidTy,
+        vec::VectorizableTy,
     },
-    val::Val,
+    val::{S, Val},
 };
 
 use super::instruction_opt::InstructionOpt;
@@ -43,7 +47,7 @@ macro_rules! impl_into_constant {
                 fn to_const(assoc: impl Into<Self::Assoc>, cx: &FnCodegen) -> Val<'_, Self> {
                     let val_as_assoc = assoc.into();
                     let raw = cx.ctx().$ty_fn().$val_fn(val_as_assoc as _, $($($args,)*)?);
-                    unsafe {Val::new_from_value(cx, raw.as_basic_value_enum())}
+                    unsafe {Val::new(cx, raw.as_basic_value_enum())}
                 }
             }
 
@@ -51,7 +55,7 @@ macro_rules! impl_into_constant {
                 type Assoc = $trace_ty;
                 fn into_const_val(self, cx: &FnCodegen) -> Val<'_, Self::Assoc> {
                     let raw = cx.ctx().$ty_fn().$val_fn(self as _, $($($args,)*)?);
-                    unsafe {Val::new_from_value(cx, raw.as_basic_value_enum())}
+                    unsafe {Val::new(cx, raw.as_basic_value_enum())}
                 }
             }
         )*
@@ -76,7 +80,7 @@ impl ConstValTy for BF16 {
     type Assoc = f32;
     fn to_const(assoc: impl Into<Self::Assoc>, cx: &FnCodegen) -> Val<'_, Self> {
         let raw = cx.ctx().bf16_type().const_float(assoc.into() as _);
-        unsafe { Val::new_from_value(cx, raw.as_basic_value_enum()) }
+        unsafe { Val::new(cx, raw.as_basic_value_enum()) }
     }
 }
 
@@ -84,7 +88,7 @@ impl ConstValTy for F16 {
     type Assoc = f32;
     fn to_const(assoc: impl Into<Self::Assoc>, cx: &FnCodegen) -> Val<'_, Self> {
         let raw = cx.ctx().f16_type().const_float(assoc.into() as _);
-        unsafe { Val::new_from_value(cx, raw.as_basic_value_enum()) }
+        unsafe { Val::new(cx, raw.as_basic_value_enum()) }
     }
 }
 
@@ -208,6 +212,17 @@ impl FnCodegen {
             should_ret
         }
     }
+    pub fn store_in_alloca<'a, T: Ty + ?Sized>(&self, val: Val<'a, T>) -> Val<'a, S<T>> {
+        let alloca_ptr =
+            unsafe { self.with_builder(|b| b.build_alloca(T::ty(self.ctx()), "alloca")) }
+                .expect("Alloca should succeed");
+        let raw_val = val.raw();
+        let _store = unsafe { self.with_builder(|b| b.build_store(alloca_ptr, raw_val)) }
+            .expect("Store should have succeeded");
+        // Safety: We have just moved the value into the alloca and so this
+        // type cast is valid
+        unsafe { Val::new(val.cx(), alloca_ptr.as_basic_value_enum()) }
+    }
     pub fn declare_function<Ret: FnRetTy, Args: IntoFuncArgs>(
         &self,
         name: &str,
@@ -242,31 +257,275 @@ impl FnCodegen {
             unsafe { self.with_builder(|b| b.build_call(fn_val.0, raw_args.as_ref(), "call_fn")) }
                 .expect("Call should have succeeded");
         let basic_val = raw_ret.try_as_basic_value().unwrap_basic();
-        unsafe { Val::new_from_value(self, basic_val) }
+        unsafe { Val::new(self, basic_val) }
     }
-    pub unsafe fn extract_struct_ptr_val<U, T>(&self, val: &Val<'_, T>, index: u32) -> Val<'_, U>
+
+    pub fn extract_elem<U, T: ?Sized>(&self, val: &Val<'_, T>, index: u32) -> U::Value<'static>
     where
-        for<'a> T: ValTy<Value<'a> = StructValue<'a>, Type<'a> = StructType<'a>>,
+        T: UniformTy,
         U: ValTy,
     {
-        let struct_ty = T::ty(self.ctx());
-        let field_ty = struct_ty
+        fn extract_as_vec(
+            cx: &FnCodegen,
+            vector: impl VectorBaseValue<'static>,
+            index: u32,
+        ) -> BasicValueEnum<'static> {
+            let index = cx.constant_from(index as u64).ll_typed();
+            unsafe { cx.with_builder(|b| b.build_extract_element(vector, index, "vextract")) }
+                .expect("[scalable] vector extract should have succeeded")
+        }
+        fn extract_as_agg(
+            cx: &FnCodegen,
+            agg: impl AggregateValue<'static>,
+            index: u32,
+        ) -> BasicValueEnum<'static> {
+            unsafe { cx.with_builder(|b| b.build_extract_value(agg, index, "agg_extract")) }
+                .expect("Aggregate extract should have succeeded")
+        }
+
+        let proposed_elem_ty = U::ty(self.ctx()).as_basic_type_enum();
+        let raw_val = val.raw();
+        let raw_val = match T::EXTRACTION_METHOD {
+            HowToExtractElements::Vector => {
+                let vector = raw_val.into_vector_value();
+                let elem_ty = vector.get_type().get_element_type();
+                assert_eq!(elem_ty, proposed_elem_ty);
+                extract_as_vec(self, vector, index)
+            }
+            HowToExtractElements::ScalableVector => {
+                let vector = raw_val.into_scalable_vector_value();
+                let elem_ty = vector.get_type().get_element_type();
+                assert_eq!(elem_ty, proposed_elem_ty);
+                extract_as_vec(self, vector, index)
+            }
+            HowToExtractElements::Array => {
+                let agg = raw_val.into_array_value();
+                let elem_ty = agg.get_type().get_element_type();
+                assert_eq!(elem_ty, proposed_elem_ty);
+                extract_as_agg(self, agg, index)
+            }
+            HowToExtractElements::Struct => {
+                let agg = raw_val.into_struct_value();
+                let elem_ty = agg
+                    .get_type()
+                    .get_field_type_at_index(index)
+                    .expect("Field out of range!");
+                assert_eq!(elem_ty, proposed_elem_ty);
+                extract_as_agg(self, agg, index)
+            }
+        };
+
+        U::type_val(raw_val.as_any_value_enum())
+    }
+    pub fn insert_elem<'a, U, T: ?Sized>(
+        &self,
+        agg: Val<'a, T>,
+        val: Val<'a, U>,
+        index: u32,
+    ) -> Val<'a, T>
+    where
+        T: UniformTy,
+        U: ValTy,
+    {
+        fn insert_as_vec(
+            cx: &FnCodegen,
+            vector: impl VectorBaseValue<'static>,
+            element: BasicValueEnum<'static>,
+            index: u32,
+        ) -> BasicValueEnum<'static> {
+            let index = cx.constant_from(index as u64).ll_typed();
+            unsafe { cx.with_builder(|b| b.build_insert_element(vector, element, index, "vins")) }
+                .expect("[scalable] Vector insert element should have succeded")
+                .as_basic_value_enum()
+        }
+        fn insert_as_agg(
+            cx: &FnCodegen,
+            agg: impl AggregateValue<'static>,
+            value: BasicValueEnum<'static>,
+            index: u32,
+        ) -> BasicValueEnum<'static> {
+            unsafe { cx.with_builder(|b| b.build_insert_value(agg, value, index, "agg_ins")) }
+                .expect("Aggregate insert element should have succeeded")
+                .as_basic_value_enum()
+        }
+
+        let element = val.raw();
+        let raw_val = val.raw();
+
+        let raw_val = match T::EXTRACTION_METHOD {
+            HowToExtractElements::Vector => {
+                let vector = raw_val.into_vector_value();
+                assert_eq!(vector.get_type().get_element_type(), raw_val.get_type());
+                insert_as_vec(self, vector, element, index)
+            }
+            HowToExtractElements::ScalableVector => {
+                let vector = raw_val.into_scalable_vector_value();
+                assert_eq!(vector.get_type().get_element_type(), raw_val.get_type());
+                insert_as_vec(self, vector, element, index)
+            }
+            HowToExtractElements::Array => {
+                let agg = raw_val.into_array_value();
+                assert_eq!(agg.get_type().get_element_type(), raw_val.get_type());
+                insert_as_agg(self, agg, element, index)
+            }
+            HowToExtractElements::Struct => {
+                let agg = raw_val.into_struct_value();
+                let elem_ty = agg
+                    .get_type()
+                    .get_field_type_at_index(index)
+                    .expect("Field index error!");
+                assert_eq!(elem_ty, raw_val.get_type());
+                insert_as_agg(self, agg, element, index)
+            }
+        };
+
+        unsafe { Val::new(agg.cx(), raw_val) }
+    }
+    pub fn get_elem_ptr<U, Ptr>(&self, ptr: &Val<'_, Ptr>, index: u32) -> PointerValue<'static>
+    where
+        Ptr: ConstPtrTy<PointeeTy: UniformTy>,
+        U: ValTy,
+    {
+        fn extract_as_vec_array(
+            cx: &FnCodegen,
+            pointee_ty: impl BasicType<'static>,
+            ptr: PointerValue<'static>,
+            index: u32,
+        ) -> PointerValue<'static> {
+            let zero = cx.constant_from(0u64).ll_typed();
+            let index = cx.constant_from(index as u64).ll_typed();
+            unsafe {
+                cx.with_builder(|b| {
+                    b.build_in_bounds_gep(pointee_ty, ptr, &[zero, index], "svarr_gep")
+                })
+            }
+            .expect("GEP for struct/vec/scalable vec should have succeeded")
+        }
+
+        let proposed_elem_ty = U::ty(self.ctx()).as_basic_type_enum();
+        let raw_ptr = ptr.ll_typed();
+        let pointee_ty = Ptr::PointeeTy::ty(self.ctx()).as_basic_type_enum();
+        match Ptr::PointeeTy::EXTRACTION_METHOD {
+            HowToExtractElements::Vector => {
+                let vec_ty = pointee_ty.into_vector_type();
+                assert_eq!(vec_ty.get_element_type(), proposed_elem_ty);
+                extract_as_vec_array(self, vec_ty, raw_ptr, index)
+            }
+            HowToExtractElements::ScalableVector => {
+                let scalable_vec_ty = pointee_ty.into_scalable_vector_type();
+                assert_eq!(scalable_vec_ty.get_element_type(), proposed_elem_ty);
+                extract_as_vec_array(self, scalable_vec_ty, raw_ptr, index)
+            }
+            HowToExtractElements::Array => {
+                let array_ty = pointee_ty.into_array_type();
+                assert_eq!(array_ty.get_element_type(), proposed_elem_ty);
+                extract_as_vec_array(self, array_ty, raw_ptr, index)
+            }
+            HowToExtractElements::Struct => {
+                let struct_ty = pointee_ty.into_struct_type();
+                let field_ty = struct_ty
+                    .get_field_type_at_index(index)
+                    .expect("Field idx should be in range");
+                assert_eq!(field_ty, proposed_elem_ty);
+
+                let offset_ptr = unsafe {
+                    self.with_builder(|b| {
+                        b.build_struct_gep(struct_ty, raw_ptr, index, "struct_gep")
+                    })
+                }
+                .expect("Struct GEP should succeed");
+                offset_ptr
+            }
+        }
+    }
+
+    pub fn extract_struct_ptr<U, Ptr>(
+        &self,
+        ptr: &Val<'_, Ptr>,
+        index: u32,
+    ) -> PointerValue<'static>
+    where
+        for<'ctx> Ptr: ConstPtrTy<
+            PointeeTy: ValTy<Type<'ctx> = StructType<'ctx>, Value<'ctx> = StructValue<'ctx>>,
+        >,
+        U: ValTy,
+    {
+        let pointee_ty = Ptr::PointeeTy::ty(self.ctx());
+        let field_ty = pointee_ty
             .get_field_type_at_index(index)
-            .expect("Field at type should be correct");
+            .expect("Field should be in-range");
         assert_eq!(field_ty, U::ty(self.ctx()).as_basic_type_enum());
 
-        let raw_ptr = val.raw_ptr();
+        let raw_ptr = ptr.ll_typed();
         let offset_ptr = unsafe {
-            self.with_builder(|b| {
-                b.build_struct_gep(T::ty(self.ctx()), raw_ptr, index, "struct_offset")
-            })
+            self.with_builder(|b| b.build_struct_gep(pointee_ty, raw_ptr, index, "struct_offset"))
         }
         .expect("Struct GEP should succeed");
-        // Safety: This `new` re-uses the alloca from `val`, but we've taken ownership
-        // over the Val<'_, T> so this should be safe. Even if T/U is copy, the user
-        // will have to write .copy() at the call site if they don't want it to be moved.
-        unsafe { Val::new(self, offset_ptr) }
+
+        offset_ptr
     }
+    pub fn extract_vec_ptr<U, Ptr>(&self, ptr: &Val<'_, Ptr>, index: u32) -> PointerValue<'static>
+    where
+        for<'ctx> Ptr: ConstPtrTy<
+            PointeeTy: ValTy<Type<'ctx> = VectorType<'ctx>, Value<'ctx> = VectorValue<'ctx>>,
+        >,
+        U: VectorizableTy,
+    {
+        let vec_ty = Ptr::PointeeTy::ty(self.ctx());
+        let elem_ty = vec_ty.get_element_type();
+        assert_eq!(elem_ty, U::ty(self.ctx()).as_basic_type_enum());
+
+        let raw_ptr = ptr.ll_typed();
+        let index = self.constant_from(index as u64).ll_typed();
+        let offset_ptr = unsafe {
+            self.with_builder(|b| b.build_in_bounds_gep(elem_ty, raw_ptr, &[index], "vec_offset"))
+        }
+        .expect("Vector GEP should succeed");
+
+        offset_ptr
+    }
+
+    pub fn extract_struct_val<U, StructT>(
+        &self,
+        val: &Val<'_, StructT>,
+        index: u32,
+    ) -> U::Value<'static>
+    where
+        for<'ctx> StructT: ValTy<Value<'ctx> = StructValue<'ctx>, Type<'ctx> = StructType<'ctx>>,
+        U: ValTy,
+    {
+        let struct_ty = StructT::ty(self.ctx());
+        let field_ty = struct_ty
+            .get_field_type_at_index(index)
+            .expect("Field should be in-range");
+        assert_eq!(field_ty, U::ty(self.ctx()).as_basic_type_enum());
+
+        let raw_val = val.ll_typed();
+        let raw_field_val = unsafe {
+            self.with_builder(|b| b.build_extract_value(raw_val, index, "extract_from_struct"))
+        }
+        .expect("Raw struct extraction should succeed");
+        U::type_val(raw_field_val.into())
+    }
+    pub fn extract_vec_val<U, VecT>(&self, val: &Val<'_, VecT>, index: u32) -> U::Value<'static>
+    where
+        for<'ctx> VecT: ValTy<Value<'ctx> = VectorValue<'ctx>, Type<'ctx> = VectorType<'ctx>>,
+        U: VectorizableTy,
+    {
+        let vec_ty = VecT::ty(self.ctx());
+        let elem_ty = vec_ty.get_element_type();
+        assert_eq!(elem_ty, U::ty(self.ctx()).as_basic_type_enum());
+
+        let raw_val = val.ll_typed();
+        let index = self.constant_from(index as u64).ll_typed();
+        let raw_elem_val = unsafe {
+            self.with_builder(|b| b.build_extract_element(raw_val, index, "extract_from_vec"))
+        }
+        .expect("Extract element from vec should succeeed");
+
+        U::type_val(raw_elem_val.into())
+    }
+
     pub fn print_module_to_string(&self) -> LLVMString {
         self.module().print_to_string()
     }

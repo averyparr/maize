@@ -79,7 +79,7 @@ fn call_unary_intrinsic<'a, T: ValTy + ?Sized>(
             .with_builder(|b| {
                 b.build_call(
                     fn_val,
-                    &[val.get_ll_typed().as_basic_value_enum().into()],
+                    &[val.ll_typed().as_basic_value_enum().into()],
                     intrinsic_name,
                 )
             })
@@ -90,7 +90,7 @@ fn call_unary_intrinsic<'a, T: ValTy + ?Sized>(
     if let Some(ins) = call_site.as_instruction_value() {
         val.cx().apply_ins_opt(ins);
     }
-    unsafe { Val::new_from_value(val.cx(), call_site) }
+    unsafe { Val::new(val.cx(), call_site) }
 }
 
 fn call_binary_intrinsic<'a, T: ValTy + ?Sized>(
@@ -115,8 +115,8 @@ fn call_binary_intrinsic<'a, T: ValTy + ?Sized>(
             b.build_call(
                 fn_val,
                 &[
-                    lhs.get_ll_typed().as_basic_value_enum().into(),
-                    rhs.get_ll_typed().as_basic_value_enum().into(),
+                    lhs.ll_typed().as_basic_value_enum().into(),
+                    rhs.ll_typed().as_basic_value_enum().into(),
                 ],
                 intrinsic_name,
             )
@@ -128,5 +128,5 @@ fn call_binary_intrinsic<'a, T: ValTy + ?Sized>(
     if let Some(ins) = call_site.as_instruction_value() {
         lhs.cx().apply_ins_opt(ins);
     }
-    unsafe { Val::new_from_value(lhs.cx(), call_site) }
+    unsafe { Val::new(lhs.cx(), call_site) }
 }

@@ -1,7 +1,7 @@
 use inkwell::values::BasicValue;
 
 use crate::{
-    ty::{ConstSizeContiguousTy, V, vec::VectorizableTy},
+    ty::{ContiguousUniformTy, V, vec::VectorizableTy},
     val::Val,
 };
 
@@ -10,7 +10,7 @@ where
     T: VectorizableTy,
 {
     pub fn elements(self) -> [Val<'a, T>; N] {
-        let raw = self.get_ll_typed();
+        let raw = self.ll_typed();
         // Safety:
         //  - We extract elements from the vector using indices
         //          which are below the size of the vector, so
@@ -23,12 +23,12 @@ where
                 .with_builder(|b| {
                     b.build_extract_element(
                         raw,
-                        self.cx().constant_from(index as u64).get_ll_typed(),
+                        self.cx().constant_from(index as u64).ll_typed(),
                         "get_elt_i",
                     )
                 })
                 .expect("extract_element failed");
-            Val::new_from_value(self.cx(), element.into())
+            Val::new(self.cx(), element.into())
         })
     }
 
@@ -41,18 +41,13 @@ where
             let idx = cx.constant_from(i as u64);
             vec_val = unsafe {
                 cx.with_builder(|b| {
-                    b.build_insert_element(
-                        vec_val,
-                        scalar.get_ll_typed(),
-                        idx.get_ll_typed(),
-                        "insert",
-                    )
+                    b.build_insert_element(vec_val, scalar.ll_typed(), idx.ll_typed(), "insert")
                 })
                 .expect("Insert element should succeed")
             };
         }
 
-        unsafe { Val::new_from_value(cx, vec_val.as_basic_value_enum()) }
+        unsafe { Val::new(cx, vec_val.as_basic_value_enum()) }
     }
 
     pub fn to_array(self) -> Val<'a, [T; N]> {

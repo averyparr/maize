@@ -38,13 +38,13 @@ where
     for<'a> From: ValTy<Value<'static>: ScalarConvertible>,
 {
     fn cvt(val: Val<'_, Self>) -> Val<'_, To> {
-        let raw = val.get_ll_typed();
+        let raw = val.ll_typed();
         let dst_ty = To::ty(val.ctx());
         let raw_cast = unsafe {
             val.cx()
                 .with_builder(|b| raw.cast_to(b, dst_ty.as_any_type_enum()))
         };
-        unsafe { Val::new_from_value(val.cx(), raw_cast) }
+        unsafe { Val::new(val.cx(), raw_cast) }
     }
 }
 
@@ -52,7 +52,7 @@ impl<From: VectorizableTy, To: VectorizableTy, const N: usize> ConvertibleTy<V<T
     for V<From, N>
 {
     fn cvt(val: Val<'_, Self>) -> Val<'_, V<To, N>> {
-        let raw = val.get_ll_typed();
+        let raw = val.ll_typed();
         let src_ty = raw.get_type();
         let dst_ty = V::<To, N>::ty(val.ctx());
         let element_type = src_ty.get_element_type();
@@ -72,7 +72,7 @@ impl<From: VectorizableTy, To: VectorizableTy, const N: usize> ConvertibleTy<V<T
             panic!("Attempted to cast between {src_ty:?} -> {dst_ty:?}");
         };
 
-        unsafe { Val::new_from_value(val.cx(), raw_cast.as_basic_value_enum()) }
+        unsafe { Val::new(val.cx(), raw_cast.as_basic_value_enum()) }
     }
 }
 

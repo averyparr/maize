@@ -28,8 +28,6 @@ pub fn test_inner() {
     let c_res = MMA::call(a_args, b_frag.load(), c_frag);
     d_frag.store(c_res);
 
-    let a = format_args!("{0}", "%3f");
-
     #[allow(unused)]
     let print_at = |cx: &FnCodegen| {
         println!("{}", cx.print_module_to_string().to_string_lossy());

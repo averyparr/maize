@@ -1,5 +1,5 @@
 use crate::{
-    ty::{ConstSizeContiguousTy, MutTy, R, RefTy, SizedTy, ValTy},
+    ty::{ContiguousUniformTy, MutTy, R, RefTy, SizedTy, ValTy},
     val::Val,
 };
 

@@ -103,43 +103,73 @@ macro_rules! struct_reflect {
                     unsafe {
                         Self(
                             $(
-                                cx.extract_struct_ptr_val::<$field_type, _>(&val, iter.next().expect("range failure!")),
+                                $crate::val::__structreflect::_new(
+                                    cx,
+                                    $crate::inkwell::values::BasicValue::as_basic_value_enum(
+                                        &cx.extract_struct_val::<$field_type, Full>(
+                                            &val,
+                                            iter.next().expect("range failure!")
+                                        )
+                                    )
+                                ),
                             )*
                         )
                     }
                 }
             }
             impl<'a, 'b, Ref: 'b + $crate::ty::RefTy> AccessorRef<'a, 'b, Ref> {
-                pub(super) fn new(val: $crate::val::Val<'a, Ref>) -> Self {
+                pub(super) fn new(val: $crate::val::Val<'a, Ref>) -> Self
+                where
+                    Ref: $crate::ty::RefTy<PointeeTy = $name$(<$($generics: StructReflect),*>)?>,
+                {
                     type Full = $name$(<$($generics: StructReflect),*>)?;
                     let raw_ty = <Full as $crate::ty::Ty>::ty($crate::val::__structreflect::_ctx(&val));
                     let num_fields = raw_ty.count_fields();
                     let mut iter = 0..num_fields;
                     let cx = val.cx();
-                    let ptr_to_struct = $crate::val::__structreflect::_get_lltyped(&val);
-                    let raw_struct = unsafe {$crate::val::Val::new(cx, ptr_to_struct)};
+                    let ptr_to_struct = $crate::val::__structreflect::_raw(&val);
+                    let raw_struct = unsafe {$crate::val::__structreflect::_new(cx, ptr_to_struct)};
                     unsafe {
                         Self(
                             $(
-                                $crate::val::Val::new_from_value(cx, $crate::inkwell::values::BasicValue::as_basic_value_enum(&cx.extract_struct_ptr_val::<$field_type, Full>(&raw_struct, iter.next().expect("range failure!")).raw_ptr())),
+                                $crate::val::__structreflect::_new(
+                                    cx,
+                                    $crate::inkwell::values::BasicValue::as_basic_value_enum(
+                                        &cx.extract_struct_ptr::<$field_type, Ref>(
+                                            &raw_struct,
+                                            iter.next().expect("range failure!")
+                                        )
+                                    )
+                                ),
                             )*
                         )
                     }
                 }
             }
             impl<'a, 'b, Mut: 'b + $crate::ty::MutTy> AccessorMut<'a, 'b, Mut> {
-                pub(super) fn new(val: $crate::val::Val<'a, Mut>) -> Self {
+                pub(super) fn new(val: $crate::val::Val<'a, Mut>) -> Self
+                where
+                    Mut: $crate::ty::MutTy<PointeeTy = $name$(<$($generics: StructReflect),*>)?>,
+                {
                     type Full = $name$(<$($generics: StructReflect),*>)?;
                     let raw_ty = <Full as $crate::ty::Ty>::ty($crate::val::__structreflect::_ctx(&val));
                     let num_fields = raw_ty.count_fields();
                     let mut iter = 0..num_fields;
                     let cx = val.cx();
-                    let ptr_to_struct = $crate::val::__structreflect::_get_lltyped(&val);
-                    let raw_struct = unsafe {$crate::val::Val::new(cx, ptr_to_struct)};
+                    let ptr_to_struct = $crate::val::__structreflect::_raw(&val);
+                    let raw_struct = unsafe {$crate::val::__structreflect::_new(cx, ptr_to_struct)};
                     unsafe {
                         Self(
                             $(
-                                $crate::val::Val::new_from_value(cx, $crate::inkwell::values::BasicValue::as_basic_value_enum(&cx.extract_struct_ptr_val::<$field_type, Full>(&raw_struct, iter.next().expect("range failure!")).raw_ptr())),
+                                $crate::val::__structreflect::_new(
+                                    cx,
+                                    $crate::inkwell::values::BasicValue::as_basic_value_enum(
+                                        &cx.extract_struct_ptr::<$field_type, Mut>(
+                                            &raw_struct,
+                                            iter.next().expect("range failure!")
+                                        )
+                                    )
+                                ),
                             )*
                         )
                     }
@@ -186,8 +216,8 @@ macro_rules! struct_reflect {
                 ),*
             }
 
-            impl<'a, $($generics),*> Accessor<'a, $($generics),*> {
-                pub(super) fn new(val: $crate::val::Val<'a, $name$(<$($generics),*>)?>) -> Self {
+            impl<'a, $($($generics: StructReflect),*)?> Accessor<'a, $($generics: StructReflect),*> {
+                pub(super) fn new(val: $crate::val::Val<'a, $name$(<$($generics: StructReflect),*>)?>) -> Self {
                     type Full = $name$(<$($generics),*>)?;
                     let raw_ty = <Full as $crate::ty::Ty>::ty($crate::val::__structreflect::_ctx(&val));
                     let num_fields = raw_ty.count_fields();
@@ -196,33 +226,41 @@ macro_rules! struct_reflect {
                     unsafe {
                         Self {
                             $(
-                                $field_name: cx.extract_struct_ptr_val::<$field_type, _>(&val, iter.next().expect("range failure!"))
-                            ),*
+                                $field_name: $crate::val::__structreflect::_new(
+                                    cx,
+                                    $crate::inkwell::values::BasicValue::as_basic_value_enum(
+                                        &cx.extract_struct_val::<$field_type, Full>(
+                                            &val,
+                                            iter.next().expect("range failure!")
+                                        )
+                                    )
+                                ),
+                            )*
                         }
                     }
                 }
             }
-
             impl<'a, 'b, Ref: 'b + $crate::ty::RefTy> AccessorRef<'a, 'b, Ref> {
-                pub(super) fn new(val: $crate::val::Val<'a, Ref>) -> Self {
+                pub(super) fn new(val: $crate::val::Val<'a, Ref>) -> Self
+                where
+                    Ref: $crate::ty::RefTy<PointeeTy = $name$(<$($generics: StructReflect),*>)?>,
+                {
                     type Full = $name$(<$($generics: StructReflect),*>)?;
                     let raw_ty = <Full as $crate::ty::Ty>::ty($crate::val::__structreflect::_ctx(&val));
                     let num_fields = raw_ty.count_fields();
                     let mut iter = 0..num_fields;
                     let cx = val.cx();
-                    let ptr_to_struct = $crate::val::__structreflect::_get_lltyped(&val);
+                    let ptr_to_struct = $crate::val::__structreflect::_raw(&val);
                     let raw_struct = unsafe {$crate::val::__structreflect::_new(cx, ptr_to_struct)};
                     unsafe {
-                        Self{
+                        Self {
                             $(
-                                $field_name: $crate::val::__structreflect::_new_from_value(
+                                $field_name: $crate::val::__structreflect::_new(
                                     cx,
                                     $crate::inkwell::values::BasicValue::as_basic_value_enum(
-                                        &$crate::val::__structreflect::_raw_ptr(
-                                            &cx.extract_struct_ptr_val::<$field_type, Full>(
-                                                &raw_struct,
-                                                iter.next().expect("range failure!")
-                                            )
+                                        &cx.extract_struct_ptr::<$field_type, Ref>(
+                                            &raw_struct,
+                                            iter.next().expect("range failure!")
                                         )
                                     )
                                 ),
@@ -232,25 +270,26 @@ macro_rules! struct_reflect {
                 }
             }
             impl<'a, 'b, Mut: 'b + $crate::ty::MutTy> AccessorMut<'a, 'b, Mut> {
-                pub(super) fn new(val: $crate::val::Val<'a, Mut>) -> Self {
+                pub(super) fn new(val: $crate::val::Val<'a, Mut>) -> Self
+                where
+                    Mut: $crate::ty::MutTy<PointeeTy = $name$(<$($generics: StructReflect),*>)?>,
+                {
                     type Full = $name$(<$($generics: StructReflect),*>)?;
                     let raw_ty = <Full as $crate::ty::Ty>::ty($crate::val::__structreflect::_ctx(&val));
                     let num_fields = raw_ty.count_fields();
                     let mut iter = 0..num_fields;
                     let cx = val.cx();
-                    let ptr_to_struct = $crate::val::__structreflect::_get_lltyped(&val);
+                    let ptr_to_struct = $crate::val::__structreflect::_raw(&val);
                     let raw_struct = unsafe {$crate::val::__structreflect::_new(cx, ptr_to_struct)};
                     unsafe {
-                        Self{
+                        Self {
                             $(
-                                $field_name: $crate::val::__structreflect::_new_from_value(
+                                $field_name: $crate::val::__structreflect::_new(
                                     cx,
                                     $crate::inkwell::values::BasicValue::as_basic_value_enum(
-                                        &$crate::val::__structreflect::_raw_ptr(
-                                            &cx.extract_struct_ptr_val::<$field_type, Full>(
-                                                &raw_struct,
-                                                iter.next().expect("range failure!")
-                                            )
+                                        &cx.extract_struct_ptr::<$field_type, Mut>(
+                                            &raw_struct,
+                                            iter.next().expect("range failure!")
                                         )
                                     )
                                 ),

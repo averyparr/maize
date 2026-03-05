@@ -28,27 +28,17 @@ use crate::{
     ty::{M, R, SizedTy, Ty, ValTy},
 };
 
+#[derive(Clone, Copy)]
+pub struct Val<'ctx, T: ?Sized>(&'ctx FnCodegen, BasicValueEnum<'static>, PhantomData<T>);
 /* CANNOT be Copy because eaech one owns an alloca */
-pub struct Val<'ctx, T: ?Sized>(&'ctx FnCodegen, PointerValue<'static>, PhantomData<T>);
+pub struct S<T: ?Sized>(PhantomData<T>);
 
-impl<'ctx, T: ?Sized> Val<'ctx, T>
+impl<T> Clone for Val<'_, S<T>>
 where
-    T: Ty + Copy,
-{
-    pub fn copy(&self) -> Self {
-        // This is cheap here, so we provide a different name
-        self.clone()
-    }
-}
-
-impl<'ctx, T> Clone for Val<'ctx, T>
-where
-    T: Ty,
+    T: Clone,
 {
     fn clone(&self) -> Self {
-        // This is safe and just ensures we don't just copy the underlying
-        // pointers
-        unsafe { Self::new_from_value(self.cx(), self.get_raw()) }
+        todo!();
     }
 }
 
@@ -57,20 +47,17 @@ pub mod __structreflect {
     pub fn _ctx<T>(val: &Val<'_, T>) -> ContextRef<'static> {
         val.ctx()
     }
-    pub fn _get_lltyped<T: ValTy>(val: &Val<'_, T>) -> T::Value<'static> {
-        val.get_ll_typed()
+    pub fn _lltyped<T: ValTy>(val: &Val<'_, T>) -> T::Value<'static> {
+        val.ll_typed()
     }
-    pub unsafe fn _new<'a, T: ValTy>(cx: &'a FnCodegen, val: PointerValue<'static>) -> Val<'a, T> {
-        unsafe { Val::new(cx, val) }
-    }
-    pub unsafe fn _new_from_value<'a, T: ValTy>(
+    pub unsafe fn _new<'a, T: ValTy>(
         cx: &'a FnCodegen,
         val: BasicValueEnum<'static>,
     ) -> Val<'a, T> {
-        unsafe { Val::new_from_value(cx, val) }
+        unsafe { Val::new(cx, val) }
     }
-    pub unsafe fn _raw_ptr<T>(val: &Val<'_, T>) -> PointerValue<'static> {
-        val.raw_ptr()
+    pub fn _raw<T>(val: &Val<'_, T>) -> BasicValueEnum<'static> {
+        val.raw()
     }
 }
 
@@ -87,20 +74,7 @@ impl<'ctx, T: ?Sized> Val<'ctx, T> {
     {
         T::ty(self.ctx()).as_basic_type_enum()
     }
-    pub(crate) unsafe fn new_from_value(cx: &'ctx FnCodegen, val: BasicValueEnum<'static>) -> Self
-    where
-        T: Ty,
-    {
-        let ty = T::ty(cx.ctx());
-        let alloca = unsafe {
-            cx.with_builder(|b| b.build_alloca(ty, "new_value_alloca"))
-                .expect("Alloca for stack values should succeed")
-        };
-        let _raw_store = unsafe { cx.with_builder(|b| b.build_store(alloca, val)) }
-            .expect("store to alloca should work");
-        Self(cx, alloca, PhantomData)
-    }
-    pub(crate) unsafe fn new(cx: &'ctx FnCodegen, val: PointerValue<'static>) -> Self {
+    pub(crate) unsafe fn new(cx: &'ctx FnCodegen, val: BasicValueEnum<'static>) -> Self {
         Self(cx, val, PhantomData)
     }
     pub fn zero(&self) -> Self
@@ -113,7 +87,13 @@ impl<'ctx, T: ?Sized> Val<'ctx, T> {
     where
         T: ValTy,
     {
-        unsafe { Self::new_from_value(cx, T::zeros(cx.ctx()).as_basic_value_enum()) }
+        Self(cx, T::zeros(cx.ctx()).as_basic_value_enum(), PhantomData)
+    }
+    pub unsafe fn new_undef(cx: &'ctx FnCodegen) -> Self
+    where
+        T: ValTy,
+    {
+        Self(cx, T::undef(cx.ctx()).as_basic_value_enum(), PhantomData)
     }
 
     /// # Safety: This is identical to ::std::mem::transmute.
@@ -122,41 +102,53 @@ impl<'ctx, T: ?Sized> Val<'ctx, T> {
         T: SizedTy,
         U: for<'a> SizedTy<Type<'a> = T::Type<'a>, Value<'a> = T::Value<'a>>,
     {
-        unsafe { Val::new(val.cx(), val.raw_ptr()) }
+        unsafe { Val::new(val.cx(), val.raw()) }
     }
-    pub(crate) fn raw_ptr(&self) -> PointerValue<'static> {
+    pub(crate) fn raw(&self) -> BasicValueEnum<'static> {
         self.1
     }
-    pub(crate) fn get_raw(&self) -> BasicValueEnum<'static>
-    where
-        T: Ty,
-    {
-        unsafe {
-            self.cx()
-                .with_builder(|b| b.build_load(T::ty(self.ctx()), self.raw_ptr(), "get_raw"))
-        }
-        .expect("Load should succeed")
-        .as_basic_value_enum()
-    }
-    pub(crate) fn get_ll_typed(&self) -> T::Value<'static>
+    pub(crate) fn ll_typed(&self) -> T::Value<'static>
     where
         T: ValTy,
     {
-        T::type_val(self.get_raw().as_any_value_enum())
+        T::type_val(self.raw().as_any_value_enum())
     }
 
-    pub fn as_ref<'a>(&'a self) -> Val<'ctx, R<&'a T>>
+    pub fn with_storage(self) -> Val<'ctx, S<T>>
     where
         T: Ty,
     {
-        let raw_ptr = self.raw_ptr();
-        unsafe { Val::new_from_value(self.cx(), raw_ptr.as_basic_value_enum()) }
+        self.cx().store_in_alloca(self)
     }
-    pub fn as_mut<'a>(&'a mut self) -> Val<'ctx, M<&'a mut T>>
-    where
-        T: Ty,
-    {
-        let raw_ptr = self.raw_ptr();
-        unsafe { Val::new_from_value(self.cx(), raw_ptr.as_basic_value_enum()) }
+}
+
+impl<'ctx, T: Ty> Val<'ctx, S<T>> {
+    pub fn as_ref<'a>(&'a self) -> Val<'ctx, R<&'a T>> {
+        let alloca = unsafe {
+            self.cx()
+                .with_builder(|b| b.build_alloca(T::ty(self.ctx()), "ref_alloca"))
+        }
+        .expect("Alloca shuold succeed");
+        Val(self.cx(), alloca.as_basic_value_enum(), PhantomData)
+    }
+    pub fn as_mut<'a>(&'a mut self) -> Val<'ctx, M<&'a mut T>> {
+        let alloca = unsafe {
+            self.cx()
+                .with_builder(|b| b.build_alloca(T::ty(self.ctx()), "mut_alloca"))
+        }
+        .expect("Alloca shuold succeed");
+        Val(self.cx(), alloca.as_basic_value_enum(), PhantomData)
+    }
+    pub fn alloca_ptr(&self) -> PointerValue<'static> {
+        self.1.into_pointer_value()
+    }
+    pub fn get(self) -> Val<'ctx, T> {
+        let raw_ptr = self.raw().into_pointer_value();
+        let val = unsafe {
+            self.cx()
+                .with_builder(|b| b.build_load(T::ty(self.ctx()), raw_ptr, "get_from_alloca"))
+        }
+        .expect("Load should succeed");
+        Val(self.cx(), val, PhantomData)
     }
 }

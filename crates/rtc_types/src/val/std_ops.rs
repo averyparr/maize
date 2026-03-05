@@ -145,10 +145,10 @@ impl_math_for_constants!(I64 => i64);
 impl Not for Val<'_, Bool> {
     type Output = Self;
     fn not(self) -> Self::Output {
-        let value = self.get_ll_typed();
+        let value = self.ll_typed();
         let raw_val = unsafe { self.cx().with_builder(|b| b.build_not(value, "not")) }
             .expect("Build not should succed");
-        unsafe { Val::new_from_value(self.cx(), raw_val.as_basic_value_enum()) }
+        unsafe { Val::new(self.cx(), raw_val.as_basic_value_enum()) }
     }
 }
 

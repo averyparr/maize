@@ -42,7 +42,7 @@ where
         let val = val.expect("Returning non-empty value should always pass Some(_)");
         if cx.bb().get_terminator().is_none() {
             unsafe {
-                cx.with_builder(|b| b.build_return(Some(&val.get_ll_typed())))
+                cx.with_builder(|b| b.build_return(Some(&val.ll_typed())))
                     .expect("Return should always succeed")
             };
         }

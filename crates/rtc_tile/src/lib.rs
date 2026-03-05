@@ -51,8 +51,8 @@ impl WarpSmemLoadTileTy for BF16_16x16 {
     ) -> Val<'a, Self::FragT> {
         let tile_ptr = ptr.reborrow_mut().as_mut_ptr();
         let elem_ptr = tile_ptr.ptr_cast::<U128>();
-        let row_offset_in_subtile = lane.copy() % 8;
-        let subtile_id = lane.copy() / 8;
+        let row_offset_in_subtile = lane % 8;
+        let subtile_id = lane / 8;
         let offset = row_offset_in_subtile + subtile_id * 8;
         let offset_elem_ptr = unsafe { elem_ptr.add(offset) };
 
@@ -68,8 +68,8 @@ impl WarpSmemLoadTileTy for BF16_8x8 {
     ) -> Val<'a, Self::FragT> {
         let tile_ptr = ptr.reborrow_mut().as_mut_ptr();
         let elem_ptr = tile_ptr.ptr_cast::<U128>();
-        let row_offset_in_subtile = lane.copy() % 8;
-        let subtile_id = lane.copy() / 8;
+        let row_offset_in_subtile = lane % 8;
+        let subtile_id = lane / 8;
         let offset = row_offset_in_subtile + subtile_id * 8;
         let offset_elem_ptr = unsafe { elem_ptr.add(offset) };
 

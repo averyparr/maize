@@ -123,15 +123,13 @@ pub unsafe trait ConstPtrTy:
     unsafe fn read_with_instruction_metadata<'a>(
         ptr: Val<'a, Self>,
         metadata: impl IntoIterator<Item = (&'a str, Option<BasicMetadataValueEnum<'a>>)>,
-        typing_fn: impl Fn(ContextRef<'static>) -> Self::Type<'static>,
     ) -> Val<'a, Self::PointeeTy> {
         // Safety: We have a pointer which the user guarantees is valid to read from, so it's safe to build
         // a pointer load at the end of the current BB
-        let raw_ptr_to_ptr = ptr.raw_ptr();
+        let raw_ptr_to_ptr = ptr.ll_typed();
         let raw_ptr = unsafe {
-            ptr.cx().with_builder(|b| {
-                b.build_load(typing_fn(ptr.ctx()), raw_ptr_to_ptr, "load_raw_ptr")
-            })
+            ptr.cx()
+                .with_builder(|b| b.build_load(Self::ty(ptr.ctx()), raw_ptr_to_ptr, "load_raw_ptr"))
         }
         .expect("Raw ptr load should succeed");
         let raw_ins = raw_ptr
@@ -153,7 +151,7 @@ pub unsafe trait ConstPtrTy:
         .expect("Pointer load should be possible");
 
         // Safety: We have just loaded a value of type PointeeTy, so it's safe to cast it.
-        unsafe { Val::new_from_value(ptr.cx(), raw_val) }
+        unsafe { Val::new(ptr.cx(), raw_val) }
     }
 
     /// # Safety:
@@ -163,7 +161,7 @@ pub unsafe trait ConstPtrTy:
     unsafe fn read_unaligned(ptr: Val<'_, Self>) -> Val<'_, Self::PointeeTy> {
         // The user promised it's safe to read without aligned access,
         // and we're not adding any additional metadata
-        unsafe { Self::read_with_instruction_metadata(ptr, [], Self::ty) }
+        unsafe { Self::read_with_instruction_metadata(ptr, []) }
     }
 
     /// # Safety:
@@ -179,9 +177,9 @@ pub unsafe trait ConstPtrTy:
         let cx = ptr.cx();
         let align = cx
             .constant_from(Self::PointeeTy::ALIGN as u64)
-            .get_ll_typed()
+            .ll_typed()
             .into();
-        unsafe { Self::read_with_instruction_metadata(ptr, [("align", Some(align))], Self::ty) }
+        unsafe { Self::read_with_instruction_metadata(ptr, [("align", Some(align))]) }
     }
 
     fn cast_const(ptr: Val<'_, Self>) -> Val<'_, P<*const Self::PointeeTy>> {
@@ -244,7 +242,7 @@ pub unsafe trait MutPtrTy: ConstPtrTy {
         val: Val<'_, Self::PointeeTy>,
         metadata: impl IntoIterator<Item = (&'a str, Option<BasicMetadataValueEnum<'a>>)>,
     ) {
-        let raw_ptr_to_ptr = ptr.raw_ptr();
+        let raw_ptr_to_ptr = ptr.ll_typed();
 
         let ptr_to_val = unsafe {
             ptr.cx()
@@ -265,7 +263,7 @@ pub unsafe trait MutPtrTy: ConstPtrTy {
         }
         unsafe {
             ptr.cx()
-                .with_builder(|b| b.build_store(ptr_to_val, val.get_ll_typed()))
+                .with_builder(|b| b.build_store(ptr_to_val, val.ll_typed()))
                 .expect("Storing to pointer should work...")
         };
     }
@@ -293,7 +291,7 @@ pub unsafe trait MutPtrTy: ConstPtrTy {
         let align = ptr
             .cx()
             .constant_from(Self::PointeeTy::ALIGN as u64)
-            .get_ll_typed();
+            .ll_typed();
         // Safety: The user promised it was safe to do an aligned write through
         // this pointer, and we know the alignment of the type behind the pointer
         unsafe {
@@ -335,7 +333,7 @@ pub unsafe trait RefTy: ConstPtrTy {
     {
         let cx = ptr.cx();
         let ptr = Self::reborrow(ptr);
-        unsafe { Self::Ref::read_with_instruction_metadata(ptr, Self::ptr_attrs(cx), Self::ty) }
+        unsafe { Self::Ref::read_with_instruction_metadata(ptr, Self::ptr_attrs(cx)) }
     }
     fn reborrow<'a, 'b>(ptr: &'b Val<'a, Self>) -> Val<'a, Self::Ref<'b, Self::PointeeTy>>
     where
@@ -344,10 +342,10 @@ pub unsafe trait RefTy: ConstPtrTy {
         // Safety: we are shortening the lifetime from '_ to 'a
         // and otherwise performing a cast to R<&'a T> which the user
         // promised was OK
-        unsafe { Val::new(ptr.cx(), ptr.raw_ptr()) }
+        unsafe { Val::new(ptr.cx(), ptr.raw()) }
     }
     fn as_ptr<'a>(ptr: Val<'a, Self>) -> Val<'a, Self::PtrConst<Self::PointeeTy>> {
-        unsafe { Val::new(ptr.cx(), ptr.raw_ptr()) }
+        unsafe { Val::new(ptr.cx(), ptr.raw()) }
     }
 }
 
@@ -428,7 +426,7 @@ pub unsafe trait MutTy: RefTy + MutPtrTy {
         // Safety: we are shortening the lifetime from '_ to 'a
         // and otherwise performing a cast to M<&'a mut T> which the user
         // promised was OK
-        unsafe { Val::new(ptr.cx(), ptr.raw_ptr()) }
+        unsafe { Val::new(ptr.cx(), ptr.raw()) }
     }
     fn swap<'a>(ptr_: &mut Val<'a, Self>, val: Val<'a, Self::PointeeTy>) -> Val<'a, Self::PointeeTy>
     where
@@ -438,7 +436,7 @@ pub unsafe trait MutTy: RefTy + MutPtrTy {
         let ptr = Self::reborrow(ptr_);
         // Safety: We hold a (short-lived) reference and can read with it. The
         // user asserted reads with these metadata were safe when they implemented `RefTy`.
-        let at_ptr = unsafe { Self::Ref::read_with_instruction_metadata(ptr, metadata, Self::ty) };
+        let at_ptr = unsafe { Self::Ref::read_with_instruction_metadata(ptr, metadata) };
 
         let metadata = Self::ptr_attrs(ptr_.cx());
         let to_write = Self::reborrow_mut(ptr_);
@@ -461,7 +459,7 @@ pub unsafe trait MutTy: RefTy + MutPtrTy {
         }
     }
     fn as_mut_ptr<'a>(ptr: Val<'a, Self>) -> Val<'a, Self::PtrMut<Self::PointeeTy>> {
-        unsafe { Val::new(ptr.cx(), ptr.raw_ptr()) }
+        unsafe { Val::new(ptr.cx(), ptr.raw()) }
     }
 }
 
@@ -478,13 +476,13 @@ where
 
 pub unsafe trait RawPtrTy: ConstPtrTy {
     fn ptr_cast<'a, U: ValTy + ?Sized>(val: Val<'a, Self>) -> Val<'a, Self::PtrConst<U>> {
-        unsafe { Val::new_from_value(val.cx(), val.get_raw()) }
+        unsafe { Val::new(val.cx(), val.raw()) }
     }
     fn ptr_cast_mut<'a, U: ValTy + ?Sized>(val: Val<'a, Self>) -> Val<'a, Self::PtrMut<U>>
     where
         Self: MutPtrTy,
     {
-        unsafe { Val::new_from_value(val.cx(), val.get_raw()) }
+        unsafe { Val::new(val.cx(), val.raw()) }
     }
 }
 

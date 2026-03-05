@@ -155,12 +155,11 @@ pub unsafe trait ComparableTy: ValTy {
         rhs: &Val<'a, Self>,
     ) -> Val<'a, Self::ComparisonT> {
         let raw_res = unsafe {
-            lhs.cx().with_builder(|b| {
-                Self::build_comparison_raw(b, predicate, lhs.get_raw(), rhs.get_raw())
-            })
+            lhs.cx()
+                .with_builder(|b| Self::build_comparison_raw(b, predicate, lhs.raw(), rhs.raw()))
         };
 
-        unsafe { Val::new_from_value(lhs.cx(), raw_res) }
+        unsafe { Val::new(lhs.cx(), raw_res) }
     }
 
     fn build_comparison_raw(

@@ -39,15 +39,15 @@ pub unsafe trait MathTy: ValTy {
         let build = |b: Builder<'static>| match Self::MATH_VARIANT {
             MathVariant::Float => b
                 .build_float_add(
-                    Self::type_as_float(lhs.get_raw()),
-                    Self::type_as_float(rhs.get_raw()),
+                    Self::type_as_float(lhs.raw()),
+                    Self::type_as_float(rhs.raw()),
                     "fadd",
                 )
                 .map(|v| v.as_basic_value_enum()),
             MathVariant::SignedInt | MathVariant::UnsignedInt => b
                 .build_int_add(
-                    Self::type_as_int(lhs.get_raw()),
-                    Self::type_as_int(rhs.get_raw()),
+                    Self::type_as_int(lhs.raw()),
+                    Self::type_as_int(rhs.raw()),
                     "add",
                 )
                 .map(|v| v.as_basic_value_enum()),
@@ -57,21 +57,21 @@ pub unsafe trait MathTy: ValTy {
         let raw = post_process(lhs.cx(), raw);
 
         // Safety: add is (T, T) -> T
-        unsafe { Val::new_from_value(lhs.cx(), raw) }
+        unsafe { Val::new(lhs.cx(), raw) }
     }
     fn sub<'a>(lhs: Val<'a, Self>, rhs: Val<'a, Self>) -> Val<'a, Self> {
         let build = |b: Builder<'static>| match Self::MATH_VARIANT {
             MathVariant::Float => b
                 .build_float_sub(
-                    Self::type_as_float(lhs.get_raw()),
-                    Self::type_as_float(rhs.get_raw()),
+                    Self::type_as_float(lhs.raw()),
+                    Self::type_as_float(rhs.raw()),
                     "fsub",
                 )
                 .map(|v| v.as_basic_value_enum()),
             MathVariant::SignedInt | MathVariant::UnsignedInt => b
                 .build_int_sub(
-                    Self::type_as_int(lhs.get_raw()),
-                    Self::type_as_int(rhs.get_raw()),
+                    Self::type_as_int(lhs.raw()),
+                    Self::type_as_int(rhs.raw()),
                     "sub",
                 )
                 .map(|v| v.as_basic_value_enum()),
@@ -80,21 +80,21 @@ pub unsafe trait MathTy: ValTy {
         let raw = post_process(lhs.cx(), raw);
 
         // Safety: sub is (T, T) -> T
-        unsafe { Val::new_from_value(lhs.cx(), raw) }
+        unsafe { Val::new(lhs.cx(), raw) }
     }
     fn mul<'a>(lhs: Val<'a, Self>, rhs: Val<'a, Self>) -> Val<'a, Self> {
         let build = |b: Builder<'static>| match Self::MATH_VARIANT {
             MathVariant::Float => b
                 .build_float_mul(
-                    Self::type_as_float(lhs.get_raw()),
-                    Self::type_as_float(rhs.get_raw()),
+                    Self::type_as_float(lhs.raw()),
+                    Self::type_as_float(rhs.raw()),
                     "fmul",
                 )
                 .map(|v| v.as_basic_value_enum()),
             MathVariant::SignedInt | MathVariant::UnsignedInt => b
                 .build_int_mul(
-                    Self::type_as_int(lhs.get_raw()),
-                    Self::type_as_int(rhs.get_raw()),
+                    Self::type_as_int(lhs.raw()),
+                    Self::type_as_int(rhs.raw()),
                     "mul",
                 )
                 .map(|v| v.as_basic_value_enum()),
@@ -103,28 +103,28 @@ pub unsafe trait MathTy: ValTy {
         let raw = post_process(lhs.cx(), raw);
 
         // Safety: mul is (T, T) -> T
-        unsafe { Val::new_from_value(lhs.cx(), raw) }
+        unsafe { Val::new(lhs.cx(), raw) }
     }
     fn div<'a>(lhs: Val<'a, Self>, rhs: Val<'a, Self>) -> Val<'a, Self> {
         let build = |b: Builder<'static>| match Self::MATH_VARIANT {
             MathVariant::Float => b
                 .build_float_div(
-                    Self::type_as_float(lhs.get_raw()),
-                    Self::type_as_float(rhs.get_raw()),
+                    Self::type_as_float(lhs.raw()),
+                    Self::type_as_float(rhs.raw()),
                     "fadd",
                 )
                 .map(|v| v.as_basic_value_enum()),
             MathVariant::SignedInt => b
                 .build_int_signed_div(
-                    Self::type_as_int(lhs.get_raw()),
-                    Self::type_as_int(rhs.get_raw()),
+                    Self::type_as_int(lhs.raw()),
+                    Self::type_as_int(rhs.raw()),
                     "sdiv",
                 )
                 .map(|v| v.as_basic_value_enum()),
             MathVariant::UnsignedInt => b
                 .build_int_unsigned_div(
-                    Self::type_as_int(lhs.get_raw()),
-                    Self::type_as_int(rhs.get_raw()),
+                    Self::type_as_int(lhs.raw()),
+                    Self::type_as_int(rhs.raw()),
                     "sdiv",
                 )
                 .map(|v| v.as_basic_value_enum()),
@@ -133,22 +133,22 @@ pub unsafe trait MathTy: ValTy {
         let raw = post_process(lhs.cx(), raw);
 
         // Safety: div is (T, T) -> T
-        unsafe { Val::new_from_value(lhs.cx(), raw) }
+        unsafe { Val::new(lhs.cx(), raw) }
     }
     fn neg<'a>(val: Val<'a, Self>) -> Val<'a, Self> {
         let build = |b: Builder<'static>| match Self::MATH_VARIANT {
             MathVariant::Float => b
-                .build_float_neg(Self::type_as_float(val.get_raw()), "fneg")
+                .build_float_neg(Self::type_as_float(val.raw()), "fneg")
                 .map(|v| v.as_basic_value_enum()),
             MathVariant::SignedInt | MathVariant::UnsignedInt => b
-                .build_int_neg(Self::type_as_int(val.get_raw()), "neg")
+                .build_int_neg(Self::type_as_int(val.raw()), "neg")
                 .map(|v| v.as_basic_value_enum()),
         };
         let raw = unsafe { val.cx().with_builder(build) }.expect("Should be able to build an neg");
         let raw = post_process(val.cx(), raw);
 
         // Safety: neg is (T) -> T
-        unsafe { Val::new_from_value(val.cx(), raw) }
+        unsafe { Val::new(val.cx(), raw) }
     }
 }
 
@@ -158,22 +158,22 @@ pub unsafe trait IntMathTy: MathTy {
 
         let build = |b: Builder<'static>| match Self::MATH_VARIANT {
             MathVariant::Float => {
-                let lhs = Self::type_as_float(lhs.get_raw());
-                let rhs = Self::type_as_float(rhs.get_raw());
+                let lhs = Self::type_as_float(lhs.raw());
+                let rhs = Self::type_as_float(rhs.raw());
                 b.build_float_rem(lhs, rhs, "float_rem")
                     .expect("Build float rem should work")
             }
             .as_basic_value_enum(),
             MathVariant::SignedInt => {
-                let lhs = Self::type_as_int(lhs.get_raw());
-                let rhs = Self::type_as_int(rhs.get_raw());
+                let lhs = Self::type_as_int(lhs.raw());
+                let rhs = Self::type_as_int(rhs.raw());
                 b.build_int_signed_rem(lhs, rhs, "sint_rem")
                     .expect("Build sint rem should work")
                     .as_basic_value_enum()
             }
             MathVariant::UnsignedInt => {
-                let lhs = Self::type_as_int(lhs.get_raw());
-                let rhs = Self::type_as_int(rhs.get_raw());
+                let lhs = Self::type_as_int(lhs.raw());
+                let rhs = Self::type_as_int(rhs.raw());
                 b.build_int_unsigned_rem(lhs, rhs, "sint_rem")
                     .expect("Build uint rem should work")
                     .as_basic_value_enum()
@@ -182,7 +182,7 @@ pub unsafe trait IntMathTy: MathTy {
 
         let raw_ret = unsafe { cx.with_builder(build) };
         let raw = post_process(cx, raw_ret);
-        unsafe { Val::new_from_value(cx, raw) }
+        unsafe { Val::new(cx, raw) }
     }
     fn left_shift<'a>(lhs: Val<'a, Self>, rhs: Val<'a, Self>) -> Val<'a, Self> {
         let cx = lhs.cx();
@@ -192,8 +192,8 @@ pub unsafe trait IntMathTy: MathTy {
                 panic!("Float left/right shifts are not supported");
             }
             MathVariant::SignedInt | MathVariant::UnsignedInt => {
-                let lhs = Self::type_as_int(lhs.get_raw());
-                let rhs = Self::type_as_int(rhs.get_raw());
+                let lhs = Self::type_as_int(lhs.raw());
+                let rhs = Self::type_as_int(rhs.raw());
                 b.build_left_shift(lhs, rhs, "left_shift")
                     .expect("Build left shift should work")
                     .as_basic_value_enum()
@@ -202,7 +202,7 @@ pub unsafe trait IntMathTy: MathTy {
 
         let raw_ret = unsafe { cx.with_builder(build) };
         let raw = post_process(cx, raw_ret);
-        unsafe { Val::new_from_value(cx, raw) }
+        unsafe { Val::new(cx, raw) }
     }
     fn right_shift<'a>(lhs: Val<'a, Self>, rhs: Val<'a, Self>) -> Val<'a, Self> {
         let cx = lhs.cx();
@@ -214,26 +214,26 @@ pub unsafe trait IntMathTy: MathTy {
         };
 
         let build = |b: Builder<'static>| {
-            let lhs = Self::type_as_int(lhs.get_raw());
-            let rhs = Self::type_as_int(rhs.get_raw());
+            let lhs = Self::type_as_int(lhs.raw());
+            let rhs = Self::type_as_int(rhs.raw());
             b.build_right_shift(lhs, rhs, sign_extend, "left_shift")
                 .expect("Build left shift should work")
         };
 
         let raw_ret = unsafe { cx.with_builder(build) };
         let raw = post_process(cx, raw_ret.as_basic_value_enum());
-        unsafe { Val::new_from_value(cx, raw) }
+        unsafe { Val::new(cx, raw) }
     }
     fn xor<'a>(lhs: Val<'a, Self>, rhs: Val<'a, Self>) -> Val<'a, Self> {
         let cx = lhs.cx();
 
-        let lhs = Self::type_as_int(lhs.get_raw());
-        let rhs = Self::type_as_int(rhs.get_raw());
+        let lhs = Self::type_as_int(lhs.raw());
+        let rhs = Self::type_as_int(rhs.raw());
 
         let raw_ret = unsafe { cx.with_builder(|b| b.build_xor(lhs, rhs, "xor_values")) }
             .expect("XOR should have built");
         let raw = post_process(cx, raw_ret.as_basic_value_enum());
-        unsafe { Val::new_from_value(cx, raw) }
+        unsafe { Val::new(cx, raw) }
     }
 }
 

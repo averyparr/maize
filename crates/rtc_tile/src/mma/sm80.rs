@@ -80,8 +80,8 @@ impl SyncMMAOp for Sm80MmaF16F32_16x8x16 {
     const INTRINSIC_NAME: &str = "llvm.nvvm.mma.m16n8k16.row.col.f32.f32";
 
     fn unpack_args<'a>(ret: Val<'a, Self::Ret>) -> Val<'a, Self::CFrag> {
-        let a = ret.as_ref().accessor();
-        Val::from_elements([a.d0.load(), a.d1.load(), a.d2.load(), a.d3.load()])
+        let a = ret.into_accessor();
+        Val::from_elements([a.d0, a.d1, a.d2, a.d3])
     }
 
     fn pack_args<'a>(

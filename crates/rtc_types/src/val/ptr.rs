@@ -28,13 +28,13 @@ impl<Ptr> Val<'_, Ptr>
 where
     Ptr: MutPtrTy,
 {
-    /// See `MutPtrTy::write_unaligned`   
+    /// See `MutPtrTy::write_unaligned`
     pub unsafe fn write_unaligned(self, val: Val<'_, Ptr::PointeeTy>) {
         // See `MutPtrTy::write_unaligned`
         unsafe { Ptr::write_unaligned(self, val) }
     }
 
-    /// See `MutPtrTy::write`   
+    /// See `MutPtrTy::write`
     pub unsafe fn write(self, val: Val<'_, Ptr::PointeeTy>)
     where
         Ptr::PointeeTy: SizedTy,
@@ -101,20 +101,20 @@ macro_rules! impl_ptr_addable_for {
 impl PtrAddableTy for $tys {
     unsafe fn ptr_add<'a, Ptr: ConstPtrTy>(ptr: Val<'a, Ptr>, val: Val<'a, Self>) -> Val<'a, Ptr> {
         let cx = ptr.cx();
-        let raw_ptr = ptr.get_ll_typed();
+        let raw_ptr = ptr.ll_typed();
         let pointee_ty = Ptr::PointeeTy::ty(ptr.ctx());
         let new_raw_ptr = unsafe {
             cx.with_builder(|b| {
                 b.build_in_bounds_gep(
                     pointee_ty,
                     raw_ptr,
-                    &[val.get_ll_typed()],
+                    &[val.ll_typed()],
                     "gep_for_ptr_add",
                 )
             })
         }
         .expect("Ptr add should work");
-        unsafe { Val::new_from_value(cx, new_raw_ptr.as_basic_value_enum()) }
+        unsafe { Val::new(cx, new_raw_ptr.as_basic_value_enum()) }
     }
 }
         )*

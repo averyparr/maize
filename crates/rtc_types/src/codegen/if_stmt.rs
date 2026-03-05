@@ -40,8 +40,8 @@ impl<'a, Ret: ValTy> Then<'a, Ret> {
                     .expect("phi from if/then/else should be able to be created")
             };
             phi_val.add_incoming(&[
-                (&self.val_from_if.get_ll_typed(), self.raw.then_bb),
-                (&else_ret.get_ll_typed(), else_end_bb),
+                (&self.val_from_if.ll_typed(), self.raw.then_bb),
+                (&else_ret.ll_typed(), else_end_bb),
             ]);
             phi_val
         });
@@ -52,7 +52,7 @@ impl<'a, Ret: ValTy> Then<'a, Ret> {
         self.raw.uni_bb = uni_bb;
 
         // Should drop self which drops ThenNoVal which in turn unconditionally jumps from else to uni
-        unsafe { Val::new_from_value(else_ret.cx(), raw_ret.as_basic_value()) }
+        unsafe { Val::new(else_ret.cx(), raw_ret.as_basic_value()) }
     }
 }
 
@@ -91,8 +91,8 @@ fn setup_branch_on<'ctx>(
         cx.with_builder(|b| {
             b.build_int_compare(
                 inkwell::IntPredicate::NE,
-                cond.get_ll_typed(),
-                false_val.get_ll_typed(),
+                cond.ll_typed(),
+                false_val.ll_typed(),
                 "icmp",
             )
         })
@@ -110,7 +110,7 @@ fn setup_branch_on<'ctx>(
 impl<'a> Val<'a, Bool> {
     fn then_inner<U>(&self, f: impl FnOnce() -> U) -> (ThenNoVal<'a>, U) {
         let cx = self.cx();
-        let (then_bb, else_bb) = setup_branch_on(self.copy());
+        let (then_bb, else_bb) = setup_branch_on(*self);
         let uni_bb = cx.ctx().append_basic_block(cx.func(), "post_if");
 
         // `f` is allowed to change the basic block so we must get a new copy
