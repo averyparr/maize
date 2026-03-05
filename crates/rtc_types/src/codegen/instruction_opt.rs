@@ -32,8 +32,10 @@ const ALLOW_REASSOC: u32 = 1 << 6;
 
 impl InstructionOpt {
     pub fn post_process_instruction(&self, ins: InstructionValue<'_>) {
-        ins.set_fast_math_flags(self.float_flags)
-            .expect("Should not fail");
+        if ins.can_use_fast_math_flags() {
+            ins.set_fast_math_flags(self.float_flags)
+                .expect("Should not fail");
+        }
     }
     pub fn allow_approx_funcs(self) -> bool {
         self.float_flags.contains(FastMathFlags::ApproxFunc)
