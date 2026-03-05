@@ -129,7 +129,7 @@ impl<Ret: FnRetTy, Args: IntoFuncArgs> RawFunc<Ret, Args> {
         assert_eq!(fn_ty, type_system_fn_ty);
         Self(fn_val, PhantomData)
     }
-    pub fn raw(self) -> FunctionValue<'static> {
+    pub fn raw(&self) -> FunctionValue<'static> {
         self.0
     }
 }
