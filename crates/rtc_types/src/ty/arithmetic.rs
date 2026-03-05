@@ -1,4 +1,5 @@
 use inkwell::builder::Builder;
+use inkwell::types::IntMathType;
 use inkwell::values::BasicValue;
 use inkwell::values::BasicValueEnum;
 use inkwell::values::FloatMathValue;
@@ -152,7 +153,45 @@ pub unsafe trait MathTy: ValTy {
     }
 }
 
-pub unsafe trait IntMathTy: MathTy {
+pub unsafe trait BitMathTy:
+    for<'a> ValTy<Type<'a>: IntMathType<'a>, Value<'a>: IntMathValue<'a>>
+{
+    fn xor<'a>(lhs: Val<'a, Self>, rhs: Val<'a, Self>) -> Val<'a, Self> {
+        let cx = lhs.cx();
+
+        let lhs = lhs.ll_typed();
+        let rhs = rhs.ll_typed();
+
+        let raw_ret = unsafe { cx.with_builder(|b| b.build_xor(lhs, rhs, "xor_values")) }
+            .expect("XOR should have built");
+        let raw = post_process(cx, raw_ret.as_basic_value_enum());
+        unsafe { Val::new(cx, raw) }
+    }
+    fn and<'a>(lhs: Val<'a, Self>, rhs: Val<'a, Self>) -> Val<'a, Self> {
+        let cx = lhs.cx();
+
+        let lhs = lhs.ll_typed();
+        let rhs = rhs.ll_typed();
+
+        let raw_ret = unsafe { cx.with_builder(|b| b.build_and(lhs, rhs, "xor_values")) }
+            .expect("AND should have built");
+        let raw = post_process(cx, raw_ret.as_basic_value_enum());
+        unsafe { Val::new(cx, raw) }
+    }
+    fn or<'a>(lhs: Val<'a, Self>, rhs: Val<'a, Self>) -> Val<'a, Self> {
+        let cx = lhs.cx();
+
+        let lhs = lhs.ll_typed();
+        let rhs = rhs.ll_typed();
+
+        let raw_ret = unsafe { cx.with_builder(|b| b.build_or(lhs, rhs, "xor_values")) }
+            .expect("AND should have built");
+        let raw = post_process(cx, raw_ret.as_basic_value_enum());
+        unsafe { Val::new(cx, raw) }
+    }
+}
+
+pub unsafe trait IntMathTy: MathTy + BitMathTy {
     fn rem<'a>(lhs: Val<'a, Self>, rhs: Val<'a, Self>) -> Val<'a, Self> {
         let cx = lhs.cx();
 
@@ -224,17 +263,6 @@ pub unsafe trait IntMathTy: MathTy {
         let raw = post_process(cx, raw_ret.as_basic_value_enum());
         unsafe { Val::new(cx, raw) }
     }
-    fn xor<'a>(lhs: Val<'a, Self>, rhs: Val<'a, Self>) -> Val<'a, Self> {
-        let cx = lhs.cx();
-
-        let lhs = Self::type_as_int(lhs.raw());
-        let rhs = Self::type_as_int(rhs.raw());
-
-        let raw_ret = unsafe { cx.with_builder(|b| b.build_xor(lhs, rhs, "xor_values")) }
-            .expect("XOR should have built");
-        let raw = post_process(cx, raw_ret.as_basic_value_enum());
-        unsafe { Val::new(cx, raw) }
-    }
 }
 
 macro_rules! impl_math_ty {
@@ -264,10 +292,13 @@ impl_math_ty!(
 macro_rules! impl_int_math_ty {
     ($($tipes: ty),*) => {
         $(
+            unsafe impl BitMathTy for $tipes {}
             unsafe impl IntMathTy for $tipes {}
         )*
     };
 }
+
+unsafe impl BitMathTy for Bool {}
 
 impl_int_math_ty!(I8, I16, I32, I64, U8, U16, U32, U64);
 
@@ -280,3 +311,6 @@ unsafe impl<T: MathTy + VectorizableTy, const N: usize> MathTy for V<T, N> {
         raw.into_vector_value()
     }
 }
+
+unsafe impl<T: BitMathTy + VectorizableTy, const N: usize> BitMathTy for V<T, N> {}
+unsafe impl<T: IntMathTy + VectorizableTy, const N: usize> IntMathTy for V<T, N> {}

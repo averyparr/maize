@@ -1,9 +1,9 @@
-use std::ops::{Add, BitXor, Div, Mul, Neg, Not, Rem, Shl, Shr, Sub};
+use std::ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Neg, Not, Rem, Shl, Shr, Sub};
 
 use inkwell::values::BasicValue;
 
 use crate::{
-    ty::{IntMathTy, MathTy, raw::*, vec::VectorizableTy},
+    ty::{BitMathTy, IntMathTy, MathTy, raw::*, vec::VectorizableTy},
     val::Val,
 };
 
@@ -173,10 +173,22 @@ impl<'a, IntT: IntMathTy> Shr<Self> for Val<'a, IntT> {
     }
 }
 
-impl<'a, IntT: IntMathTy> BitXor<Self> for Val<'a, IntT> {
+impl<'a, IntT: BitMathTy> BitXor<Self> for Val<'a, IntT> {
     type Output = Self;
     fn bitxor(self, rhs: Self) -> Self::Output {
         IntT::xor(self, rhs)
+    }
+}
+impl<'a, IntT: BitMathTy> BitAnd<Self> for Val<'a, IntT> {
+    type Output = Self;
+    fn bitand(self, rhs: Self) -> Self::Output {
+        IntT::and(self, rhs)
+    }
+}
+impl<'a, IntT: BitMathTy> BitOr<Self> for Val<'a, IntT> {
+    type Output = Self;
+    fn bitor(self, rhs: Self) -> Self::Output {
+        IntT::or(self, rhs)
     }
 }
 
@@ -203,6 +215,8 @@ macro_rules! impl_int_math_for_constants {
         impl_int_math_for_constants!(inner: Shr, shr, $trace_ty, $real_ty);
         impl_int_math_for_constants!(inner: Shl, shl, $trace_ty, $real_ty);
         impl_int_math_for_constants!(inner: BitXor, bitxor, $trace_ty, $real_ty);
+        impl_int_math_for_constants!(inner: BitAnd, bitand, $trace_ty, $real_ty);
+        impl_int_math_for_constants!(inner: BitOr, bitor, $trace_ty, $real_ty);
     };
 }
 
@@ -215,3 +229,7 @@ impl_int_math_for_constants!(I8 => i8);
 impl_int_math_for_constants!(I16 => i16);
 impl_int_math_for_constants!(I32 => i32);
 impl_int_math_for_constants!(I64 => i64);
+
+impl_int_math_for_constants!(inner: BitXor, bitxor, Bool, bool);
+impl_int_math_for_constants!(inner: BitAnd, bitand, Bool, bool);
+impl_int_math_for_constants!(inner: BitOr, bitor, Bool, bool);
