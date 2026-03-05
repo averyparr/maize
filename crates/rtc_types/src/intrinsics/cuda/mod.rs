@@ -59,55 +59,20 @@ impl CUDA {
             assertfail.add_attribute(AttributeLoc::Function, attr);
         }
 
-        let add_global_str = |s: &str, name| {
-            let i8_ty = ctx.i8_type();
-            let ty = i8_ty.array_type(s.len().try_into().expect("usize -> u32 overflow"));
-            let mapped_chars = s
-                .bytes()
-                .map(|b| ctx.i8_type().const_int(b.into(), false))
-                .collect::<Vec<_>>();
-            let address_space = Some(AddressSpace::from(1));
-            let global = cx.module().add_global(ty, address_space, name);
-            global.set_initializer(&i8_ty.const_array(mapped_chars.as_slice()));
-            global.set_linkage(Linkage::Internal);
-            global.set_unnamed_addr(true);
-            let zero = ctx.i32_type().const_zero();
-            let ptr_to_char = unsafe {
-                cx.with_builder(|b| {
-                    let gep_ptr = b
-                        .build_in_bounds_gep(
-                            ty,
-                            global.as_pointer_value(),
-                            &[zero, zero],
-                            "str_gep",
-                        )
-                        .expect("GEP for const char array should succeed");
-                    let generic_ptr = b
-                        .build_address_space_cast(
-                            gep_ptr,
-                            generic_ptr_ty,
-                            "string_global_to_generic_cast",
-                        )
-                        .expect("string addrspace cast should succeed");
-                    generic_ptr
-                })
-            };
-            ptr_to_char
-        };
-
-        let msg_ptr = add_global_str(msg, "msg");
-        let file_ptr = add_global_str(file, "file");
-        let func_ptr = add_global_str(func, "func");
+        let global_address_space = Some(AddressSpace::from(1));
+        let msg_ptr = cx.insert_str(msg, global_address_space, "msg");
+        let file_ptr = cx.insert_str(file, global_address_space, "file");
+        let func_ptr = cx.insert_str(func, global_address_space, "func");
         unsafe {
             cx.with_builder(|b| {
                 let _call = b
                     .build_call(
                         assertfail,
                         &[
-                            msg_ptr.into(),
-                            file_ptr.into(),
+                            msg_ptr.raw().into(),
+                            file_ptr.raw().into(),
                             ctx.i32_type().const_int(line as _, false).into(),
-                            func_ptr.into(),
+                            func_ptr.raw().into(),
                             ctx.i64_type().const_int(1, false).into(),
                         ],
                         "call_assert_fail",

@@ -298,6 +298,10 @@ pub unsafe trait MutPtrTy: ConstPtrTy {
             Self::write_with_instruction_metadata(ptr, val, [("align", Some(align.into()))]);
         }
     }
+
+    fn to_const_ptr<'a>(ptr: Val<'a, Self>) -> Val<'a, Self::PtrConst<Self::PointeeTy>> {
+        unsafe { Val::new(ptr.cx(), ptr.raw()) }
+    }
 }
 
 unsafe impl<T: ?Sized> MutPtrTy for P<*mut T>
@@ -489,7 +493,7 @@ pub unsafe trait RawPtrTy: ConstPtrTy {
 unsafe impl<T: ValTy + ?Sized> RawPtrTy for P<*const T> {}
 unsafe impl<T: ValTy + ?Sized> RawPtrTy for P<*mut T> {}
 
-pub trait AddrspacePtr {
+pub trait AddrspacePtr: ConstPtrTy {
     type Inner: ConstPtrTy;
     const ADDRSPACE: u16;
     type Ref<'r, PT: ValTy + ?Sized>: RefTy<PointeeTy = PT>

@@ -11,6 +11,13 @@ where
         <[T; N]>::elements(self)
     }
 
+    pub fn copy_elements(&self) -> [Val<'a, T>; N]
+    where
+        T: Copy,
+    {
+        <[T; N]>::copy_elements(self)
+    }
+
     pub fn array_from_elements(arr: [Val<'a, T>; N]) -> Self {
         <[T; N]>::from_elements(arr)
     }

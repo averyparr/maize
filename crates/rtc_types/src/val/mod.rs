@@ -118,7 +118,9 @@ impl<'ctx, T: ?Sized> Val<'ctx, T> {
     where
         T: Ty,
     {
-        self.cx().store_in_alloca(self)
+        let alloca = self.cx().store_in_alloca(self.raw());
+        let raw_ptr = alloca.raw();
+        Val(self.cx(), raw_ptr, PhantomData)
     }
 }
 

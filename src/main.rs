@@ -2,6 +2,7 @@ use rtc_tile::{Tile, WarpSmemLoadTileTy, WarpTileTy, mma::SyncMMAOp};
 use rtc_types::{
     codegen::{Func, new_ptx_kernel, target_cpu::cuda::SM, typed_func::FnCodegen},
     inkwell::OptimizationLevel,
+    kernel_print,
     ty::{M, R, cuda::Global},
     val::Val,
 };
@@ -25,7 +26,15 @@ pub fn test_inner() {
     let a_args = TileT::collective_load(&mut c_shared, lane);
     let c_frag = Val::zeros(a_args.cx());
 
+    kernel_print!("abcd" => a_args.cx());
+
     let c_res = MMA::call(a_args, b_frag.load(), c_frag);
+    kernel_print!(
+        "Vector formatter?: \nFor A: '{}'\nFor B: '{}'\nFor C: '{}'",
+        a_args,
+        b_frag.load(),
+        c_res,
+    );
     d_frag.store(c_res);
 
     #[allow(unused)]
@@ -33,9 +42,13 @@ pub fn test_inner() {
         println!("{}", cx.print_module_to_string().to_string_lossy());
     };
 
-    let asm = kernel
-        .finalize()
-        .compile_asm_at_opt(&SM::SM90, OptimizationLevel::Aggressive);
+    let asm = kernel.finalize().compile_asm_at_opt_with_hooks(
+        &SM::SM90,
+        OptimizationLevel::Aggressive,
+        |_| (),
+        // |_| (),
+        print_at,
+    );
 
     println!("{}", asm);
 }

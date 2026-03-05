@@ -27,6 +27,16 @@ pub unsafe trait ContiguousUniformTy<const SIZE: usize>: UniformTy {
             unsafe { Val::new(val.cx(), element.as_basic_value_enum()) }
         })
     }
+    fn copy_elements<'a>(val: &Val<'a, Self>) -> [Val<'a, Self::ElemT>; SIZE]
+    where
+        Self::ElemT: Copy,
+    {
+        ::core::array::from_fn(|index| {
+            let index = u32::try_from(index).expect("u32 overflowed usize");
+            let element = val.cx().extract_elem::<Self::ElemT, Self>(&val, index);
+            unsafe { Val::new(val.cx(), element.as_basic_value_enum()) }
+        })
+    }
     fn from_elements(values: [Val<'_, Self::ElemT>; SIZE]) -> Val<'_, Self> {
         let cx = values[0].cx();
         let mut val = unsafe { Val::new_undef(cx) };
@@ -65,6 +75,11 @@ pub unsafe trait ContiguousUniformTy<const SIZE: usize>: UniformTy {
         })
     }
 
+    fn element<'a>(val: Val<'a, Self>, index: usize) -> Val<'a, Self::ElemT> {
+        let index = u32::try_from(index).expect("u32 overflowed usize");
+        let element = val.cx().extract_elem::<Self::ElemT, Self>(&val, index);
+        unsafe { Val::new(val.cx(), element.as_basic_value_enum()) }
+    }
     fn element_ref<'a, 'b, Ref>(
         ptr: Val<'a, Ref::Ref<'b, Ref::PointeeTy>>,
         index: u32,

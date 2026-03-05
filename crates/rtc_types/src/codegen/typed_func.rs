@@ -1,16 +1,16 @@
 use std::{borrow::Borrow, cell::Cell, marker::PhantomData};
 
 use inkwell::{
-    OptimizationLevel,
+    AddressSpace, OptimizationLevel,
     basic_block::BasicBlock,
     builder::Builder,
     context::ContextRef,
     intrinsics::Intrinsic,
-    module::Module,
+    module::{Linkage, Module},
     passes::PassBuilderOptions,
     support::LLVMString,
     targets::{FileType, InitializationConfig, Target, TargetTriple},
-    types::{BasicType, StructType, VectorType},
+    types::{BasicType, PointerType, StructType, VectorType},
     values::{
         AggregateValue, AnyValue, BasicValue, BasicValueEnum, FunctionValue, InstructionValue,
         PointerValue, StructValue, VectorBaseValue, VectorValue,
@@ -20,11 +20,11 @@ use inkwell::{
 use crate::{
     intrinsics::{IntrinsicCodegen, IntrinsicsLibrary, StatelessIntrinsicsLibrary},
     ty::{
-        BF16, Bool, ConstPtrTy, F16, F32, F64, FnRetTy, HowToExtractElements, I8, I16, I32, I64,
-        IntoFuncArgs, Ty, U8, U16, U32, U64, UniformTy, V, ValTy, Void, VoidTy,
+        AddrspacePtr, BF16, Bool, ConstPtrTy, F16, F32, F64, FnRetTy, HowToExtractElements, I8,
+        I16, I32, I64, IntoFuncArgs, P, Ty, U8, U16, U32, U64, UniformTy, V, ValTy, Void, VoidTy,
         vec::VectorizableTy,
     },
-    val::{S, Val},
+    val::Val,
 };
 
 use super::instruction_opt::InstructionOpt;
@@ -212,16 +212,40 @@ impl FnCodegen {
             should_ret
         }
     }
-    pub fn store_in_alloca<'a, T: Ty + ?Sized>(&self, val: Val<'a, T>) -> Val<'a, S<T>> {
-        let alloca_ptr =
-            unsafe { self.with_builder(|b| b.build_alloca(T::ty(self.ctx()), "alloca")) }
-                .expect("Alloca should succeed");
-        let raw_val = val.raw();
-        let _store = unsafe { self.with_builder(|b| b.build_store(alloca_ptr, raw_val)) }
+    pub fn store_in_alloca<'a>(&'a self, val: BasicValueEnum<'static>) -> Val<'a, P<*mut Void>> {
+        let alloca_ptr = unsafe { self.with_builder(|b| b.build_alloca(val.get_type(), "alloca")) }
+            .expect("Alloca should succeed");
+        let _store = unsafe { self.with_builder(|b| b.build_store(alloca_ptr, val)) }
             .expect("Store should have succeeded");
         // Safety: We have just moved the value into the alloca and so this
         // type cast is valid
-        unsafe { Val::new(val.cx(), alloca_ptr.as_basic_value_enum()) }
+        unsafe { Val::new(self, alloca_ptr.as_basic_value_enum()) }
+    }
+    pub fn store_vals_in_struct_alloca<'a>(
+        &'a self,
+        all_values: &[BasicValueEnum<'static>],
+        packed: bool,
+    ) -> Val<'a, P<*mut Void>> {
+        let field_types: Vec<_> = all_values.iter().map(|v| v.get_type()).collect();
+        let pointee_ty = self.ctx().struct_type(&field_types, packed);
+        let alloca_ptr = unsafe { self.with_builder(|b| b.build_alloca(pointee_ty, "alloca")) }
+            .expect("Alloca should succeed");
+        for (field_idx, value) in all_values.iter().enumerate() {
+            let index = u32::try_from(field_idx).expect("usize -> u32 overflow");
+            // SAFETY: We are GEPing into something we just allocated and storing a value we
+            // already have into that alloca, and the only way someone can make use
+            // of the alloca directly is by dereferencing the void* ptr.
+            unsafe {
+                self.with_builder(|b| {
+                    let ptr = b
+                        .build_struct_gep(pointee_ty, alloca_ptr, index, "valist_gep")
+                        .expect("VA list GEP should succeed");
+                    b.build_store(ptr, *value)
+                        .expect("Store to VA list should succeed");
+                });
+            }
+        }
+        unsafe { Val::new(self, alloca_ptr.as_basic_value_enum()) }
     }
     pub fn declare_function<Ret: FnRetTy, Args: IntoFuncArgs>(
         &self,
@@ -350,22 +374,22 @@ impl FnCodegen {
         }
 
         let element = val.raw();
-        let raw_val = val.raw();
+        let raw_val = agg.raw();
 
         let raw_val = match T::EXTRACTION_METHOD {
             HowToExtractElements::Vector => {
                 let vector = raw_val.into_vector_value();
-                assert_eq!(vector.get_type().get_element_type(), raw_val.get_type());
+                assert_eq!(vector.get_type().get_element_type(), element.get_type());
                 insert_as_vec(self, vector, element, index)
             }
             HowToExtractElements::ScalableVector => {
                 let vector = raw_val.into_scalable_vector_value();
-                assert_eq!(vector.get_type().get_element_type(), raw_val.get_type());
+                assert_eq!(vector.get_type().get_element_type(), element.get_type());
                 insert_as_vec(self, vector, element, index)
             }
             HowToExtractElements::Array => {
                 let agg = raw_val.into_array_value();
-                assert_eq!(agg.get_type().get_element_type(), raw_val.get_type());
+                assert_eq!(agg.get_type().get_element_type(), element.get_type());
                 insert_as_agg(self, agg, element, index)
             }
             HowToExtractElements::Struct => {
@@ -374,7 +398,7 @@ impl FnCodegen {
                     .get_type()
                     .get_field_type_at_index(index)
                     .expect("Field index error!");
-                assert_eq!(elem_ty, raw_val.get_type());
+                assert_eq!(elem_ty, element.get_type());
                 insert_as_agg(self, agg, element, index)
             }
         };
@@ -524,6 +548,51 @@ impl FnCodegen {
         .expect("Extract element from vec should succeeed");
 
         U::type_val(raw_elem_val.into())
+    }
+
+    pub fn insert_str(
+        &self,
+        s: &str,
+        address_space: Option<AddressSpace>,
+        name: &str,
+    ) -> Val<'_, P<*const U8>> {
+        let ctx = self.ctx();
+        let i8_ty = ctx.i8_type();
+        let ty = i8_ty.array_type(s.len().try_into().expect("usize -> u32 overflow"));
+        let mapped_chars = s
+            .bytes()
+            .map(|b| ctx.i8_type().const_int(b.into(), false))
+            .collect::<Vec<_>>();
+        let global = self.module().add_global(ty, address_space, name);
+        global.set_initializer(&i8_ty.const_array(mapped_chars.as_slice()));
+        global.set_linkage(Linkage::Internal);
+        global.set_unnamed_addr(true);
+        let zero = ctx.i32_type().const_zero();
+        let ptr_to_char = unsafe {
+            self.with_builder(|b| {
+                let gep_ptr = b
+                    .build_in_bounds_gep(ty, global.as_pointer_value(), &[zero, zero], "str_gep")
+                    .expect("GEP for const char array should succeed");
+                gep_ptr
+            })
+        };
+        unsafe { Val::new(self, ptr_to_char.as_basic_value_enum()) }
+    }
+
+    pub unsafe fn addrspace_cast<'a, NewPtr, Ptr>(&self, val: Val<'a, Ptr>) -> Val<'a, NewPtr>
+    where
+        for<'b> Ptr: AddrspacePtr<Value<'b> = PointerValue<'b>, Type<'b> = PointerType<'b>>,
+        for<'b> NewPtr: AddrspacePtr<Value<'b> = PointerValue<'b>, Type<'b> = PointerType<'b>>,
+    {
+        let ptr_val = val.ll_typed();
+        let new_ptr_type = NewPtr::ty(val.ctx());
+        let new_ptr = unsafe {
+            self.with_builder(|b| {
+                b.build_address_space_cast(ptr_val, new_ptr_type, "addrspace_cast")
+            })
+        }
+        .expect("addrspace cast should have worked");
+        unsafe { Val::new(val.cx(), new_ptr.as_basic_value_enum()) }
     }
 
     pub fn print_module_to_string(&self) -> LLVMString {

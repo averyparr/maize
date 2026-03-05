@@ -9,6 +9,7 @@ pub mod cuda;
 mod float;
 mod func;
 mod int;
+pub mod printable;
 mod ptr;
 pub mod raw;
 mod sized;

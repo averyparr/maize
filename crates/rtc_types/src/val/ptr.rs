@@ -24,7 +24,7 @@ where
     }
 }
 
-impl<Ptr> Val<'_, Ptr>
+impl<'a, Ptr> Val<'a, Ptr>
 where
     Ptr: MutPtrTy,
 {
@@ -41,6 +41,9 @@ where
     {
         // See `MutPtrTy::write`
         unsafe { Ptr::write(self, val) }
+    }
+    pub fn to_const_ptr(self) -> Val<'a, Ptr::PtrConst<Ptr::PointeeTy>> {
+        Ptr::to_const_ptr(self)
     }
 }
 
