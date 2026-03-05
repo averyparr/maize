@@ -5,7 +5,7 @@ use inkwell::{
 };
 
 use crate::{
-    ty::{MathTy, MathVariant, V, ValTy, vec::VectorizableTy},
+    ty::{Bool, MathTy, MathVariant, V, ValTy, vec::VectorizableTy},
     val::Val,
 };
 
@@ -197,5 +197,43 @@ where
     }
     pub fn min(self) -> Val<'a, T> {
         T::call_min(self)
+    }
+}
+
+impl<'a, const N: usize> Val<'a, [Bool; N]> {
+    pub fn all(self) -> Val<'a, Bool> {
+        let elements = self.array_elements();
+        let mut ret = self.cx().constant_from(true);
+        for element in elements {
+            ret = ret & element;
+        }
+        ret
+    }
+    pub fn any(self) -> Val<'a, Bool> {
+        let elements = self.array_elements();
+        let mut ret = self.cx().constant_from(false);
+        for element in elements {
+            ret = ret | element
+        }
+        ret
+    }
+}
+
+impl<'a, const N: usize> Val<'a, V<Bool, N>> {
+    pub fn all(self) -> Val<'a, Bool> {
+        let elements = self.elements();
+        let mut ret = self.cx().constant_from(true);
+        for element in elements {
+            ret = ret & element;
+        }
+        ret
+    }
+    pub fn any(self) -> Val<'a, Bool> {
+        let elements = self.elements();
+        let mut ret = self.cx().constant_from(false);
+        for element in elements {
+            ret = ret | element
+        }
+        ret
     }
 }

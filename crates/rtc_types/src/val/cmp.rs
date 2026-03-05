@@ -7,7 +7,7 @@ use inkwell::{
 
 use crate::{
     codegen::typed_func::ConstValTy,
-    ty::{Bool, ValTy, raw::*, vec::VectorizableTy},
+    ty::{SizedTy, raw::*, vec::VectorizableTy},
     val::Val,
 };
 
@@ -144,11 +144,11 @@ fn unsigned_int_compare(
     }
 }
 
-pub unsafe trait ComparableTy: ValTy {
+pub unsafe trait ComparableTy: SizedTy {
     /// This is typcially bools, but vectors
     /// compare elementwise and return a V<Bool, _>
     /// so we must allow this type of specialization
-    type ComparisonT: ValTy;
+    type ComparisonT: SizedTy;
     fn compare<'a>(
         predicate: Predicate,
         lhs: &Val<'a, Self>,
@@ -187,23 +187,76 @@ macro_rules! compare_for_scalar {
         }
     };
 }
-
+compare_for_scalar!(F64 => float_compare);
 compare_for_scalar!(F32 => float_compare);
+compare_for_scalar!(F16 => float_compare);
+compare_for_scalar!(BF16 => float_compare);
 compare_for_scalar!(I32 => signed_int_compare);
 compare_for_scalar!(U32 => unsigned_int_compare);
 
 unsafe impl<T, const N: usize> ComparableTy for V<T, N>
 where
-    T: ComparableTy + VectorizableTy,
+    T: ComparableTy<ComparisonT: VectorizableTy> + VectorizableTy + Copy,
 {
-    type ComparisonT = V<Bool, N>;
+    type ComparisonT = V<T::ComparisonT, N>;
+    // We explicitly compare elementwise here because I found that vectorized
+    // codegen on NVPTX is quite bad for booleans. This still isn't perfect,
+    // but it at least does the cascading `setp.eq` followed by e.g. `and.pred`.
+    fn compare<'a>(
+        predicate: Predicate,
+        lhs: &Val<'a, Self>,
+        rhs: &Val<'a, Self>,
+    ) -> Val<'a, Self::ComparisonT> {
+        let lhs_elements = lhs.copy_elements();
+        let rhs_elements = rhs.copy_elements();
+        let arr = ::core::array::from_fn(|i| {
+            let lhs = lhs_elements[i];
+            let rhs = rhs_elements[i];
+            T::compare(predicate, &lhs, &rhs)
+        });
+        Val::from_elements(arr)
+    }
     fn build_comparison_raw(
         b: Builder<'static>,
         pred: Predicate,
         lhs: BasicValueEnum<'static>,
         rhs: BasicValueEnum<'static>,
     ) -> BasicValueEnum<'static> {
-        T::build_comparison_raw(b, pred, lhs, rhs)
+        T::build_comparison_raw(b, pred, lhs, rhs);
+        panic!("Vectors rely on a different method");
+    }
+}
+
+unsafe impl<T, const N: usize> ComparableTy for [T; N]
+where
+    T: ComparableTy + Copy,
+{
+    type ComparisonT = [T::ComparisonT; N];
+    // We explicitly compare elementwise here because I found that vectorized
+    // codegen on NVPTX is quite bad for booleans. This still isn't perfect,
+    // but it at least does the cascading `setp.eq` followed by e.g. `and.pred`.
+    fn compare<'a>(
+        predicate: Predicate,
+        lhs: &Val<'a, Self>,
+        rhs: &Val<'a, Self>,
+    ) -> Val<'a, Self::ComparisonT> {
+        let lhs_elements = lhs.copy_elements();
+        let rhs_elements = rhs.copy_elements();
+        let arr = ::core::array::from_fn(|i| {
+            let lhs = lhs_elements[i];
+            let rhs = rhs_elements[i];
+            T::compare(predicate, &lhs, &rhs)
+        });
+        Val::array_from_elements(arr)
+    }
+    fn build_comparison_raw(
+        b: Builder<'static>,
+        pred: Predicate,
+        lhs: BasicValueEnum<'static>,
+        rhs: BasicValueEnum<'static>,
+    ) -> BasicValueEnum<'static> {
+        T::build_comparison_raw(b, pred, lhs, rhs);
+        panic!("Arrays rely on a different method");
     }
 }
 
