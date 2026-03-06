@@ -1,5 +1,6 @@
 pub mod bf16_tile;
 pub mod gmem;
+pub mod group;
 mod lane_to_coord;
 mod ldsm;
 pub mod mma;
@@ -15,6 +16,29 @@ use rtc_types::{
     ty::{AlignedTy, AnyTy, BF16, M, SizedTy, Ty, U32, U128, V, ValTy, cuda::Shared},
     val::Val,
 };
+
+pub struct W<T, const N: u32>(PhantomData<T>);
+impl<T, const N: u32> Clone for W<T, N> {
+    fn clone(&self) -> Self {
+        Self(PhantomData)
+    }
+}
+impl<T, const N: u32> Copy for W<T, N> {}
+impl<T, const N: u32> W<T, N> {
+    fn new() -> Self {
+        Self(PhantomData)
+    }
+}
+
+trait FixedWidthWindow: Copy {
+    type ElemT: ValTy;
+    const WIDTH: u32;
+}
+
+impl<T: ValTy, const N: u32> FixedWidthWindow for W<T, N> {
+    type ElemT = T;
+    const WIDTH: u32 = N;
+}
 
 pub trait WarpTileTy {
     const ROWS: u32;

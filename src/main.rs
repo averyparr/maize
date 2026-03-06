@@ -1,6 +1,7 @@
 use rtc_tile::{
     WarpTileTy,
-    gmem::{BidXGroup, Matrix},
+    gmem::Matrix,
+    group::by_block::{BlockX, BlockY},
     mma::run_test_sync_mma,
 };
 use rtc_types::{
@@ -16,8 +17,8 @@ type MMA = rtc_tile::mma::sm80::Sm80MmaBf16F32_16x8x16;
 pub fn test_inner() {
     let kernel = new_ptx_kernel::<(
         Global<P<*const F32>>,
-        U16,
-        U16,
+        U32,
+        U32,
         Global<R<&<TileT as WarpTileTy>::FragT>>,
         Global<M<&mut <TileT as WarpTileTy>::FragT>>,
     )>();
@@ -28,9 +29,9 @@ pub fn test_inner() {
 
     let mut matrix = Matrix::new(ptr, nrows, ncols);
 
-    let group = BidXGroup(kernel.intrinsics());
+    let group = BlockY(kernel.intrinsics());
 
-    for panel in matrix.row_panel_iter_by_group(group, 16) {
+    for panel in matrix.collective_row_panel_iter::<16>(group) {
         // kernel_print!("We are at pointer {}", );
         let r = panel.ptr.to_mut_ptr().ptr_cast_mut();
         unsafe { r.write(c_val.load().vec_cast::<F32>()) };
@@ -45,10 +46,10 @@ pub fn test_inner() {
     let asm = kernel.finalize().compile_asm_at_opt_with_hooks(
         &SM::SM90,
         OptimizationLevel::Aggressive,
-        // |_| (),
-        print_at,
-        // |_| (),
-        print_at,
+        |_| (),
+        // print_at,
+        // print_at,
+        |_| (),
     );
 
     println!("{}", &asm[..asm.len() - 1]);
