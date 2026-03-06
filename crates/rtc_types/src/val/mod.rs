@@ -126,20 +126,10 @@ impl<'ctx, T: ?Sized> Val<'ctx, T> {
 
 impl<'ctx, T: Ty> Val<'ctx, S<T>> {
     pub fn as_ref<'a>(&'a self) -> Val<'ctx, R<&'a T>> {
-        let alloca = unsafe {
-            self.cx()
-                .with_builder(|b| b.build_alloca(T::ty(self.ctx()), "ref_alloca"))
-        }
-        .expect("Alloca shuold succeed");
-        Val(self.cx(), alloca.as_basic_value_enum(), PhantomData)
+        Val(self.cx(), self.raw(), PhantomData)
     }
     pub fn as_mut<'a>(&'a mut self) -> Val<'ctx, M<&'a mut T>> {
-        let alloca = unsafe {
-            self.cx()
-                .with_builder(|b| b.build_alloca(T::ty(self.ctx()), "mut_alloca"))
-        }
-        .expect("Alloca shuold succeed");
-        Val(self.cx(), alloca.as_basic_value_enum(), PhantomData)
+        Val(self.cx(), self.raw(), PhantomData)
     }
     pub fn alloca_ptr(&self) -> PointerValue<'static> {
         self.1.into_pointer_value()

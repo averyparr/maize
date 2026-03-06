@@ -126,12 +126,7 @@ pub unsafe trait ConstPtrTy:
     ) -> Val<'a, Self::PointeeTy> {
         // Safety: We have a pointer which the user guarantees is valid to read from, so it's safe to build
         // a pointer load at the end of the current BB
-        let raw_ptr_to_ptr = ptr.ll_typed();
-        let raw_ptr = unsafe {
-            ptr.cx()
-                .with_builder(|b| b.build_load(Self::ty(ptr.ctx()), raw_ptr_to_ptr, "load_raw_ptr"))
-        }
-        .expect("Raw ptr load should succeed");
+        let raw_ptr = ptr.ll_typed();
         let raw_ins = raw_ptr
             .as_instruction_value()
             .expect("load should always be an instruction");
@@ -146,7 +141,7 @@ pub unsafe trait ConstPtrTy:
 
         let raw_val = unsafe {
             ptr.cx()
-                .with_builder(|b| b.build_load(pointee_ty, raw_ptr.into_pointer_value(), "load"))
+                .with_builder(|b| b.build_load(pointee_ty, raw_ptr, "load"))
         }
         .expect("Pointer load should be possible");
 
@@ -242,16 +237,8 @@ pub unsafe trait MutPtrTy: ConstPtrTy {
         val: Val<'_, Self::PointeeTy>,
         metadata: impl IntoIterator<Item = (&'a str, Option<BasicMetadataValueEnum<'a>>)>,
     ) {
-        let raw_ptr_to_ptr = ptr.ll_typed();
+        let ptr_to_val = ptr.ll_typed();
 
-        let ptr_to_val = unsafe {
-            ptr.cx()
-                .with_builder(|b| {
-                    b.build_load(Self::ty(ptr.ctx()), raw_ptr_to_ptr, "read_for_write")
-                })
-                .expect("Load read_for_write should succeed")
-        }
-        .into_pointer_value();
         let raw_ins = ptr_to_val
             .as_instruction_value()
             .expect("Pointer load should be possible");
@@ -478,7 +465,7 @@ where
         PT: 'r;
 }
 
-pub unsafe trait RawPtrTy: ConstPtrTy {
+pub unsafe trait RawPtrTy: ConstPtrTy + Copy {
     fn ptr_cast<'a, U: ValTy + ?Sized>(val: Val<'a, Self>) -> Val<'a, Self::PtrConst<U>> {
         unsafe { Val::new(val.cx(), val.raw()) }
     }

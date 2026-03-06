@@ -15,6 +15,7 @@ macro_rules! addrspace_ptrs {
     ($($ptr: ident => $addrspace: literal;)*) => {
     $(
         #[allow(unused)]
+        #[derive(Clone, Copy)]
         pub struct $ptr<Ptr>(PhantomData<Ptr>);
         impl<Ptr> AddrspacePtr for $ptr<Ptr>
         where

@@ -1,9 +1,13 @@
-use rtc_tile::{Tile, WarpSmemLoadTileTy, WarpTileTy, mma::SyncMMAOp};
+use rtc_tile::{
+    Tile, WarpSmemLoadTileTy, WarpTileTy,
+    gmem::{BidXGroup, Matrix},
+    mma::SyncMMAOp,
+};
 use rtc_types::{
     codegen::{Func, new_ptx_kernel, target_cpu::cuda::SM, typed_func::FnCodegen},
     inkwell::OptimizationLevel,
     kernel_print,
-    ty::{M, R, cuda::Global},
+    ty::{M, R, U32, cuda::Global, raw::*},
     val::Val,
 };
 
@@ -13,29 +17,21 @@ type MMA = rtc_tile::mma::sm80::Sm80MmaBf16F32_16x8x16;
 
 pub fn test_inner() {
     let kernel = new_ptx_kernel::<(
-        Global<R<&<MMA as SyncMMAOp>::AFrag>>,
-        Global<R<&<MMA as SyncMMAOp>::BFrag>>,
-        Global<M<&mut <MMA as SyncMMAOp>::CFrag>>,
+        Global<P<*const F32>>,
+        U32,
+        U32,
         Global<M<&mut <TileT as WarpTileTy>::FragT>>,
     )>();
     let mut c_shared = kernel.intrinsics().alloc_aligned_shared::<Tile<TileT>>(16);
     kernel.use_fast_math();
-    let (_a_frag, b_frag, mut d_frag, mut _d) = kernel.get_args();
+    let (ptr, nrows, ncols, mut _d) = kernel.get_args();
 
-    let lane = kernel.intrinsics().laneid();
-    let a_args = TileT::collective_load(&mut c_shared, lane);
-    let c_frag = Val::zeros(a_args.cx());
+    let mut matrix = Matrix::new(ptr, nrows, ncols);
 
-    kernel_print!("abcd" => a_args.cx());
-
-    let c_res = MMA::call(a_args, b_frag.load(), c_frag);
-    kernel_print!(
-        "Vector formatter?: \nFor A: '{}'\nFor B: '{}'\nFor C: '{}'",
-        a_args,
-        b_frag.load(),
-        c_res,
-    );
-    d_frag.store(c_res);
+    let group = BidXGroup(kernel.intrinsics());
+    for t in matrix.row_panel_iter_by_group(group, 16) {
+        kernel_print!("We are at pointer {}", t.ptr);
+    }
 
     #[allow(unused)]
     let print_at = |cx: &FnCodegen| {
@@ -45,9 +41,9 @@ pub fn test_inner() {
     let asm = kernel.finalize().compile_asm_at_opt_with_hooks(
         &SM::SM90,
         OptimizationLevel::Aggressive,
+        print_at,
         |_| (),
         // |_| (),
-        print_at,
     );
 
     println!("{}", asm);

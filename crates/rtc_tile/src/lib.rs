@@ -1,4 +1,5 @@
 pub mod bf16_tile;
+pub mod gmem;
 mod lane_to_coord;
 mod ldsm;
 pub mod mma;
