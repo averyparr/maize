@@ -1,14 +1,15 @@
+use std::u32;
+
 use rtc_types::{
     codegen::{
         loops::{Loop, TransformLooper},
         typed_func::FnCodegen,
     },
     intrinsics::{IntrinsicCodegen, cuda::CUDA},
-    ty::{Bool, R, RawPtrTy, SizedTy, U32, cuda::Global},
+    kernel_assert,
+    ty::{Bool, RawPtrTy, U16, U32},
     val::Val,
 };
-
-struct DNxDM;
 
 pub trait Group {
     fn index_size<'a>(self) -> (Val<'a, U32>, Val<'a, U32>)
@@ -33,8 +34,12 @@ pub struct Matrix<'a, Ptr> {
 }
 
 impl<'a, Ptr> Matrix<'a, Ptr> {
-    pub fn new(ptr: Val<'a, Ptr>, nrows: Val<'a, U32>, ncols: Val<'a, U32>) -> Self {
-        Self { ptr, nrows, ncols }
+    pub fn new(ptr: Val<'a, Ptr>, nrows: Val<'a, U16>, ncols: Val<'a, U16>) -> Self {
+        Self {
+            ptr,
+            nrows: nrows.cast(),
+            ncols: ncols.cast(),
+        }
     }
 }
 
@@ -101,7 +106,10 @@ where
     where
         Self: 'a,
     {
-        curr_row + self.rows_per_iter
+        // SAFETY: I'm actually not sure if this is what I want, but if we overflow U32,
+        // then I'd argue that our loop was broken in the first place and so it should be
+        // OK to optimize on that basis.
+        unsafe { curr_row.add_unchecked(self.rows_per_iter) }
     }
 }
 
@@ -114,6 +122,8 @@ impl<'a, Ptr: RawPtrTy + 'a> Matrix<'a, Ptr> {
         let (index, size) = group.index_size();
         let rows_per_iter = size * panel_rows;
         let curr_row = index * panel_rows;
+        let cannot_overflow = (self.nrows + rows_per_iter).lt(index.cx().constant(u32::MAX));
+        kernel_assert!(cannot_overflow, "Would overflow U32 during iteration!");
         Loop::new(RowPanelIterLooper {
             ptr: self.ptr,
             curr_row,

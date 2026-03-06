@@ -1,11 +1,7 @@
-use inkwell::{
-    builder::Builder,
-    types::{AnyType, AnyTypeEnum},
-    values::{BasicValue, BasicValueEnum, FloatValue, IntValue},
-};
+use inkwell::{builder::Builder, values::BasicValue};
 
 use crate::{
-    ty::{Ty, V, ValTy, vec::VectorizableTy},
+    ty::{Ty, V, ValTy, raw::*, vec::VectorizableTy},
     val::Val,
 };
 
@@ -13,38 +9,74 @@ pub trait ConvertibleTy<To: ValTy>: ValTy {
     fn cvt(val: Val<'_, Self>) -> Val<'_, To>;
 }
 
-trait ScalarConvertible {
-    fn cast_to(self, b: Builder<'static>, dst_ty: AnyTypeEnum<'static>) -> BasicValueEnum<'static>;
+trait ScalarConvertibleTy: ValTy {
+    fn cast_to(
+        val: Self::Value<'static>,
+        b: Builder<'static>,
+        dst_ty: Self::Type<'static>,
+    ) -> Self::Value<'static>;
 }
 
-impl ScalarConvertible for FloatValue<'static> {
-    fn cast_to(self, b: Builder<'static>, dst_ty: AnyTypeEnum<'static>) -> BasicValueEnum<'static> {
-        b.build_float_cast(self, dst_ty.into_float_type(), "fcvt")
-            .expect("Float cast should always succeed")
-            .as_basic_value_enum()
-    }
+macro_rules! impl_scalar_convertible {
+    (float: $($tipes: ty),*) => {
+        $(
+            impl ScalarConvertibleTy for $tipes {
+                fn cast_to(
+                    val: Self::Value<'static>,
+                    b: Builder<'static>,
+                    dst_ty: Self::Type<'static>,
+                ) -> Self::Value<'static> {
+                    b.build_float_cast(val, dst_ty, "fcast")
+                        .expect("Float cast should succeed")
+                }
+            }
+        )*
+    };
+    (sint: $($tipes: ty),*) => {
+        $(
+            impl ScalarConvertibleTy for $tipes {
+                fn cast_to(
+                    val: Self::Value<'static>,
+                    b: Builder<'static>,
+                    dst_ty: Self::Type<'static>,
+                ) -> Self::Value<'static> {
+                    b.build_int_cast_sign_flag(val, dst_ty, false, "sicast")
+                        .expect("Int cast should succeed")
+                }
+            }
+        )*
+    };
+    (uint: $($tipes: ty),*) => {
+        $(
+            impl ScalarConvertibleTy for $tipes {
+                fn cast_to(
+                    val: Self::Value<'static>,
+                    b: Builder<'static>,
+                    dst_ty: Self::Type<'static>,
+                ) -> Self::Value<'static> {
+                    b.build_int_cast_sign_flag(val, dst_ty, false, "uicast")
+                        .expect("Unsigned int cast should succeed")
+                }
+            }
+        )*
+    };
 }
-impl ScalarConvertible for IntValue<'static> {
-    fn cast_to(self, b: Builder<'static>, dst_ty: AnyTypeEnum<'static>) -> BasicValueEnum<'static> {
-        b.build_int_cast(self, dst_ty.into_int_type(), "icvt")
-            .expect("Int cast should always succeed")
-            .as_basic_value_enum()
-    }
-}
+
+impl_scalar_convertible!(float: F16, BF16, F32, F64);
+impl_scalar_convertible!(sint: I8, I16, I32, I64, I128);
+impl_scalar_convertible!(uint: U8, U16, U32, U64, U128);
 
 impl<From, To> ConvertibleTy<To> for From
 where
-    for<'a> To: ValTy<Type<'a> = From::Type<'a>, Value<'a> = From::Value<'a>>,
-    for<'a> From: ValTy<Value<'static>: ScalarConvertible>,
+    for<'a> To: ScalarConvertibleTy<Type<'a> = From::Type<'a>, Value<'a> = From::Value<'a>>,
+    for<'a> From: ScalarConvertibleTy,
 {
     fn cvt(val: Val<'_, Self>) -> Val<'_, To> {
         let raw = val.ll_typed();
         let dst_ty = To::ty(val.ctx());
-        let raw_cast = unsafe {
-            val.cx()
-                .with_builder(|b| raw.cast_to(b, dst_ty.as_any_type_enum()))
-        };
-        unsafe { Val::new(val.cx(), raw_cast) }
+        let raw_cast = unsafe { val.cx().with_builder(|b| Self::cast_to(raw, b, dst_ty)) };
+
+        unsafe { Val::new(val.cx(), raw_cast.as_basic_value_enum()) }
     }
 }
 

@@ -127,14 +127,13 @@ pub unsafe trait ConstPtrTy:
         // Safety: We have a pointer which the user guarantees is valid to read from, so it's safe to build
         // a pointer load at the end of the current BB
         let raw_ptr = ptr.ll_typed();
-        let raw_ins = raw_ptr
-            .as_instruction_value()
-            .expect("load should always be an instruction");
-        for (name, args) in metadata.into_iter() {
-            let kind_id = ptr.ctx().get_kind_id(name);
-            raw_ins
-                .set_metadata(ptr.ctx().metadata_node(args.as_slice()), kind_id)
-                .expect("Failed to set metadata");
+        if let Some(raw_ins) = raw_ptr.as_instruction_value() {
+            for (name, args) in metadata.into_iter() {
+                let kind_id = ptr.ctx().get_kind_id(name);
+                raw_ins
+                    .set_metadata(ptr.ctx().metadata_node(args.as_slice()), kind_id)
+                    .expect("Failed to set metadata");
+            }
         }
 
         let pointee_ty = Self::PointeeTy::ty(ptr.ctx());
@@ -239,14 +238,13 @@ pub unsafe trait MutPtrTy: ConstPtrTy {
     ) {
         let ptr_to_val = ptr.ll_typed();
 
-        let raw_ins = ptr_to_val
-            .as_instruction_value()
-            .expect("Pointer load should be possible");
-        for (name, args) in metadata.into_iter() {
-            let kind_id = ptr.ctx().get_kind_id(name);
-            raw_ins
-                .set_metadata(ptr.ctx().metadata_node(args.as_slice()), kind_id)
-                .expect("Failed to set metadata");
+        if let Some(raw_ins) = ptr_to_val.as_instruction_value() {
+            for (name, args) in metadata.into_iter() {
+                let kind_id = ptr.ctx().get_kind_id(name);
+                raw_ins
+                    .set_metadata(ptr.ctx().metadata_node(args.as_slice()), kind_id)
+                    .expect("Failed to set metadata");
+            }
         }
         unsafe {
             ptr.cx()
@@ -466,6 +464,7 @@ where
 }
 
 pub unsafe trait RawPtrTy: ConstPtrTy + Copy {
+    type AsMutPtr: MutPtrTy;
     fn ptr_cast<'a, U: ValTy + ?Sized>(val: Val<'a, Self>) -> Val<'a, Self::PtrConst<U>> {
         unsafe { Val::new(val.cx(), val.raw()) }
     }
@@ -475,10 +474,17 @@ pub unsafe trait RawPtrTy: ConstPtrTy + Copy {
     {
         unsafe { Val::new(val.cx(), val.raw()) }
     }
+    fn to_mut_ptr<'a>(val: Val<'a, Self>) -> Val<'a, Self::AsMutPtr> {
+        unsafe { Val::new(val.cx(), val.raw()) }
+    }
 }
 
-unsafe impl<T: ValTy + ?Sized> RawPtrTy for P<*const T> {}
-unsafe impl<T: ValTy + ?Sized> RawPtrTy for P<*mut T> {}
+unsafe impl<T: ValTy + ?Sized> RawPtrTy for P<*const T> {
+    type AsMutPtr = P<*mut T>;
+}
+unsafe impl<T: ValTy + ?Sized> RawPtrTy for P<*mut T> {
+    type AsMutPtr = P<*mut T>;
+}
 
 pub trait AddrspacePtr: ConstPtrTy {
     type Inner: ConstPtrTy;

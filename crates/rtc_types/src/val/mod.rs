@@ -1,6 +1,7 @@
 mod array;
 mod assert;
 mod cmp;
+mod no_overflow;
 mod ptr;
 mod std_ops;
 mod vec;
@@ -100,7 +101,7 @@ impl<'ctx, T: ?Sized> Val<'ctx, T> {
     pub unsafe fn transmute<U: ?Sized>(val: Self) -> Val<'ctx, U>
     where
         T: SizedTy,
-        U: for<'a> SizedTy<Type<'a> = T::Type<'a>, Value<'a> = T::Value<'a>>,
+        U: SizedTy,
     {
         unsafe { Val::new(val.cx(), val.raw()) }
     }

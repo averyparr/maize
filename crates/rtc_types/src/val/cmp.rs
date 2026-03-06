@@ -191,9 +191,14 @@ compare_for_scalar!(F64 => float_compare);
 compare_for_scalar!(F32 => float_compare);
 compare_for_scalar!(F16 => float_compare);
 compare_for_scalar!(BF16 => float_compare);
+compare_for_scalar!(I8 => signed_int_compare);
+compare_for_scalar!(I16 => signed_int_compare);
 compare_for_scalar!(I32 => signed_int_compare);
+compare_for_scalar!(I64 => signed_int_compare);
+compare_for_scalar!(U8 => unsigned_int_compare);
+compare_for_scalar!(U16 => unsigned_int_compare);
 compare_for_scalar!(U32 => unsigned_int_compare);
-
+compare_for_scalar!(U64 => unsigned_int_compare);
 unsafe impl<T, const N: usize> ComparableTy for V<T, N>
 where
     T: ComparableTy<ComparisonT: VectorizableTy> + VectorizableTy + Copy,

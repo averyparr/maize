@@ -149,4 +149,7 @@ where
     {
         Ptr::ptr_cast_mut(self)
     }
+    pub fn to_mut_ptr(self) -> Val<'a, Ptr::AsMutPtr> {
+        Ptr::to_mut_ptr(self)
+    }
 }

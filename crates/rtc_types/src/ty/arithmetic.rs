@@ -2,7 +2,9 @@ use inkwell::builder::Builder;
 use inkwell::types::IntMathType;
 use inkwell::values::BasicValue;
 use inkwell::values::BasicValueEnum;
+use inkwell::values::FastMathFlags;
 use inkwell::values::FloatMathValue;
+use inkwell::values::InstructionValue;
 use inkwell::values::IntMathValue;
 
 use crate::ty::ValTy;
@@ -15,6 +17,75 @@ pub enum MathVariant {
     Float,
     SignedInt,
     UnsignedInt,
+}
+
+macro_rules! add_dispatched_binary_function {
+    ($slf: ident, $fn_name:
+        ident => $float_variant: ident $(($ffunc: ident))?,
+        $signed_variant: ident  $(($sfunc: ident))?,
+        $unsigned_variant: ident  $(($ufunc: ident))?$(,)?
+    ) => {
+        fn $fn_name<'a>(lhs: Val<'a, Self>, rhs: Val<'a, Self>) -> Val<'a, Self> {
+            let build = |b: Builder<'static>| match $slf::MATH_VARIANT {
+                MathVariant::Float => b
+                    .$float_variant(
+                        Self::type_as_float(lhs.raw()),
+                        Self::type_as_float(rhs.raw()),
+                        concat!("f", stringify!($fn_name)),
+                    )
+                    .map(|v| {
+                        $(if let Some(ins) = v.as_instruction_value() {
+                            $ffunc(ins);
+                        })?
+                        v.as_basic_value_enum()
+                    }),
+                MathVariant::SignedInt => b
+                    .$signed_variant(
+                        Self::type_as_int(lhs.raw()),
+                        Self::type_as_int(rhs.raw()),
+                        concat!("i", stringify!($fn_name)),
+                    )
+                    .map(|v| {
+                        $(if let Some(ins) = v.as_instruction_value() {
+                            $sfunc(ins);
+                        })?
+                        v.as_basic_value_enum()
+                    }),
+                MathVariant::UnsignedInt => b
+                    .$unsigned_variant(
+                        Self::type_as_int(lhs.raw()),
+                        Self::type_as_int(rhs.raw()),
+                        concat!("u", stringify!($fn_name)),
+                    )
+                    .map(|v| {
+                        $(if let Some(ins) = v.as_instruction_value() {
+                            $ufunc(ins);
+                        })?
+                        v.as_basic_value_enum()
+                    }),
+            };
+            let raw = unsafe { lhs.cx().with_builder(build) }
+                .expect(stringify!("Should be able to build a[n] ", $fn_name));
+            let raw = post_process(lhs.cx(), raw);
+
+            // Safety: $fn_name is (T, T) -> T
+            unsafe { Val::new(lhs.cx(), raw) }
+        }
+    };
+}
+
+fn no_special_float_values(ins: InstructionValue<'_>) {
+    let flags = FastMathFlags::NoNaNs
+        | FastMathFlags::NoInfs
+        | FastMathFlags::NoSignedZeros
+        | FastMathFlags::AllowContract;
+    ins.set_fast_math_flags(flags)
+        .expect("Setting fast math flags on float add should work");
+}
+
+fn exact_div_or_rem(ins: InstructionValue<'_>) {
+    ins.set_exact_flag(true)
+        .expect("Called on an invalid math op")
 }
 
 /// Safety: Implementing this trait requires that nothing is done
@@ -36,106 +107,14 @@ pub unsafe trait MathTy: ValTy {
     }
 
     // None of these should be overridden
-    fn add<'a>(lhs: Val<'a, Self>, rhs: Val<'a, Self>) -> Val<'a, Self> {
-        let build = |b: Builder<'static>| match Self::MATH_VARIANT {
-            MathVariant::Float => b
-                .build_float_add(
-                    Self::type_as_float(lhs.raw()),
-                    Self::type_as_float(rhs.raw()),
-                    "fadd",
-                )
-                .map(|v| v.as_basic_value_enum()),
-            MathVariant::SignedInt | MathVariant::UnsignedInt => b
-                .build_int_add(
-                    Self::type_as_int(lhs.raw()),
-                    Self::type_as_int(rhs.raw()),
-                    "add",
-                )
-                .map(|v| v.as_basic_value_enum()),
-        };
-        let raw = unsafe { lhs.cx().with_builder(build) }.expect("Should be able to build an add");
-
-        let raw = post_process(lhs.cx(), raw);
-
-        // Safety: add is (T, T) -> T
-        unsafe { Val::new(lhs.cx(), raw) }
-    }
-    fn sub<'a>(lhs: Val<'a, Self>, rhs: Val<'a, Self>) -> Val<'a, Self> {
-        let build = |b: Builder<'static>| match Self::MATH_VARIANT {
-            MathVariant::Float => b
-                .build_float_sub(
-                    Self::type_as_float(lhs.raw()),
-                    Self::type_as_float(rhs.raw()),
-                    "fsub",
-                )
-                .map(|v| v.as_basic_value_enum()),
-            MathVariant::SignedInt | MathVariant::UnsignedInt => b
-                .build_int_sub(
-                    Self::type_as_int(lhs.raw()),
-                    Self::type_as_int(rhs.raw()),
-                    "sub",
-                )
-                .map(|v| v.as_basic_value_enum()),
-        };
-        let raw = unsafe { lhs.cx().with_builder(build) }.expect("Should be able to build an sub");
-        let raw = post_process(lhs.cx(), raw);
-
-        // Safety: sub is (T, T) -> T
-        unsafe { Val::new(lhs.cx(), raw) }
-    }
-    fn mul<'a>(lhs: Val<'a, Self>, rhs: Val<'a, Self>) -> Val<'a, Self> {
-        let build = |b: Builder<'static>| match Self::MATH_VARIANT {
-            MathVariant::Float => b
-                .build_float_mul(
-                    Self::type_as_float(lhs.raw()),
-                    Self::type_as_float(rhs.raw()),
-                    "fmul",
-                )
-                .map(|v| v.as_basic_value_enum()),
-            MathVariant::SignedInt | MathVariant::UnsignedInt => b
-                .build_int_mul(
-                    Self::type_as_int(lhs.raw()),
-                    Self::type_as_int(rhs.raw()),
-                    "mul",
-                )
-                .map(|v| v.as_basic_value_enum()),
-        };
-        let raw = unsafe { lhs.cx().with_builder(build) }.expect("Should be able to build an mul");
-        let raw = post_process(lhs.cx(), raw);
-
-        // Safety: mul is (T, T) -> T
-        unsafe { Val::new(lhs.cx(), raw) }
-    }
-    fn div<'a>(lhs: Val<'a, Self>, rhs: Val<'a, Self>) -> Val<'a, Self> {
-        let build = |b: Builder<'static>| match Self::MATH_VARIANT {
-            MathVariant::Float => b
-                .build_float_div(
-                    Self::type_as_float(lhs.raw()),
-                    Self::type_as_float(rhs.raw()),
-                    "fadd",
-                )
-                .map(|v| v.as_basic_value_enum()),
-            MathVariant::SignedInt => b
-                .build_int_signed_div(
-                    Self::type_as_int(lhs.raw()),
-                    Self::type_as_int(rhs.raw()),
-                    "sdiv",
-                )
-                .map(|v| v.as_basic_value_enum()),
-            MathVariant::UnsignedInt => b
-                .build_int_unsigned_div(
-                    Self::type_as_int(lhs.raw()),
-                    Self::type_as_int(rhs.raw()),
-                    "sdiv",
-                )
-                .map(|v| v.as_basic_value_enum()),
-        };
-        let raw = unsafe { lhs.cx().with_builder(build) }.expect("Should be able to build a div");
-        let raw = post_process(lhs.cx(), raw);
-
-        // Safety: div is (T, T) -> T
-        unsafe { Val::new(lhs.cx(), raw) }
-    }
+    add_dispatched_binary_function!(Self, add => build_float_add, build_int_add, build_int_add);
+    add_dispatched_binary_function!(Self, add_no_wrap => build_float_add (no_special_float_values), build_int_nsw_add, build_int_nuw_add);
+    add_dispatched_binary_function!(Self, sub => build_float_sub, build_int_sub, build_int_sub);
+    add_dispatched_binary_function!(Self, sub_no_wrap => build_float_sub (no_special_float_values), build_int_nsw_sub, build_int_nuw_sub);
+    add_dispatched_binary_function!(Self, mul => build_float_mul, build_int_mul, build_int_mul);
+    add_dispatched_binary_function!(Self, mul_no_wrap => build_float_mul (no_special_float_values), build_int_nsw_mul, build_int_nuw_mul);
+    add_dispatched_binary_function!(Self, div => build_float_div, build_int_signed_div, build_int_unsigned_div);
+    add_dispatched_binary_function!(Self, div_nonzero => build_float_div (no_special_float_values), build_int_exact_signed_div, build_int_unsigned_div (exact_div_or_rem));
     fn neg<'a>(val: Val<'a, Self>) -> Val<'a, Self> {
         let build = |b: Builder<'static>| match Self::MATH_VARIANT {
             MathVariant::Float => b

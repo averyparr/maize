@@ -1,14 +1,10 @@
 use core::ops::Range;
-use std::marker::PhantomData;
 
-use inkwell::{
-    basic_block::BasicBlock,
-    values::{BasicValue, PointerValue},
-};
+use inkwell::basic_block::BasicBlock;
 
 use crate::{
     codegen::FnCodegen,
-    ty::{Bool, M, SizedTy, U32},
+    ty::{Bool, SizedTy, U32},
     val::{S, Val},
 };
 

@@ -1,14 +1,12 @@
 use rtc_tile::{
-    Tile, WarpSmemLoadTileTy, WarpTileTy,
+    WarpTileTy,
     gmem::{BidXGroup, Matrix},
-    mma::SyncMMAOp,
+    mma::run_test_sync_mma,
 };
 use rtc_types::{
     codegen::{Func, new_ptx_kernel, target_cpu::cuda::SM, typed_func::FnCodegen},
     inkwell::OptimizationLevel,
-    kernel_print,
-    ty::{M, R, U32, cuda::Global, raw::*},
-    val::Val,
+    ty::{M, R, cuda::Global, raw::*},
 };
 
 type TileT = rtc_tile::bf16_tile::MmaBf16_16x16;
@@ -18,19 +16,25 @@ type MMA = rtc_tile::mma::sm80::Sm80MmaBf16F32_16x8x16;
 pub fn test_inner() {
     let kernel = new_ptx_kernel::<(
         Global<P<*const F32>>,
-        U32,
-        U32,
+        U16,
+        U16,
+        Global<R<&<TileT as WarpTileTy>::FragT>>,
         Global<M<&mut <TileT as WarpTileTy>::FragT>>,
     )>();
-    let mut c_shared = kernel.intrinsics().alloc_aligned_shared::<Tile<TileT>>(16);
+    // let mut c_shared = kernel.intrinsics().alloc_aligned_shared::<Tile<TileT>>(16);
     kernel.use_fast_math();
-    let (ptr, nrows, ncols, mut _d) = kernel.get_args();
+    let (ptr, nrows, ncols, c_val, mut d_val) = kernel.get_args();
+    // let (ptr, nrows, ncols) = kernel.get_args();
 
     let mut matrix = Matrix::new(ptr, nrows, ncols);
 
     let group = BidXGroup(kernel.intrinsics());
-    for t in matrix.row_panel_iter_by_group(group, 16) {
-        kernel_print!("We are at pointer {}", t.ptr);
+
+    for panel in matrix.row_panel_iter_by_group(group, 16) {
+        // kernel_print!("We are at pointer {}", );
+        let r = panel.ptr.to_mut_ptr().ptr_cast_mut();
+        unsafe { r.write(c_val.load().vec_cast::<F32>()) };
+        d_val.store(c_val.load());
     }
 
     #[allow(unused)]
@@ -41,18 +45,19 @@ pub fn test_inner() {
     let asm = kernel.finalize().compile_asm_at_opt_with_hooks(
         &SM::SM90,
         OptimizationLevel::Aggressive,
-        print_at,
-        |_| (),
         // |_| (),
+        print_at,
+        // |_| (),
+        print_at,
     );
 
-    println!("{}", asm);
+    println!("{}", &asm[..asm.len() - 1]);
 }
 
-fn test_mma() {
-    test_inner();
+pub fn test_mma() {
+    println!("{}", run_test_sync_mma::<MMA>(SM::SM90));
 }
 
 fn main() {
-    test_mma();
+    test_inner();
 }

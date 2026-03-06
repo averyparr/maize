@@ -129,6 +129,7 @@ macro_rules! addrspace_ptrs {
         where
             Ptr: RawPtrTy,
         {
+            type AsMutPtr = $ptr<Ptr::AsMutPtr>;
         }
     )*
     };
