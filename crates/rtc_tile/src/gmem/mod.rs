@@ -1,3 +1,4 @@
+mod col_panel;
 mod matrix;
 mod row_panel;
 

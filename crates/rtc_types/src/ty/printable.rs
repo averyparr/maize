@@ -1,7 +1,7 @@
 use inkwell::values::BasicValueEnum;
 
 use crate::{
-    ty::{AddrspacePtr, AnyTy, BF16, F16, F32, F64, P, V, ValTy, vec::VectorizableTy},
+    ty::{AnyTy, BF16, F16, F32, F64, P, V, ValTy, vec::VectorizableTy},
     val::Val,
 };
 
@@ -52,14 +52,6 @@ impl<T: AnyTy> PrintableTy for P<*const T> {
     }
 }
 impl<T: AnyTy> PrintableTy for P<*mut T> {
-    fn format_str() -> impl AsRef<str> {
-        "%p"
-    }
-    fn to_flat_va_args(val: Val<'_, Self>) -> impl Iterator<Item = BasicValueEnum<'static>> {
-        [val.raw()].into_iter()
-    }
-}
-impl<T: AddrspacePtr<Inner: PrintableTy>> PrintableTy for T {
     fn format_str() -> impl AsRef<str> {
         "%p"
     }

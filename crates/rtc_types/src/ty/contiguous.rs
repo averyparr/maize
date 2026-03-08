@@ -1,7 +1,7 @@
 use inkwell::values::BasicValue;
 
 use crate::{
-    ty::{MutTy, R, RefTy, V, ValTy, vec::VectorizableTy},
+    ty::{Addrspace, M, R, V, ValTy, vec::VectorizableTy},
     val::Val,
 };
 
@@ -20,7 +20,10 @@ pub unsafe trait UniformTy: ValTy {
 
 pub unsafe trait ContiguousUniformTy<const SIZE: usize>: UniformTy {
     const SIZE: usize = SIZE;
-    fn elements(val: Val<'_, Self>) -> [Val<'_, Self::ElemT>; SIZE] {
+    fn elements(val: Val<'_, Self>) -> [Val<'_, Self::ElemT>; SIZE]
+    where
+        Self: Sized,
+    {
         ::core::array::from_fn(|index| {
             let index = u32::try_from(index).expect("u32 overflowed usize");
             let element = val.cx().extract_elem::<Self::ElemT, Self>(&val, index);
@@ -30,6 +33,7 @@ pub unsafe trait ContiguousUniformTy<const SIZE: usize>: UniformTy {
     fn copy_elements<'a>(val: &Val<'a, Self>) -> [Val<'a, Self::ElemT>; SIZE]
     where
         Self::ElemT: Copy,
+        Self: Sized,
     {
         ::core::array::from_fn(|index| {
             let index = u32::try_from(index).expect("u32 overflowed usize");
@@ -37,7 +41,10 @@ pub unsafe trait ContiguousUniformTy<const SIZE: usize>: UniformTy {
             unsafe { Val::new(val.cx(), element.as_basic_value_enum()) }
         })
     }
-    fn from_elements(values: [Val<'_, Self::ElemT>; SIZE]) -> Val<'_, Self> {
+    fn from_elements(values: [Val<'_, Self::ElemT>; SIZE]) -> Val<'_, Self>
+    where
+        Self: Sized,
+    {
         let cx = values[0].cx();
         let mut val = unsafe { Val::new_undef(cx) };
         for (index, scalar) in values.into_iter().enumerate() {
@@ -47,68 +54,60 @@ pub unsafe trait ContiguousUniformTy<const SIZE: usize>: UniformTy {
         val
     }
 
-    fn elements_ref<'a, 'b, Ref>(
-        ptr: Val<'a, Ref::Ref<'b, Ref::PointeeTy>>,
-    ) -> [Val<'a, Ref::Ref<'b, Self::ElemT>>; SIZE]
-    where
-        Ref: RefTy<PointeeTy = Self>,
-    {
+    fn elements_ref<'a, 'b, Space: Addrspace>(
+        ptr: Val<'a, R<&'b Self, Space>>,
+    ) -> [Val<'a, R<&'b Self::ElemT, Space>>; SIZE] {
         let cx = ptr.cx();
         ::core::array::from_fn(|index| {
             let index = u32::try_from(index).expect("u32 overflow");
-            let ptr = cx.get_elem_ptr::<Self::ElemT, _>(&ptr, index);
+            let ptr = cx.get_elem_ptr::<Self::ElemT, _, _>(&ptr.as_ptr(), index);
             unsafe { Val::new(cx, ptr.as_basic_value_enum()) }
         })
     }
 
-    fn elements_mut<'a, 'b, Mut>(
-        ptr: Val<'a, Mut::Mut<'b, Mut::PointeeTy>>,
-    ) -> [Val<'a, Mut::Mut<'b, Self::ElemT>>; SIZE]
-    where
-        Mut: MutTy<PointeeTy = Self>,
-    {
+    fn elements_mut<'a, 'b, Space: Addrspace>(
+        ptr: Val<'a, M<&'b mut Self, Space>>,
+    ) -> [Val<'a, M<&'b mut Self::ElemT, Space>>; SIZE] {
         let cx = ptr.cx();
         ::core::array::from_fn(|index| {
             let index = u32::try_from(index).expect("u32 overflow");
-            let ptr = cx.get_elem_ptr::<Self::ElemT, _>(&ptr, index);
+            let ptr = cx.get_elem_ptr::<Self::ElemT, _, _>(&ptr.as_ptr(), index);
             unsafe { Val::new(cx, ptr.as_basic_value_enum()) }
         })
     }
 
-    fn element<'a>(val: Val<'a, Self>, index: usize) -> Val<'a, Self::ElemT> {
+    fn element<'a>(val: Val<'a, Self>, index: usize) -> Val<'a, Self::ElemT>
+    where
+        Self: Sized,
+    {
         let index = u32::try_from(index).expect("u32 overflowed usize");
         let element = val.cx().extract_elem::<Self::ElemT, Self>(&val, index);
         unsafe { Val::new(val.cx(), element.as_basic_value_enum()) }
     }
-    fn element_ref<'a, 'b, Ref>(
-        ptr: Val<'a, Ref::Ref<'b, Ref::PointeeTy>>,
+    fn element_ref<'a, 'b, Space: Addrspace>(
+        ptr: Val<'a, R<&'b Self, Space>>,
         index: u32,
-    ) -> Val<'a, R<&'b Self::ElemT>>
-    where
-        Ref: RefTy<PointeeTy = Self> + 'b,
-    {
+    ) -> Val<'a, R<&'b Self::ElemT>> {
         assert!((index as usize) < Self::SIZE);
         let cx = ptr.cx();
-        let ptr = cx.get_elem_ptr::<Self::ElemT, _>(&ptr, index);
+        let ptr = cx.get_elem_ptr::<Self::ElemT, _, _>(&ptr.as_ptr(), index);
         unsafe { Val::new(cx, ptr.as_basic_value_enum()) }
     }
 
-    fn element_mut<'a, 'b, Mut>(
-        ptr: Val<'a, Mut::Mut<'b, Mut::PointeeTy>>,
+    fn element_mut<'a, 'b, Space: Addrspace>(
+        ptr: Val<'a, M<&'b mut Self, Space>>,
         index: u32,
-    ) -> Val<'a, Mut::Mut<'b, Self::ElemT>>
-    where
-        Mut: MutTy<PointeeTy = Self> + 'b,
-    {
+    ) -> Val<'a, M<&'b mut Self::ElemT, Space>> {
         assert!((index as usize) < Self::SIZE);
         let cx = ptr.cx();
-        let ptr = cx.get_elem_ptr::<Self::ElemT, _>(&ptr, index);
+        let ptr = cx.get_elem_ptr::<Self::ElemT, _, _>(&ptr.as_ptr(), index);
         unsafe { Val::new(cx, ptr.as_basic_value_enum()) }
     }
 
     fn splat<'a>(val: Val<'a, Self::ElemT>) -> Val<'a, Self>
     where
         Self::ElemT: Copy,
+        Self: Sized,
     {
         Self::from_elements(::core::array::from_fn(|_| val))
     }

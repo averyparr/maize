@@ -1,5 +1,5 @@
 use rtc_types::{
-    ty::{U16, U32},
+    ty::{DereferencableTy, U32},
     val::Val,
 };
 
@@ -10,7 +10,10 @@ pub struct Matrix<'a, Ptr> {
 }
 
 impl<'a, Ptr> Matrix<'a, Ptr> {
-    pub fn new(ptr: Val<'a, Ptr>, nrows: Val<'a, U32>, ncols: Val<'a, U32>) -> Self {
+    pub fn new(ptr: Val<'a, Ptr>, nrows: Val<'a, U32>, ncols: Val<'a, U32>) -> Self
+    where
+        Ptr: DereferencableTy,
+    {
         Self { ptr, nrows, ncols }
     }
 }

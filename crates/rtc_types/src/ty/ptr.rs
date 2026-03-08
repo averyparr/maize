@@ -7,28 +7,103 @@ use inkwell::{
 
 use crate::{
     codegen::FnCodegen,
-    ty::{AnyTy, SizedTy, sized::AlignedTy},
+    ty::{AnyTy, M, P, R, SizedTy, Ty, ValTy},
     val::Val,
 };
 
-use super::{M, P, R, Ty, ValTy};
+#[derive(Clone, Copy)]
+pub struct DefaultAddressSpace;
+
+pub trait Addrspace: Copy {
+    const AS_U16: u16;
+}
+
+impl Addrspace for DefaultAddressSpace {
+    const AS_U16: u16 = 0;
+}
+
+pub trait DereferencableTy:
+    for<'a> ValTy<Type<'a> = PointerType<'a>, Value<'a> = PointerValue<'a>>
+{
+    type Pointee: AnyTy;
+    type Space: Addrspace;
+    unsafe fn on_underlying_raw<'a, F>(val: &Val<'a, Self>, f: F) -> Val<'a, Self>
+    where
+        F: FnOnce(
+            Val<'a, P<*const Self::Pointee, Self::Space>>,
+        ) -> Val<'a, P<*const Self::Pointee, Self::Space>>;
+}
+
+pub trait PtrTy: DereferencableTy {}
+
+impl<T: AnyTy, Space: Addrspace> DereferencableTy for P<*const T, Space> {
+    type Pointee = T;
+    type Space = Space;
+    unsafe fn on_underlying_raw<'a, F>(val: &Val<'a, Self>, f: F) -> Val<'a, Self>
+    where
+        F: FnOnce(
+            Val<'a, P<*const Self::Pointee, Self::Space>>,
+        ) -> Val<'a, P<*const Self::Pointee, Self::Space>>,
+    {
+        f(*val)
+    }
+}
+impl<T: AnyTy, Space: Addrspace> DereferencableTy for P<*mut T, Space> {
+    type Pointee = T;
+    type Space = Space;
+    unsafe fn on_underlying_raw<'a, F>(val: &Val<'a, Self>, f: F) -> Val<'a, Self>
+    where
+        F: FnOnce(
+            Val<'a, P<*const Self::Pointee, Self::Space>>,
+        ) -> Val<'a, P<*const Self::Pointee, Self::Space>>,
+    {
+        f(val.as_const()).as_mut()
+    }
+}
+impl<'b, T: ValTy, Space: Addrspace> DereferencableTy for R<&'b T, Space> {
+    type Pointee = T;
+    type Space = Space;
+    unsafe fn on_underlying_raw<'a, F>(val: &Val<'a, Self>, f: F) -> Val<'a, Self>
+    where
+        F: FnOnce(
+            Val<'a, P<*const Self::Pointee, Self::Space>>,
+        ) -> Val<'a, P<*const Self::Pointee, Self::Space>>,
+    {
+        unsafe { f(val.as_ptr()).as_ref_unchecked() }
+    }
+}
+impl<'b, T: ValTy, Space: Addrspace> DereferencableTy for M<&'b mut T, Space> {
+    type Pointee = T;
+    type Space = Space;
+    unsafe fn on_underlying_raw<'a, F>(val: &Val<'a, Self>, f: F) -> Val<'a, Self>
+    where
+        F: FnOnce(
+            Val<'a, P<*const Self::Pointee, Self::Space>>,
+        ) -> Val<'a, P<*const Self::Pointee, Self::Space>>,
+    {
+        unsafe { f(val.as_ptr()).as_mut().as_mut_unchecked() }
+    }
+}
+
+impl<T: AnyTy, Space: Addrspace> PtrTy for P<*mut T, Space> {}
+impl<T: AnyTy, Space: Addrspace> PtrTy for P<*const T, Space> {}
 
 macro_rules! body {
-    (ty) => {
+    (ty, $addrspace: ty) => {
         type AnyType<'ctx> = PointerType<'ctx>;
         fn any_ty<'ctx>(ctx: ContextRef<'ctx>) -> Self::AnyType<'ctx> {
-            ctx.ptr_type(AddressSpace::default())
+            ctx.ptr_type(AddressSpace::from(<$addrspace>::AS_U16))
         }
     };
     (val_ty) => {
         type Value<'ctx> = PointerValue<'ctx>;
 
         fn undef<'ctx>(ctx: ContextRef<'ctx>) -> Self::Value<'ctx> {
-            ctx.ptr_type(AddressSpace::default()).get_undef()
+            Self::ty(ctx).get_undef()
         }
 
         fn zeros<'ctx>(ctx: ContextRef<'ctx>) -> Self::Value<'ctx> {
-            ctx.ptr_type(AddressSpace::default()).const_null()
+            Self::ty(ctx).const_null()
         }
 
         fn try_type_val<'ctx>(val: AnyValueEnum<'ctx>) -> Option<Self::Value<'ctx>> {
@@ -41,118 +116,103 @@ macro_rules! body {
     };
 }
 
-impl<T: ?Sized> AnyTy for P<*mut T>
+impl<T: ?Sized, Space: Addrspace> AnyTy for P<*mut T, Space>
 where
     T: AnyTy,
 {
-    body!(ty);
+    body!(ty, Space);
 }
 
-impl<T: ?Sized> AnyTy for P<*const T>
+impl<T: ?Sized, Space: Addrspace> AnyTy for P<*const T, Space>
 where
     T: AnyTy,
 {
-    body!(ty);
+    body!(ty, Space);
 }
 
-impl<'a, T: ?Sized> AnyTy for R<&'a T>
+impl<'a, T: ?Sized, Space: Addrspace> AnyTy for R<&'a T, Space>
 where
     T: Ty,
 {
-    body!(ty);
+    body!(ty, Space);
 }
 
-impl<'a, T: ?Sized> AnyTy for M<&'a mut T>
+impl<'a, T: ?Sized, Space: Addrspace> AnyTy for M<&'a mut T, Space>
 where
     T: Ty,
 {
-    body!(ty);
+    body!(ty, Space);
 }
 
-impl<T: ?Sized> ValTy for P<*const T>
-where
-    T: AnyTy,
-{
-    body!(val_ty);
-}
-
-impl<T: ?Sized> ValTy for P<*mut T>
+impl<T: ?Sized, Space: Addrspace> ValTy for P<*const T, Space>
 where
     T: AnyTy,
 {
     body!(val_ty);
 }
 
-impl<'a, T: ?Sized> ValTy for R<&'a T>
+impl<T: ?Sized, Space: Addrspace> ValTy for P<*mut T, Space>
+where
+    T: AnyTy,
+{
+    body!(val_ty);
+}
+
+impl<'a, T: ?Sized, Space: Addrspace> ValTy for R<&'a T, Space>
 where
     T: Ty,
 {
     body!(val_ty);
 }
 
-impl<'a, T: ?Sized> ValTy for M<&'a mut T>
+impl<'a, T: ?Sized, Space: Addrspace> ValTy for M<&'a mut T, Space>
 where
     T: Ty,
 {
     body!(val_ty);
 }
 
-/// # Safety:
-/// Implementing this trait asserts that values of type `T` are freely
-/// interconvertible with P<*const T::PointeeTy> and in particular
-/// support the (unsafe) equivalents of ::std::ptr::read[_unaligned]
-/// and casts to P<*const T::PointeeTy> and P<*mut T::PointeeTy>.
-pub unsafe trait ConstPtrTy:
-    for<'a> ValTy<Value<'a> = PointerValue<'a>, Type<'a> = PointerType<'a>> + SizedTy
-{
-    type PointeeTy: ValTy + ?Sized;
-    type PtrConst<PT: ValTy + ?Sized>: ConstPtrTy;
-
-    fn instance_in_addrspace<'ctx>(
-        ctx: ContextRef<'ctx>,
-        address_space: AddressSpace,
-    ) -> Self::Type<'ctx> {
-        ctx.ptr_type(address_space)
-    }
-
+impl<T: AnyTy + ?Sized, Space: Addrspace> P<*const T, Space> {
     /// # Safety:
     /// This function is unsafe in the same way that `::std::ptr::read_unaligned`
     /// is -- it just bitwise-copies from the address. It has the additional safety
     /// guarantee that all instruction metadata passed through `InstructionFunc` must
-    /// not interfere with Rust's safety model (e.g. &mut T loads cannot be readonly)
-    unsafe fn read_with_instruction_metadata<'a>(
+    /// not interfere with Rust's safety model (e.g. &mut T cannot be readonly but can be noalias)
+    unsafe fn read_with_instruction_metadata<'a, 'b>(
         ptr: Val<'a, Self>,
-        metadata: impl IntoIterator<Item = (&'a str, Option<BasicMetadataValueEnum<'a>>)>,
-    ) -> Val<'a, Self::PointeeTy> {
-        // Safety: We have a pointer which the user guarantees is valid to read from, so it's safe to build
-        // a pointer load at the end of the current BB
+        read_metadata: impl IntoIterator<Item = (&'b str, Option<BasicMetadataValueEnum<'static>>)>,
+    ) -> Val<'a, T>
+    where
+        T: ValTy,
+    {
         let raw_ptr = ptr.ll_typed();
-        if let Some(raw_ins) = raw_ptr.as_instruction_value() {
-            for (name, args) in metadata.into_iter() {
-                let kind_id = ptr.ctx().get_kind_id(name);
-                raw_ins
-                    .set_metadata(ptr.ctx().metadata_node(args.as_slice()), kind_id)
-                    .expect("Failed to set metadata");
-            }
-        }
-
-        let pointee_ty = Self::PointeeTy::ty(ptr.ctx());
-
-        let raw_val = unsafe {
+        let pointee_ty = T::ty(ptr.ctx());
+        let raw_load = unsafe {
             ptr.cx()
                 .with_builder(|b| b.build_load(pointee_ty, raw_ptr, "load"))
         }
         .expect("Pointer load should be possible");
 
+        if let Some(ins) = raw_load.as_instruction_value() {
+            for (name, args) in read_metadata.into_iter() {
+                let kind_id = ptr.ctx().get_kind_id(name);
+                ins.set_metadata(ptr.ctx().metadata_node(args.as_slice()), kind_id)
+                    .expect("Failed to set metadata");
+            }
+        }
+
         // Safety: We have just loaded a value of type PointeeTy, so it's safe to cast it.
-        unsafe { Val::new(ptr.cx(), raw_val) }
+        unsafe { Val::new(ptr.cx(), raw_load) }
     }
 
     /// # Safety:
     /// This function is unsafe in the same way that `::std::ptr::read_unaligned` is --
     /// it just bitwise-copies from the address with assumed alignment.
     /// This can lead to unsafety if Self::PointeeTy is not Copy.
-    unsafe fn read_unaligned(ptr: Val<'_, Self>) -> Val<'_, Self::PointeeTy> {
+    unsafe fn read_unaligned(ptr: Val<'_, Self>) -> Val<'_, T>
+    where
+        T: ValTy,
+    {
         // The user promised it's safe to read without aligned access,
         // and we're not adding any additional metadata
         unsafe { Self::read_with_instruction_metadata(ptr, []) }
@@ -162,102 +222,68 @@ pub unsafe trait ConstPtrTy:
     /// This function is unsafe in the same way that `::std::ptr::read` is --
     /// it just bitwise-copies from the address with assumed alignment.
     /// This can lead to unsafety if Self::PointeeTy is not Copy.
-    unsafe fn read(ptr: Val<'_, Self>) -> Val<'_, Self::PointeeTy>
+    unsafe fn read(ptr: Val<'_, Self>) -> Val<'_, T>
     where
-        Self::PointeeTy: SizedTy,
+        T: SizedTy,
     {
         // The user promised it's safe to load and that the pointer is aligned,
         // so it's safe to read with alignment metadata.
         let cx = ptr.cx();
-        let align = cx
-            .constant_from(Self::PointeeTy::ALIGN as u64)
-            .ll_typed()
-            .into();
+        let align = cx.constant_from(T::ALIGN as u64).ll_typed().into();
         unsafe { Self::read_with_instruction_metadata(ptr, [("align", Some(align))]) }
     }
 
-    fn cast_const(ptr: Val<'_, Self>) -> Val<'_, P<*const Self::PointeeTy>> {
-        // Safety: User promised that this is safe by implementing the trait
+    fn to_mut_ptr(ptr: Val<'_, Self>) -> Val<'_, P<*mut T, Space>> {
         unsafe { Val::transmute(ptr) }
     }
-    fn cast_mut(ptr: Val<'_, Self>) -> Val<'_, P<*mut Self::PointeeTy>> {
-        // Safety: Interconverting a *const T to a *mut T is safe because
-        // it requires downstream `Unsafe` to make use of it. User promised
-        // that the initial cast was safe.
-        let const_ptr = Self::cast_const(ptr);
-        unsafe { Val::transmute(const_ptr) }
+
+    fn cast<U: AnyTy + ?Sized>(ptr: Val<'_, Self>) -> Val<'_, P<*const U, Space>> {
+        unsafe { Val::transmute(ptr) }
+    }
+
+    unsafe fn to_ref_unchecked<'a, 'b>(val: Val<'a, Self>) -> Val<'a, R<&'b T, Space>>
+    where
+        T: ValTy,
+    {
+        unsafe { Val::transmute(val) }
     }
 }
 
-unsafe impl<T: ?Sized> ConstPtrTy for P<*const T>
-where
-    T: ValTy,
-{
-    type PtrConst<PT: ValTy + ?Sized> = P<*const PT>;
-    type PointeeTy = T;
-}
-unsafe impl<T: ?Sized> ConstPtrTy for P<*mut T>
-where
-    T: ValTy,
-{
-    type PtrConst<PT: ValTy + ?Sized> = P<*const PT>;
-    type PointeeTy = T;
-}
-unsafe impl<T: ?Sized> ConstPtrTy for R<&T>
-where
-    T: ValTy,
-{
-    type PtrConst<PT: ValTy + ?Sized> = P<*const PT>;
-    type PointeeTy = T;
-}
-unsafe impl<T: ?Sized> ConstPtrTy for M<&mut T>
-where
-    T: ValTy,
-{
-    type PtrConst<PT: ValTy + ?Sized> = P<*const PT>;
-    type PointeeTy = T;
-}
-
-/// # Safety:
-/// Implementing this trait asserts that values of type `T` are freely
-/// interconvertible with P<*const T::PointeeTy> and in particular
-/// support the (unsafe) equivalents of ::std::ptr::read[_unaligned]
-/// and casts to P<*const T::PointeeTy> and P<*mut T::PointeeTy>.
-pub unsafe trait MutPtrTy: ConstPtrTy {
-    type PtrMut<PT: ValTy + ?Sized>: MutPtrTy;
+impl<T: AnyTy, Space: Addrspace> P<*mut T, Space> {
     /// # Safety:
     /// This function is unsafe in the same way that `::std::ptr::write_unaligned`
     /// is -- it just bitwise-copies to the address. It does not drop the value at
     /// the address, so it can leak resources. It also has the requirement that
     /// InstructionFunc doesn't annotate the instruction with any additional metadata
     /// which would make the write unsafe.
-    unsafe fn write_with_instruction_metadata<'a>(
+    unsafe fn write_with_instruction_metadata<'a, 'b>(
         ptr: Val<'_, Self>,
-        val: Val<'_, Self::PointeeTy>,
-        metadata: impl IntoIterator<Item = (&'a str, Option<BasicMetadataValueEnum<'a>>)>,
-    ) {
-        let ptr_to_val = ptr.ll_typed();
+        val: Val<'_, T>,
+        write_metadata: impl IntoIterator<Item = (&'b str, Option<BasicMetadataValueEnum<'static>>)>,
+    ) where
+        T: ValTy,
+    {
+        let raw_ptr = ptr.ll_typed();
+        let value = val.ll_typed();
+        let raw_store = unsafe { ptr.cx().with_builder(|b| b.build_store(raw_ptr, value)) }
+            .expect("Pointer store should be possible");
 
-        if let Some(raw_ins) = ptr_to_val.as_instruction_value() {
-            for (name, args) in metadata.into_iter() {
-                let kind_id = ptr.ctx().get_kind_id(name);
-                raw_ins
-                    .set_metadata(ptr.ctx().metadata_node(args.as_slice()), kind_id)
-                    .expect("Failed to set metadata");
-            }
+        for (name, args) in write_metadata.into_iter() {
+            let kind_id = ptr.ctx().get_kind_id(name);
+            raw_store
+                .set_metadata(ptr.ctx().metadata_node(args.as_slice()), kind_id)
+                .expect("Failed to set metadata");
         }
-        unsafe {
-            ptr.cx()
-                .with_builder(|b| b.build_store(ptr_to_val, val.ll_typed()))
-                .expect("Storing to pointer should work...")
-        };
     }
 
     /// # Safety:
     /// This function is unsafe in the same way that `::std::ptr::write_unaligned` is --
     /// it just bitwise-copies to the address. It does not drop the value at the address,
     /// so it can leak resources. You must guarantee that the pointer is valid.
-    unsafe fn write_unaligned(ptr: Val<'_, Self>, val: Val<'_, Self::PointeeTy>) {
+    unsafe fn write_unaligned(ptr: Val<'_, Self>, val: Val<'_, T>)
+    where
+        T: ValTy,
+    {
         // Safety: The user promised it was safe to write (unaligned) to this pointer,
         // and we are not introducing any metadata to the instruction.
         unsafe {
@@ -269,14 +295,11 @@ pub unsafe trait MutPtrTy: ConstPtrTy {
     /// This function is unsafe in the same wya that `::std::ptr::write` is --
     /// it just bitwise-copies to the address. It does not drop the value at the address,
     /// so it can leak resources. You must ensure that the pointer is aligned and valid.
-    unsafe fn write(ptr: Val<'_, Self>, val: Val<'_, Self::PointeeTy>)
+    unsafe fn write(ptr: Val<'_, Self>, val: Val<'_, T>)
     where
-        Self::PointeeTy: SizedTy,
+        T: SizedTy,
     {
-        let align = ptr
-            .cx()
-            .constant_from(Self::PointeeTy::ALIGN as u64)
-            .ll_typed();
+        let align = ptr.cx().constant_from(T::ALIGN as u64).ll_typed();
         // Safety: The user promised it was safe to do an aligned write through
         // this pointer, and we know the alignment of the type behind the pointer
         unsafe {
@@ -284,217 +307,260 @@ pub unsafe trait MutPtrTy: ConstPtrTy {
         }
     }
 
-    fn to_const_ptr<'a>(ptr: Val<'a, Self>) -> Val<'a, Self::PtrConst<Self::PointeeTy>> {
+    fn to_const_ptr(ptr: Val<'_, Self>) -> Val<'_, P<*const T, Space>> {
+        unsafe { Val::transmute(ptr) }
+    }
+    unsafe fn to_mut_unchecked<'a, 'b>(val: Val<'a, Self>) -> Val<'a, M<&'b mut T, Space>>
+    where
+        T: ValTy,
+    {
+        unsafe { Val::transmute(val) }
+    }
+
+    fn cast_mut<U: AnyTy + ?Sized>(ptr: Val<'_, Self>) -> Val<'_, P<*mut U, Space>> {
+        unsafe { Val::transmute(ptr) }
+    }
+}
+
+impl<'b, T: ValTy + ?Sized, Space: Addrspace> R<&'b T, Space> {
+    fn load_metadata(
+        _cx: &FnCodegen,
+    ) -> impl IntoIterator<Item = (&'static str, Option<BasicMetadataValueEnum<'static>>)> {
+        []
+    }
+    fn to_const_ptr(ptr: Val<'_, Self>) -> Val<'_, P<*const T, Space>> {
+        unsafe { Val::transmute(ptr) }
+    }
+    fn load<'a>(ptr: Val<'a, Self>) -> Val<'a, T>
+    where
+        T: Copy + SizedTy,
+    {
+        let ptr_attrs = Self::load_metadata(ptr.cx());
+        let ptr = Self::to_const_ptr(ptr);
+        unsafe { P::read_with_instruction_metadata(ptr, ptr_attrs) }
+    }
+    fn reborrow<'a, 'c>(ptr: &'c Val<'a, Self>) -> Val<'a, R<&'c T, Space>>
+    where
+        'b: 'c,
+    {
+        fn is_clone<T: Copy>(_: T) {}
+        is_clone(*ptr);
+        unsafe { Val::transmute(*ptr) }
+    }
+}
+
+impl<'b, T: ValTy + ?Sized, Space: Addrspace> M<&'b mut T, Space> {
+    fn load_metadata(
+        _cx: &FnCodegen,
+    ) -> impl IntoIterator<Item = (&'static str, Option<BasicMetadataValueEnum<'static>>)> {
+        []
+    }
+    fn store_metadata(
+        _cx: &FnCodegen,
+    ) -> impl IntoIterator<Item = (&'static str, Option<BasicMetadataValueEnum<'static>>)> {
+        []
+    }
+    fn to_ref(val: Val<'_, Self>) -> Val<'_, R<&'b T, Space>> {
+        unsafe { Val::transmute(val) }
+    }
+    fn to_const_ptr(val: Val<'_, Self>) -> Val<'_, P<*const T, Space>> {
+        R::to_const_ptr(Self::to_ref(val))
+    }
+    fn to_mut_ptr(val: Val<'_, Self>) -> Val<'_, P<*mut T, Space>> {
+        unsafe { Val::transmute(val) }
+    }
+    unsafe fn from_mut_ptr(ptr: Val<'_, P<*mut T, Space>>) -> Val<'_, Self> {
+        unsafe { Val::transmute(ptr) }
+    }
+    fn reborrow<'a, 'c>(ptr: &'c Val<'a, Self>) -> Val<'a, R<&'c T, Space>>
+    where
+        'b: 'c,
+    {
         unsafe { Val::new(ptr.cx(), ptr.raw()) }
     }
-}
-
-unsafe impl<T: ?Sized> MutPtrTy for P<*mut T>
-where
-    T: ValTy,
-{
-    type PtrMut<PT: ValTy + ?Sized> = P<*mut PT>;
-}
-unsafe impl<T: ?Sized> MutPtrTy for M<&mut T>
-where
-    T: ValTy,
-{
-    type PtrMut<PT: ValTy + ?Sized> = P<*mut PT>;
-}
-
-/// # Safety:
-/// In order for this to be safe, a `Ty` must trace-like a &'a T
-/// and be interconvertible with a R<&'a T>
-pub unsafe trait RefTy: ConstPtrTy {
-    type Ref<'r, PT: ValTy + ?Sized>: RefTy<PointeeTy = PT>
-    where
-        Self: 'r,
-        PT: 'r;
-    fn ptr_attrs(
-        cx: &FnCodegen,
-    ) -> impl IntoIterator<Item = (&str, Option<BasicMetadataValueEnum<'_>>)>
-    where
-        Self::PointeeTy: SizedTy;
-
-    fn load<'a>(ptr: &Val<'a, Self>) -> Val<'a, Self::PointeeTy>
-    where
-        Self::PointeeTy: Copy + SizedTy,
-    {
-        let cx = ptr.cx();
-        let ptr = Self::reborrow(ptr);
-        unsafe { Self::Ref::read_with_instruction_metadata(ptr, Self::ptr_attrs(cx)) }
-    }
-    fn reborrow<'a, 'b>(ptr: &'b Val<'a, Self>) -> Val<'a, Self::Ref<'b, Self::PointeeTy>>
-    where
-        'a: 'b,
-    {
-        // Safety: we are shortening the lifetime from '_ to 'a
-        // and otherwise performing a cast to R<&'a T> which the user
-        // promised was OK
+    fn reborrow_mut<'a, 'c>(ptr: &'c mut Val<'a, Self>) -> Val<'a, M<&'c mut T, Space>> {
         unsafe { Val::new(ptr.cx(), ptr.raw()) }
     }
-    fn as_ptr<'a>(ptr: Val<'a, Self>) -> Val<'a, Self::PtrConst<Self::PointeeTy>> {
-        unsafe { Val::new(ptr.cx(), ptr.raw()) }
-    }
-}
 
-unsafe impl<'a, T: ?Sized> RefTy for R<&'a T>
-where
-    T: ValTy,
-{
-    type Ref<'r, PT: ValTy + ?Sized>
-        = R<&'r PT>
+    fn load<'a>(ptr: Val<'a, Self>) -> Val<'a, T>
     where
-        Self: 'r,
-        PT: 'r;
-    fn ptr_attrs(
-        cx: &FnCodegen,
-    ) -> impl IntoIterator<Item = (&str, Option<BasicMetadataValueEnum<'_>>)>
-    where
-        Self::PointeeTy: SizedTy,
+        T: Copy + SizedTy,
     {
-        let size = cx
-            .ctx()
-            .i64_type()
-            .const_int(Self::PointeeTy::SIZE as _, false);
-        let align = cx
-            .ctx()
-            .i64_type()
-            .const_int(Self::PointeeTy::ALIGN as _, false);
-        [
-            ("align", Some(align.into())),
-            ("dereferenceable", Some(size.into())),
-            ("nonnull", None),
-            ("readonly", None),
-        ]
+        let load_metadata = Self::load_metadata(ptr.cx());
+        let ptr = Self::to_const_ptr(ptr);
+        unsafe { P::read_with_instruction_metadata(ptr, load_metadata) }
     }
-}
 
-unsafe impl<'a, T: ?Sized> RefTy for M<&'a mut T>
-where
-    T: ValTy,
-{
-    type Ref<'r, PT: ValTy + ?Sized>
-        = R<&'r PT>
+    fn swap<'a>(ptr: Val<'a, Self>, val: Val<'a, T>) -> Val<'a, T>
     where
-        Self: 'r,
-        PT: 'r;
-    fn ptr_attrs(
-        cx: &FnCodegen,
-    ) -> impl IntoIterator<Item = (&str, Option<BasicMetadataValueEnum<'_>>)>
-    where
-        Self::PointeeTy: SizedTy,
+        T: SizedTy,
     {
-        let size = cx
-            .ctx()
-            .i64_type()
-            .const_int(Self::PointeeTy::SIZE as _, false);
-        let align = cx
-            .ctx()
-            .i64_type()
-            .const_int(Self::PointeeTy::ALIGN as _, false);
-        [
-            ("align", Some(align.into())),
-            ("dereferenceable", Some(size.into())),
-            ("nonnull", None),
-            ("noalias", None),
-        ]
-    }
-}
+        let read_metadata = Self::load_metadata(ptr.cx());
+        let read_ptr = R::to_const_ptr(Self::reborrow(&ptr));
+        let ret = unsafe { P::read_with_instruction_metadata(read_ptr, read_metadata) };
 
-pub unsafe trait MutTy: RefTy + MutPtrTy {
-    type Mut<'r, PT: ValTy + ?Sized>: MutTy<PointeeTy = PT>
-    where
-        Self: 'r,
-        PT: 'r;
-    fn reborrow_mut<'a, 'b>(ptr: &Val<'a, Self>) -> Val<'a, Self::Mut<'b, Self::PointeeTy>>
-    where
-        Self: 'b,
-        'a: 'b,
-    {
-        // Safety: we are shortening the lifetime from '_ to 'a
-        // and otherwise performing a cast to M<&'a mut T> which the user
-        // promised was OK
-        unsafe { Val::new(ptr.cx(), ptr.raw()) }
-    }
-    fn swap<'a>(ptr_: &mut Val<'a, Self>, val: Val<'a, Self::PointeeTy>) -> Val<'a, Self::PointeeTy>
-    where
-        Self::PointeeTy: SizedTy,
-    {
-        let metadata = Self::ptr_attrs(ptr_.cx());
-        let ptr = Self::reborrow(ptr_);
-        // Safety: We hold a (short-lived) reference and can read with it. The
-        // user asserted reads with these metadata were safe when they implemented `RefTy`.
-        let at_ptr = unsafe { Self::Ref::read_with_instruction_metadata(ptr, metadata) };
+        let write_metadata = Self::store_metadata(ptr.cx());
+        let write_ptr = Self::to_mut_ptr(ptr);
+        unsafe { P::write_with_instruction_metadata(write_ptr, val, write_metadata) };
 
-        let metadata = Self::ptr_attrs(ptr_.cx());
-        let to_write = Self::reborrow_mut(ptr_);
-        // Safety: We hold a (short-lived) exclusive reference and can write through it. The
-        // user asserted reads with these metadata were safe when they implemented `RefTy`.
-        let _: () = unsafe { Self::Mut::write_with_instruction_metadata(to_write, val, metadata) };
-        at_ptr
+        ret
     }
-    fn store<'a>(ptr: &mut Val<'a, Self>, val: Val<'a, Self::PointeeTy>)
+
+    fn store<'a>(ptr: Val<'a, Self>, val: Val<'a, T>)
     where
-        Self::PointeeTy: SizedTy,
+        T: SizedTy,
     {
-        if Self::PointeeTy::NEEDS_DROP {
+        if T::NEEDS_DROP {
             let mut res = Self::swap(ptr, val);
-            Self::PointeeTy::inner_drop(&mut res);
+            T::inner_drop(&mut res);
         } else {
-            let ptr = Self::reborrow_mut(ptr);
-            let metadata = Self::ptr_attrs(ptr.cx());
-            let _: () = unsafe { Self::Mut::write_with_instruction_metadata(ptr, val, metadata) };
+            let write_metadata = Self::store_metadata(ptr.cx());
+            let write_ptr = Self::to_mut_ptr(ptr);
+            unsafe { P::write_with_instruction_metadata(write_ptr, val, write_metadata) };
         }
     }
-    fn as_mut_ptr<'a>(ptr: Val<'a, Self>) -> Val<'a, Self::PtrMut<Self::PointeeTy>> {
-        unsafe { Val::new(ptr.cx(), ptr.raw()) }
-    }
 }
 
-unsafe impl<T: ?Sized> MutTy for M<&mut T>
+impl<'a, T: ?Sized, Space: Addrspace> Val<'a, P<*const T, Space>>
 where
-    T: ValTy,
+    T: AnyTy,
 {
-    type Mut<'r, PT: ValTy + ?Sized>
-        = M<&'r mut PT>
-    where
-        Self: 'r,
-        PT: 'r;
-}
-
-pub unsafe trait RawPtrTy: ConstPtrTy + Copy {
-    type AsMutPtr: MutPtrTy;
-    fn ptr_cast<'a, U: ValTy + ?Sized>(val: Val<'a, Self>) -> Val<'a, Self::PtrConst<U>> {
-        unsafe { Val::new(val.cx(), val.raw()) }
+    pub fn addrspace_cast<OtherSpace: Addrspace>(self) -> Val<'a, P<*const T, OtherSpace>> {
+        let raw_ptr = self.ll_typed();
+        let new_ptr_type = P::<*const T, OtherSpace>::ty(self.ctx());
+        let new_ptr = unsafe {
+            self.cx().with_builder(|b| {
+                b.build_address_space_cast(raw_ptr, new_ptr_type, "addrspace_cast")
+            })
+        }
+        .expect("Address space cast should work");
+        unsafe { Val::new(self.cx(), new_ptr.as_basic_value_enum()) }
     }
-    fn ptr_cast_mut<'a, U: ValTy + ?Sized>(val: Val<'a, Self>) -> Val<'a, Self::PtrMut<U>>
+    pub fn ptr_cast<U: AnyTy + ?Sized>(self) -> Val<'a, P<*const U, Space>> {
+        P::cast(self)
+    }
+    pub fn as_mut(self) -> Val<'a, P<*mut T, Space>> {
+        P::to_mut_ptr(self)
+    }
+    pub unsafe fn as_ref_unchecked<'b>(self) -> Val<'a, R<&'b T, Space>>
     where
-        Self: MutPtrTy,
+        T: ValTy,
     {
-        unsafe { Val::new(val.cx(), val.raw()) }
+        unsafe { P::to_ref_unchecked(self) }
     }
-    fn to_mut_ptr<'a>(val: Val<'a, Self>) -> Val<'a, Self::AsMutPtr> {
-        unsafe { Val::new(val.cx(), val.raw()) }
+
+    pub unsafe fn read_unaligned(self) -> Val<'a, T>
+    where
+        T: SizedTy,
+    {
+        unsafe { P::read_unaligned(self) }
+    }
+    pub unsafe fn read(self) -> Val<'a, T>
+    where
+        T: SizedTy,
+    {
+        unsafe { P::read(self) }
     }
 }
 
-unsafe impl<T: ValTy + ?Sized> RawPtrTy for P<*const T> {
-    type AsMutPtr = P<*mut T>;
-}
-unsafe impl<T: ValTy + ?Sized> RawPtrTy for P<*mut T> {
-    type AsMutPtr = P<*mut T>;
+impl<'a, T, Space: Addrspace> Val<'a, P<*mut T, Space>>
+where
+    T: AnyTy,
+{
+    pub fn addrspace_cast<OtherSpace: Addrspace>(self) -> Val<'a, P<*mut T, OtherSpace>> {
+        self.as_const().addrspace_cast().as_mut()
+    }
+    pub fn ptr_cast<U: AnyTy>(self) -> Val<'a, P<*mut U, Space>> {
+        P::cast_mut(self)
+    }
+    pub fn as_const(self) -> Val<'a, P<*const T, Space>> {
+        P::to_const_ptr(self)
+    }
+    pub unsafe fn as_mut_unchecked<'b>(self) -> Val<'a, M<&'b mut T, Space>>
+    where
+        T: ValTy,
+    {
+        unsafe { P::to_mut_unchecked(self) }
+    }
+
+    pub unsafe fn read_unaligned(self) -> Val<'a, T>
+    where
+        T: SizedTy,
+    {
+        unsafe { P::read_unaligned(self.as_const()) }
+    }
+
+    pub unsafe fn read(self) -> Val<'a, T>
+    where
+        T: SizedTy,
+    {
+        unsafe { P::read(self.as_const()) }
+    }
+
+    pub unsafe fn write_unaligned(self, val: Val<'a, T>)
+    where
+        T: SizedTy,
+    {
+        unsafe { P::write_unaligned(self, val) }
+    }
+    pub unsafe fn write(self, val: Val<'a, T>)
+    where
+        T: SizedTy,
+    {
+        unsafe { P::write(self, val) }
+    }
 }
 
-pub trait AddrspacePtr: ConstPtrTy {
-    type Inner: ConstPtrTy;
-    const ADDRSPACE: u16;
-    type Ref<'r, PT: ValTy + ?Sized>: RefTy<PointeeTy = PT>
+impl<'a, 'b, T: ValTy + ?Sized, Space: Addrspace> Val<'a, R<&'b T, Space>> {
+    pub fn as_ptr(&self) -> Val<'a, P<*const T, Space>> {
+        R::to_const_ptr(self.reborrow())
+    }
+    pub fn reborrow<'c>(&'c self) -> Val<'a, R<&'c T, Space>> {
+        R::reborrow(self)
+    }
+    pub fn load(&self) -> Val<'a, T>
     where
-        Self::Inner: RefTy + 'r,
-        PT: 'r;
-    type Mut<'r, PT: ValTy + ?Sized>: MutTy<PointeeTy = PT>
+        T: Copy + SizedTy,
+    {
+        R::load(self.reborrow())
+    }
+}
+
+impl<'a, 'b, T: ValTy + ?Sized, Space: Addrspace> Val<'a, M<&'b mut T, Space>> {
+    pub fn reborrow<'c>(&'c self) -> Val<'a, R<&'c T, Space>> {
+        M::reborrow(self)
+    }
+    pub fn reborrow_mut<'c>(&'c mut self) -> Val<'a, M<&'c mut T, Space>> {
+        M::reborrow_mut(self)
+    }
+    pub fn as_ptr(&self) -> Val<'a, P<*const T, Space>> {
+        self.reborrow().as_ptr()
+    }
+    pub fn as_ptr_mut(&self) -> Val<'a, P<*mut T, Space>> {
+        self.as_ptr().as_mut()
+    }
+    pub fn as_ref(self) -> Val<'a, R<&'b T, Space>> {
+        M::to_ref(self)
+    }
+
+    pub fn load(&self) -> Val<'a, T>
     where
-        Self::Inner: MutTy + 'r,
-        PT: 'r;
+        T: Copy + SizedTy,
+    {
+        M::load(unsafe { M::from_mut_ptr(self.as_ptr_mut()) })
+    }
+
+    pub fn store(&mut self, val: Val<'a, T>)
+    where
+        T: SizedTy,
+    {
+        M::store(self.reborrow_mut(), val);
+    }
+
+    pub fn swap(&mut self, val: Val<'a, T>) -> Val<'a, T>
+    where
+        T: SizedTy,
+    {
+        M::swap(self.reborrow_mut(), val)
+    }
 }

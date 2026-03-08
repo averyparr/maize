@@ -6,8 +6,11 @@ use rtc_types::{
 
 use crate::group::{CTA, Group};
 
+#[derive(Clone, Copy)]
 pub struct BlockX<'a>(pub IntrinsicCodegen<'a, CUDA>);
+#[derive(Clone, Copy)]
 pub struct BlockY<'a>(pub IntrinsicCodegen<'a, CUDA>);
+#[derive(Clone, Copy)]
 pub struct BlockZ<'a>(pub IntrinsicCodegen<'a, CUDA>);
 
 impl<'ctx> Group for BlockX<'ctx> {

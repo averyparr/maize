@@ -1,42 +1,53 @@
-use rtc_tile::{
-    WarpTileTy,
-    gmem::Matrix,
-    group::by_block::{BlockX, BlockY},
-    mma::run_test_sync_mma,
-};
+use rtc_tile::{gmem::Matrix, group::by_block::BlockY, mma::run_test_sync_mma};
 use rtc_types::{
-    codegen::{Func, new_ptx_kernel, target_cpu::cuda::SM, typed_func::FnCodegen},
+    codegen::{Func, loops::Looper, new_ptx_kernel, target_cpu::cuda::SM, typed_func::FnCodegen},
     inkwell::OptimizationLevel,
-    ty::{M, R, cuda::Global, raw::*},
+    struct_reflect,
+    ty::{M, cuda::Global, raw::*},
 };
-
-type TileT = rtc_tile::bf16_tile::MmaBf16_16x16;
 
 type MMA = rtc_tile::mma::sm80::Sm80MmaBf16F32_16x8x16;
 
+struct_reflect!(
+    #[repr(align(16))]
+    pub struct GlobalMatrix<T: 'static> {
+        pub ptr: M<&'static mut T, Global>,
+        pub nrows: U32,
+        pub ncols: U32,
+    } => global_matrix
+);
+
 pub fn test_inner() {
     let kernel = new_ptx_kernel::<(
-        Global<P<*const F32>>,
+        M<&'static mut F32>,
         U32,
         U32,
-        Global<R<&<TileT as WarpTileTy>::FragT>>,
-        Global<M<&mut <TileT as WarpTileTy>::FragT>>,
+        M<&'static mut F32>,
+        U32,
+        U32,
+        F32,
+        F32,
+        F32,
+        M<&mut F32, Global>,
     )>();
     // let mut c_shared = kernel.intrinsics().alloc_aligned_shared::<Tile<TileT>>(16);
     kernel.use_fast_math();
-    let (ptr, nrows, ncols, c_val, mut d_val) = kernel.get_args();
-    // let (ptr, nrows, ncols) = kernel.get_args();
-
-    let mut matrix = Matrix::new(ptr, nrows, ncols);
+    let (amat, arows, acols, bmat, brows, bcols, per_row, per_col, stored_every_loop, mut to_store) =
+        kernel.get_args();
+    let mut amat = Matrix::new(amat, arows, acols);
+    let mut bmat = Matrix::new(bmat, brows, bcols);
 
     let group = BlockY(kernel.intrinsics());
 
-    for panel in matrix.collective_row_panel_iter::<16>(group) {
-        // kernel_print!("We are at pointer {}", );
-        let r = panel.ptr.to_mut_ptr().ptr_cast_mut();
-        unsafe { r.write(c_val.load().vec_cast::<F32>()) };
-        d_val.store(c_val.load());
-    }
+    let row_iter = amat.collective_row_panel_iter::<16>(group);
+    row_iter.for_each(|mut row| {
+        let col_iter = bmat.collective_col_panel_iter::<16>(group);
+        col_iter.for_each(|mut col| {
+            row.ptr.store(per_row);
+            col.ptr.store(per_col);
+            to_store.store(stored_every_loop);
+        });
+    });
 
     #[allow(unused)]
     let print_at = |cx: &FnCodegen| {
@@ -46,10 +57,10 @@ pub fn test_inner() {
     let asm = kernel.finalize().compile_asm_at_opt_with_hooks(
         &SM::SM90,
         OptimizationLevel::Aggressive,
-        |_| (),
-        // print_at,
         // print_at,
         |_| (),
+        print_at,
+        // |_| (),
     );
 
     println!("{}", &asm[..asm.len() - 1]);

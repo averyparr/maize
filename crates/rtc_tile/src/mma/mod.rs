@@ -44,9 +44,9 @@ pub trait SyncMMAOp {
 
 pub fn run_test_sync_mma<MMA: SyncMMAOp>(sm: SM) -> String {
     let kernel = new_ptx_kernel::<(
-        Global<R<&MMA::AFrag>>,
-        Global<R<&MMA::BFrag>>,
-        Global<M<&mut MMA::CFrag>>,
+        R<&MMA::AFrag, Global>,
+        R<&MMA::BFrag, Global>,
+        M<&mut MMA::CFrag, Global>,
     )>();
     let (a, b, mut d) = kernel.get_args();
     let c = MMA::zero_accum(a.cx());

@@ -15,10 +15,11 @@ use crate::{
         BinaryIntrinsic, IntrinsicCodegen, IntrinsicsLibrary, StatelessIntrinsicsLibrary,
         UnaryIntrinsic,
     },
-    ty::{AddrspacePtr, M, R, SizedTy, cuda::Shared, raw::*},
+    ty::{Addrspace, M, R, SizedTy, cuda::Shared, raw::*},
     val::Val,
 };
 
+#[derive(Clone, Copy)]
 pub struct CUDA;
 
 impl CUDA {
@@ -116,7 +117,7 @@ impl CUDA {
 }
 
 impl<'a> IntrinsicCodegen<'a, CUDA> {
-    pub fn alloc_aligned_shared<T: SizedTy>(self, align: u32) -> Val<'a, Shared<M<&'a mut T>>> {
+    pub fn alloc_aligned_shared<T: SizedTy>(self, align: u32) -> Val<'a, M<&'a mut T, Shared>> {
         let cx = self.cx();
         assert!(
             align % T::ALIGN == 0,
@@ -126,7 +127,7 @@ impl<'a> IntrinsicCodegen<'a, CUDA> {
         let ty = T::ty(cx.ctx());
         let global_val = cx.module().add_global(
             ty,
-            Some(AddressSpace::from(Shared::<M<&mut T>>::ADDRSPACE)),
+            Some(AddressSpace::from(Shared::AS_U16)),
             "const_sized_shared",
         );
         global_val.set_initializer(&T::undef(cx.ctx()));
@@ -134,12 +135,12 @@ impl<'a> IntrinsicCodegen<'a, CUDA> {
         unsafe { Val::new(cx, global_val.as_basic_value_enum()) }
     }
 
-    pub fn alloc_shared<T: SizedTy>(self) -> Val<'a, Shared<M<&'a mut T>>> {
+    pub fn alloc_shared<T: SizedTy>(self) -> Val<'a, M<&'a mut T, Shared>> {
         let cx = self.cx();
         let ty = T::ty(cx.ctx());
         let global_val = cx.module().add_global(
             ty,
-            Some(AddressSpace::from(Shared::<M<&mut T>>::ADDRSPACE)),
+            Some(AddressSpace::from(Shared::AS_U16)),
             "const_sized_shared",
         );
         global_val.set_initializer(&T::undef(cx.ctx()));

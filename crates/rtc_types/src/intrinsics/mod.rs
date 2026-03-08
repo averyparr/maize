@@ -11,6 +11,7 @@ pub mod cuda;
 mod transcendental;
 pub mod vector;
 
+#[derive(Clone, Copy)]
 pub struct IntrinsicCodegen<'a, Intrins>(&'a FnCodegen, Intrins);
 
 impl<'a, Intrins: StatelessIntrinsicsLibrary> IntrinsicCodegen<'a, Intrins> {

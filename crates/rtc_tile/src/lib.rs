@@ -32,6 +32,7 @@ impl<T, const N: u32> W<T, N> {
 
 trait FixedWidthWindow: Copy {
     type ElemT: ValTy;
+    #[expect(unused, reason = "I think this will be used later")]
     const WIDTH: u32;
 }
 
@@ -64,17 +65,17 @@ impl WarpTileTy for BF16_8x8 {
 
 pub trait WarpSmemLoadTileTy: WarpTileTy + Sized {
     fn collective_load<'a, 'b>(
-        ptr: &mut Val<'a, Shared<M<&'b mut Tile<Self>>>>,
+        ptr: &mut Val<'a, M<&'b mut Tile<Self>, Shared>>,
         lane: Val<'a, U32>,
     ) -> Val<'a, Self::FragT>;
 }
 
 impl WarpSmemLoadTileTy for BF16_16x16 {
     fn collective_load<'a, 'b>(
-        ptr: &mut Val<'a, Shared<M<&'b mut Tile<Self>>>>,
+        ptr: &mut Val<'a, M<&'b mut Tile<Self>, Shared>>,
         lane: Val<'a, U32>,
     ) -> Val<'a, Self::FragT> {
-        let tile_ptr = ptr.reborrow_mut().as_mut_ptr();
+        let tile_ptr = ptr.as_ptr();
         let elem_ptr = tile_ptr.ptr_cast::<U128>();
         let row_offset_in_subtile = lane % 8;
         let subtile_id = lane / 8;
@@ -88,10 +89,10 @@ impl WarpSmemLoadTileTy for BF16_16x16 {
 
 impl WarpSmemLoadTileTy for BF16_8x8 {
     fn collective_load<'a, 'b>(
-        ptr: &mut Val<'a, Shared<M<&'b mut Tile<Self>>>>,
+        ptr: &mut Val<'a, M<&'b mut Tile<Self>, Shared>>,
         lane: Val<'a, U32>,
     ) -> Val<'a, Self::FragT> {
-        let tile_ptr = ptr.reborrow_mut().as_mut_ptr();
+        let tile_ptr = ptr.as_ptr();
         let elem_ptr = tile_ptr.ptr_cast::<U128>();
         let row_offset_in_subtile = lane % 8;
         let subtile_id = lane / 8;

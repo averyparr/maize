@@ -10,7 +10,10 @@ use crate::{
 };
 
 struct_reflect!(
-    pub struct LDSMx2(pub I32, pub I32) => ldsmx2
+    pub struct LDSMx2 {
+        pub a: I32,
+        pub b: I32
+    } => ldsmx2
 );
 
 struct_reflect!(
@@ -42,28 +45,28 @@ fn add_ldsm_attributes(fn_val: FunctionValue<'static>) {
     add_attr("willreturn");
 }
 
-pub unsafe fn call_ldsm_x1<'a>(ptr: Val<'a, Shared<P<*const U128>>>) -> Val<'a, V<I32, 1>> {
+pub unsafe fn call_ldsm_x1<'a>(ptr: Val<'a, P<*const U128, Shared>>) -> Val<'a, V<I32, 1>> {
     let cx = ptr.cx();
     let name = "llvm.nvvm.ldmatrix.sync.aligned.m8n8.x1.b16";
-    let function = cx.get_intrinsic::<I32, (Shared<P<*const U128>>,)>(name, false);
+    let function = cx.get_intrinsic::<I32, (P<*const U128, Shared>,)>(name, false);
     add_ldsm_attributes(function.raw());
     let raw_ret = cx.call_fn(function, (ptr,));
     Val::from_elements([raw_ret])
 }
 
-pub unsafe fn call_ldsm_x2<'a>(ptr: Val<'a, Shared<P<*const U128>>>) -> Val<'a, V<I32, 2>> {
+pub unsafe fn call_ldsm_x2<'a>(ptr: Val<'a, P<*const U128, Shared>>) -> Val<'a, V<I32, 2>> {
     let cx = ptr.cx();
     let name = "llvm.nvvm.ldmatrix.sync.aligned.m8n8.x2.b16";
-    let function = cx.get_intrinsic::<LDSMx2, (Shared<P<*const U128>>,)>(name, false);
+    let function = cx.get_intrinsic::<LDSMx2, (P<*const U128, Shared>,)>(name, false);
     add_ldsm_attributes(function.raw());
     let ret = cx.call_fn(function, (ptr,)).into_accessor();
-    Val::from_elements([ret.0, ret.1])
+    Val::from_elements([ret.a, ret.b])
 }
 
-pub unsafe fn call_ldsm_x4<'a>(ptr: Val<'a, Shared<P<*const U128>>>) -> Val<'a, V<I32, 4>> {
+pub unsafe fn call_ldsm_x4<'a>(ptr: Val<'a, P<*const U128, Shared>>) -> Val<'a, V<I32, 4>> {
     let cx = ptr.cx();
     let name = "llvm.nvvm.ldmatrix.sync.aligned.m8n8.x4.b16";
-    let function = cx.get_intrinsic::<LDSMx4, (Shared<P<*const U128>>,)>(name, false);
+    let function = cx.get_intrinsic::<LDSMx4, (P<*const U128, Shared>,)>(name, false);
     add_ldsm_attributes(function.raw());
     let ret = cx.call_fn(function, (ptr,)).into_accessor();
     Val::from_elements([ret.a, ret.b, ret.c, ret.d])

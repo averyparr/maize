@@ -10,19 +10,18 @@ use inkwell::{
     passes::PassBuilderOptions,
     support::LLVMString,
     targets::{FileType, InitializationConfig, Target, TargetTriple},
-    types::{BasicType, PointerType, StructType, VectorType},
+    types::{BasicType, StructType},
     values::{
         AggregateValue, AnyValue, BasicValue, BasicValueEnum, FunctionValue, InstructionValue,
-        PointerValue, StructValue, VectorBaseValue, VectorValue,
+        PointerValue, StructValue, VectorBaseValue,
     },
 };
 
 use crate::{
     intrinsics::{IntrinsicCodegen, IntrinsicsLibrary, StatelessIntrinsicsLibrary},
     ty::{
-        AddrspacePtr, BF16, Bool, ConstPtrTy, F16, F32, F64, FnRetTy, HowToExtractElements, I8,
-        I16, I32, I64, IntoFuncArgs, P, Ty, U8, U16, U32, U64, UniformTy, V, ValTy, Void, VoidTy,
-        vec::VectorizableTy,
+        Addrspace, BF16, Bool, F16, F32, F64, FnRetTy, HowToExtractElements, I8, I16, I32, I64,
+        IntoFuncArgs, P, U8, U16, U32, U64, UniformTy, V, ValTy, Void, VoidTy, vec::VectorizableTy,
     },
     val::Val,
 };
@@ -284,7 +283,7 @@ impl FnCodegen {
         unsafe { Val::new(self, basic_val) }
     }
 
-    pub fn extract_elem<U, T: ?Sized>(&self, val: &Val<'_, T>, index: u32) -> U::Value<'static>
+    pub fn extract_elem<U, T>(&self, val: &Val<'_, T>, index: u32) -> U::Value<'static>
     where
         T: UniformTy,
         U: ValTy,
@@ -341,12 +340,7 @@ impl FnCodegen {
 
         U::type_val(raw_val.as_any_value_enum())
     }
-    pub fn insert_elem<'a, U, T: ?Sized>(
-        &self,
-        agg: Val<'a, T>,
-        val: Val<'a, U>,
-        index: u32,
-    ) -> Val<'a, T>
+    pub fn insert_elem<'a, U, T>(&self, agg: Val<'a, T>, val: Val<'a, U>, index: u32) -> Val<'a, T>
     where
         T: UniformTy,
         U: ValTy,
@@ -405,9 +399,13 @@ impl FnCodegen {
 
         unsafe { Val::new(agg.cx(), raw_val) }
     }
-    pub fn get_elem_ptr<U, Ptr>(&self, ptr: &Val<'_, Ptr>, index: u32) -> PointerValue<'static>
+    pub fn get_elem_ptr<U, T, Space: Addrspace>(
+        &self,
+        ptr: &Val<'_, P<*const T, Space>>,
+        index: u32,
+    ) -> PointerValue<'static>
     where
-        Ptr: ConstPtrTy<PointeeTy: UniformTy>,
+        T: UniformTy + ?Sized,
         U: ValTy,
     {
         fn extract_as_vec_array(
@@ -428,8 +426,8 @@ impl FnCodegen {
 
         let proposed_elem_ty = U::ty(self.ctx()).as_basic_type_enum();
         let raw_ptr = ptr.ll_typed();
-        let pointee_ty = Ptr::PointeeTy::ty(self.ctx()).as_basic_type_enum();
-        match Ptr::PointeeTy::EXTRACTION_METHOD {
+        let pointee_ty = T::ty(self.ctx()).as_basic_type_enum();
+        match T::EXTRACTION_METHOD {
             HowToExtractElements::Vector => {
                 let vec_ty = pointee_ty.into_vector_type();
                 assert_eq!(vec_ty.get_element_type(), proposed_elem_ty);
@@ -463,18 +461,59 @@ impl FnCodegen {
         }
     }
 
-    pub fn extract_struct_ptr<U, Ptr>(
+    pub fn get_struct_field<U, T>(&self, val: &Val<'_, T>, index: u32) -> U::Value<'static>
+    where
+        for<'ctx> T: ValTy<Type<'ctx> = StructType<'ctx>, Value<'ctx> = StructValue<'ctx>>,
+        U: ValTy,
+    {
+        let struct_ty = T::ty(self.ctx());
+        let field_ty = struct_ty
+            .get_field_type_at_index(index)
+            .expect("Field index should be in-range");
+        assert_eq!(field_ty, U::ty(self.ctx()).as_basic_type_enum());
+
+        let raw_val = unsafe {
+            self.with_builder(|b| b.build_extract_value(val.ll_typed(), index, "get_struct_field"))
+        }
+        .expect("Struct get field should have worked");
+
+        U::type_val(raw_val.as_any_value_enum())
+    }
+    pub fn insert_struct_field<'a, U, T>(
         &self,
-        ptr: &Val<'_, Ptr>,
+        agg: Val<'a, T>,
+        val: Val<'a, U>,
+        index: u32,
+    ) -> Val<'a, T>
+    where
+        for<'ctx> T: ValTy<Type<'ctx> = StructType<'ctx>, Value<'ctx> = StructValue<'ctx>>,
+        U: ValTy,
+    {
+        let struct_ty = T::ty(self.ctx());
+        let field_ty = struct_ty
+            .get_field_type_at_index(index)
+            .expect("Field index should be in-range");
+        assert_eq!(field_ty, U::ty(self.ctx()).as_basic_type_enum());
+
+        let raw_val = unsafe {
+            self.with_builder(|b| {
+                b.build_insert_value(agg.ll_typed(), val.ll_typed(), index, "insert_struct")
+            })
+        }
+        .expect("Insert to struct should have worked");
+
+        unsafe { Val::new(agg.cx(), raw_val.as_basic_value_enum()) }
+    }
+    pub fn get_struct_ptr<U, T, Space: Addrspace>(
+        &self,
+        ptr: Val<'_, P<*const T, Space>>,
         index: u32,
     ) -> PointerValue<'static>
     where
-        for<'ctx> Ptr: ConstPtrTy<
-            PointeeTy: ValTy<Type<'ctx> = StructType<'ctx>, Value<'ctx> = StructValue<'ctx>>,
-        >,
+        for<'ctx> T: ValTy<Type<'ctx> = StructType<'ctx>, Value<'ctx> = StructValue<'ctx>>,
         U: ValTy,
     {
-        let pointee_ty = Ptr::PointeeTy::ty(self.ctx());
+        let pointee_ty = T::ty(self.ctx());
         let field_ty = pointee_ty
             .get_field_type_at_index(index)
             .expect("Field should be in-range");
@@ -487,67 +526,6 @@ impl FnCodegen {
         .expect("Struct GEP should succeed");
 
         offset_ptr
-    }
-    pub fn extract_vec_ptr<U, Ptr>(&self, ptr: &Val<'_, Ptr>, index: u32) -> PointerValue<'static>
-    where
-        for<'ctx> Ptr: ConstPtrTy<
-            PointeeTy: ValTy<Type<'ctx> = VectorType<'ctx>, Value<'ctx> = VectorValue<'ctx>>,
-        >,
-        U: VectorizableTy,
-    {
-        let vec_ty = Ptr::PointeeTy::ty(self.ctx());
-        let elem_ty = vec_ty.get_element_type();
-        assert_eq!(elem_ty, U::ty(self.ctx()).as_basic_type_enum());
-
-        let raw_ptr = ptr.ll_typed();
-        let index = self.constant_from(index as u64).ll_typed();
-        let offset_ptr = unsafe {
-            self.with_builder(|b| b.build_in_bounds_gep(elem_ty, raw_ptr, &[index], "vec_offset"))
-        }
-        .expect("Vector GEP should succeed");
-
-        offset_ptr
-    }
-
-    pub fn extract_struct_val<U, StructT>(
-        &self,
-        val: &Val<'_, StructT>,
-        index: u32,
-    ) -> U::Value<'static>
-    where
-        for<'ctx> StructT: ValTy<Value<'ctx> = StructValue<'ctx>, Type<'ctx> = StructType<'ctx>>,
-        U: ValTy,
-    {
-        let struct_ty = StructT::ty(self.ctx());
-        let field_ty = struct_ty
-            .get_field_type_at_index(index)
-            .expect("Field should be in-range");
-        assert_eq!(field_ty, U::ty(self.ctx()).as_basic_type_enum());
-
-        let raw_val = val.ll_typed();
-        let raw_field_val = unsafe {
-            self.with_builder(|b| b.build_extract_value(raw_val, index, "extract_from_struct"))
-        }
-        .expect("Raw struct extraction should succeed");
-        U::type_val(raw_field_val.into())
-    }
-    pub fn extract_vec_val<U, VecT>(&self, val: &Val<'_, VecT>, index: u32) -> U::Value<'static>
-    where
-        for<'ctx> VecT: ValTy<Value<'ctx> = VectorValue<'ctx>, Type<'ctx> = VectorType<'ctx>>,
-        U: VectorizableTy,
-    {
-        let vec_ty = VecT::ty(self.ctx());
-        let elem_ty = vec_ty.get_element_type();
-        assert_eq!(elem_ty, U::ty(self.ctx()).as_basic_type_enum());
-
-        let raw_val = val.ll_typed();
-        let index = self.constant_from(index as u64).ll_typed();
-        let raw_elem_val = unsafe {
-            self.with_builder(|b| b.build_extract_element(raw_val, index, "extract_from_vec"))
-        }
-        .expect("Extract element from vec should succeeed");
-
-        U::type_val(raw_elem_val.into())
     }
 
     pub fn insert_str(
@@ -577,22 +555,6 @@ impl FnCodegen {
             })
         };
         unsafe { Val::new(self, ptr_to_char.as_basic_value_enum()) }
-    }
-
-    pub unsafe fn addrspace_cast<'a, NewPtr, Ptr>(&self, val: Val<'a, Ptr>) -> Val<'a, NewPtr>
-    where
-        for<'b> Ptr: AddrspacePtr<Value<'b> = PointerValue<'b>, Type<'b> = PointerType<'b>>,
-        for<'b> NewPtr: AddrspacePtr<Value<'b> = PointerValue<'b>, Type<'b> = PointerType<'b>>,
-    {
-        let ptr_val = val.ll_typed();
-        let new_ptr_type = NewPtr::ty(val.ctx());
-        let new_ptr = unsafe {
-            self.with_builder(|b| {
-                b.build_address_space_cast(ptr_val, new_ptr_type, "addrspace_cast")
-            })
-        }
-        .expect("addrspace cast should have worked");
-        unsafe { Val::new(val.cx(), new_ptr.as_basic_value_enum()) }
     }
 
     pub fn print_module_to_string(&self) -> LLVMString {

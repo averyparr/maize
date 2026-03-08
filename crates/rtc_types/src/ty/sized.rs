@@ -1,6 +1,6 @@
 use inkwell::{attributes::Attribute, context::ContextRef};
 
-use crate::ty::{AnyTy, Ty, raw::*};
+use crate::ty::{AnyTy, Ty, ptr::Addrspace, raw::*};
 
 use super::ValTy;
 
@@ -8,7 +8,7 @@ pub trait AlignedTy: AnyTy {
     const ALIGN: u32;
 }
 
-pub trait SizedTy: AlignedTy + ValTy {
+pub trait SizedTy: AlignedTy + ValTy + Sized {
     const SIZE: u32;
     fn fn_arg_attrs(ctx: ContextRef<'_>) -> impl IntoIterator<Item = Attribute> {
         let align_id = Attribute::get_named_enum_kind_id("align");
@@ -59,49 +59,49 @@ impl_size_align!(
     U128 => u128,
 );
 
-impl<T: ?Sized> AlignedTy for P<*const T>
+impl<T: ?Sized, Space: Addrspace> AlignedTy for P<*const T, Space>
 where
     T: AnyTy,
 {
     const ALIGN: u32 = ::std::mem::align_of::<*const ()>() as _;
 }
 
-impl<T: ?Sized> AlignedTy for P<*mut T>
+impl<T: ?Sized, Space: Addrspace> AlignedTy for P<*mut T, Space>
 where
     T: AnyTy,
 {
     const ALIGN: u32 = ::std::mem::align_of::<*const ()>() as _;
 }
 
-impl<T: ?Sized> AlignedTy for R<&T>
+impl<T: ?Sized, Space: Addrspace> AlignedTy for R<&T, Space>
 where
     T: Ty,
 {
     const ALIGN: u32 = ::std::mem::align_of::<&()>() as _;
 }
 
-impl<T: ?Sized> AlignedTy for M<&mut T>
+impl<T: ?Sized, Space: Addrspace> AlignedTy for M<&mut T, Space>
 where
     T: Ty,
 {
     const ALIGN: u32 = ::std::mem::align_of::<&mut ()>() as _;
 }
 
-impl<T: ?Sized> SizedTy for P<*const T>
+impl<T: ?Sized, Space: Addrspace> SizedTy for P<*const T, Space>
 where
     T: AnyTy,
 {
     const SIZE: u32 = ::std::mem::size_of::<*const ()>() as _;
 }
 
-impl<T: ?Sized> SizedTy for P<*mut T>
+impl<T: ?Sized, Space: Addrspace> SizedTy for P<*mut T, Space>
 where
     T: AnyTy,
 {
     const SIZE: u32 = ::std::mem::size_of::<*const ()>() as _;
 }
 
-impl<T: ?Sized> SizedTy for R<&T>
+impl<T: ?Sized, Space: Addrspace> SizedTy for R<&T, Space>
 where
     T: Ty,
 {
@@ -118,7 +118,7 @@ where
     }
 }
 
-impl<T: ?Sized> SizedTy for M<&mut T>
+impl<T: ?Sized, Space: Addrspace> SizedTy for M<&mut T, Space>
 where
     T: Ty,
 {

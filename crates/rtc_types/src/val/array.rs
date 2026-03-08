@@ -1,5 +1,5 @@
 use crate::{
-    ty::{ContiguousUniformTy, MutTy, R, RefTy, SizedTy, ValTy},
+    ty::{Addrspace, ContiguousUniformTy, M, R, SizedTy, ValTy},
     val::Val,
 };
 
@@ -32,31 +32,29 @@ impl<'a, T> Val<'a, T> {
     }
 }
 
-impl<'a, 'b, Ref, T, const N: usize> Val<'a, Ref>
+impl<'a, 'b, Space: Addrspace, T, const N: usize> Val<'a, R<&'b [T; N], Space>>
 where
-    Ref: RefTy<PointeeTy = [T; N]>,
     T: ValTy + 'a,
 {
     pub fn index_ref<'c>(&'c self, index: usize) -> Val<'a, R<&'c T>> {
-        <[T; N]>::element_ref::<Ref>(Ref::reborrow(self), index.try_into().expect("u32 overflow"))
+        <[T; N]>::element_ref(self.reborrow(), index.try_into().expect("u32 overflow"))
     }
-    pub fn elements_ref<'c>(&'c self) -> [Val<'a, Ref::Ref<'c, T>>; N] {
-        <[T; N]>::elements_ref::<Ref>(self.reborrow())
+    pub fn elements_ref<'c>(&'c self) -> [Val<'a, R<&'c T, Space>>; N] {
+        <[T; N]>::elements_ref(self.reborrow())
     }
 }
 
-impl<'a, 'b, Mut, T, const N: usize> Val<'a, Mut>
+impl<'a, 'b, Space: Addrspace, T, const N: usize> Val<'a, M<&'b mut [T; N], Space>>
 where
-    Mut: MutTy<PointeeTy = [T; N]>,
     T: ValTy + 'a,
 {
-    pub fn index_mut<'c>(&'c mut self, index: usize) -> Val<'a, Mut::Mut<'c, T>>
+    pub fn index_mut<'c>(&'c mut self, index: usize) -> Val<'a, M<&'c mut T, Space>>
     where
         'a: 'c,
     {
-        <[T; N]>::element_mut::<Mut>(self.reborrow_mut(), index.try_into().expect("u32 overflow"))
+        <[T; N]>::element_mut(self.reborrow_mut(), index.try_into().expect("u32 overflow"))
     }
-    pub fn elements_mut<'c>(&'c mut self) -> [Val<'a, Mut::Mut<'c, T>>; N] {
-        <[T; N]>::elements_mut::<Mut>(self.reborrow_mut())
+    pub fn elements_mut<'c>(&'c mut self) -> [Val<'a, M<&'c mut T, Space>>; N] {
+        <[T; N]>::elements_mut(self.reborrow_mut())
     }
 }

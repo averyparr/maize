@@ -1,5 +1,7 @@
 use std::marker::PhantomData;
 
+use crate::ty::ptr::DefaultAddressSpace;
+
 macro_rules! declare_zst_types {
     ($($tipes: ident),*) => {
         $(
@@ -26,25 +28,25 @@ declare_zst_types!(
 pub struct V<T, const N: usize>(PhantomData<T>);
 
 #[derive(Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
-pub struct P<T: ?Sized>(PhantomData<T>);
-impl<T> Clone for P<T> {
+pub struct P<T: ?Sized, Space = DefaultAddressSpace>(PhantomData<T>, PhantomData<Space>);
+impl<T, Space> Clone for P<T, Space> {
     fn clone(&self) -> Self {
-        P(PhantomData)
+        P(PhantomData, PhantomData)
     }
 }
-impl<T> Copy for P<T> {}
+impl<T, Space> Copy for P<T, Space> {}
 
 #[derive(Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
-pub struct R<T: ?Sized>(PhantomData<T>);
-impl<T> Clone for R<T> {
+pub struct R<T: ?Sized, Space = DefaultAddressSpace>(PhantomData<T>, PhantomData<Space>);
+impl<T, Space> Clone for R<T, Space> {
     fn clone(&self) -> Self {
-        R(PhantomData)
+        R(PhantomData, PhantomData)
     }
 }
-impl<T> Copy for R<T> {}
+impl<T, Space> Copy for R<T, Space> {}
 // _Must_ not be Copy or we immediately break aliasing
 #[derive(Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
-pub struct M<T: ?Sized>(PhantomData<T>);
+pub struct M<T: ?Sized, Space = DefaultAddressSpace>(PhantomData<T>, PhantomData<Space>);
 
 impl<T, const N: usize> V<T, N> {
     #[allow(unused)]

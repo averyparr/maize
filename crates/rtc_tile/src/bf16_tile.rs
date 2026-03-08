@@ -17,13 +17,13 @@ impl WarpTileTy for MmaBf16_16x16 {
 
 impl WarpSmemLoadTileTy for MmaBf16_16x16 {
     fn collective_load<'a, 'b>(
-        ptr: &mut Val<'a, Shared<M<&'b mut Tile<Self>>>>,
+        ptr: &mut Val<'a, M<&'b mut Tile<Self>, Shared>>,
         lane: Val<'a, U32>,
     ) -> Val<'a, Self::FragT> {
         let row = lane % 16;
         let col_xormask = row % 2;
         let col_block = (lane / 16) ^ col_xormask;
-        let tile_ptr = ptr.reborrow_mut().as_mut_ptr();
+        let tile_ptr = ptr.reborrow().as_ptr();
         let elem_ptr = tile_ptr.ptr_cast::<U128>();
         let offset_per_row = Self::COLS / (U128::SIZE / BF16::SIZE);
         let offset = col_block + row * offset_per_row;
