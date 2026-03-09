@@ -1,5 +1,5 @@
 use rtc_types::{
-    intrinsics::{IntrinsicCodegen, cuda::CUDA},
+    intrinsics::{IntrinsicCodegen, IntrinsicsLibrary, cuda::CUDA},
     ty::U32,
     val::Val,
 };
@@ -15,30 +15,39 @@ pub struct BlockZ<'a>(pub IntrinsicCodegen<'a, CUDA>);
 
 impl<'ctx> Group for BlockX<'ctx> {
     type Scope = CTA;
-    fn index_size<'a>(self) -> (Val<'a, U32>, Val<'a, U32>)
+    fn index_size<'a>(&self) -> (Val<'a, U32>, Val<'a, U32>)
     where
         Self: 'a,
     {
-        (self.0.bid_x(), self.0.gdim_x())
+        let bid_x = self.0.bid_x();
+        let gdim_x = self.0.gdim_x();
+        unsafe { self.0.assume(bid_x.lt(gdim_x)) };
+        (bid_x, gdim_x)
     }
 }
 
 impl<'ctx> Group for BlockY<'ctx> {
     type Scope = CTA;
-    fn index_size<'a>(self) -> (Val<'a, U32>, Val<'a, U32>)
+    fn index_size<'a>(&self) -> (Val<'a, U32>, Val<'a, U32>)
     where
         Self: 'a,
     {
-        (self.0.bid_y(), self.0.gdim_y())
+        let bid_y = self.0.bid_y();
+        let gdim_y = self.0.gdim_y();
+        unsafe { self.0.assume(bid_y.lt(gdim_y)) };
+        (bid_y, gdim_y)
     }
 }
 
 impl<'ctx> Group for BlockZ<'ctx> {
     type Scope = CTA;
-    fn index_size<'a>(self) -> (Val<'a, U32>, Val<'a, U32>)
+    fn index_size<'a>(&self) -> (Val<'a, U32>, Val<'a, U32>)
     where
         Self: 'a,
     {
-        (self.0.bid_z(), self.0.gdim_z())
+        let bid_z = self.0.bid_z();
+        let gdim_z = self.0.gdim_z();
+        unsafe { self.0.assume(bid_z.lt(gdim_z)) };
+        (bid_z, gdim_z)
     }
 }

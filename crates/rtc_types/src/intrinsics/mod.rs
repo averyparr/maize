@@ -8,6 +8,7 @@ use crate::{
 
 pub mod abs;
 pub mod cuda;
+pub mod minmax;
 mod transcendental;
 pub mod vector;
 
@@ -26,10 +27,14 @@ impl<'a, I> IntrinsicCodegen<'a, I> {
 }
 
 pub trait IntrinsicsLibrary {
+    unsafe fn assume(&self, cond: Val<'_, Bool>);
     fn assert(&self, cond: Val<'_, Bool>, message: &str, file: &str, line: u32, function: &str);
 }
 
 impl<Intrinsic: IntrinsicsLibrary> IntrinsicsLibrary for IntrinsicCodegen<'_, Intrinsic> {
+    unsafe fn assume(&self, cond: Val<'_, Bool>) {
+        unsafe { self.1.assume(cond) };
+    }
     fn assert(&self, cond: Val<'_, Bool>, message: &str, file: &str, line: u32, function: &str) {
         self.1.assert(cond, message, file, line, function);
     }

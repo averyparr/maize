@@ -2,6 +2,7 @@ use std::{borrow::Borrow, cell::Cell, marker::PhantomData};
 
 use inkwell::{
     AddressSpace, OptimizationLevel,
+    attributes::{Attribute, AttributeLoc},
     basic_block::BasicBlock,
     builder::Builder,
     context::ContextRef,
@@ -212,7 +213,20 @@ impl FnCodegen {
         }
     }
     pub fn store_in_alloca<'a>(&'a self, val: BasicValueEnum<'static>) -> Val<'a, P<*mut Void>> {
-        let alloca_ptr = unsafe { self.with_builder(|b| b.build_alloca(val.get_type(), "alloca")) }
+        let first_bb = self
+            .func()
+            .get_first_basic_block()
+            .expect("There should be a first BB");
+        let builder = self.ctx().create_builder();
+        builder.position_at(
+            first_bb,
+            &first_bb
+                .get_first_instruction()
+                .expect("Should be some instruction"),
+        );
+
+        let alloca_ptr = builder
+            .build_alloca(val.get_type(), "alloca")
             .expect("Alloca should succeed");
         let _store = unsafe { self.with_builder(|b| b.build_store(alloca_ptr, val)) }
             .expect("Store should have succeeded");
@@ -600,6 +614,9 @@ pub trait Func: Sized {
         let fn_ty = Self::Ret::fn_ty::<Self::Args>(ctx);
         let func = module.add_function("func", fn_ty, None);
         func.set_call_conventions(Self::CALL_CONV);
+        let mustprogress_id = Attribute::get_named_enum_kind_id("mustprogress");
+        let mustprogress = ctx.create_enum_attribute(mustprogress_id, 0);
+        func.add_attribute(AttributeLoc::Function, mustprogress);
         let bb = ctx.append_basic_block(func, "entry");
         let bb = Cell::new(bb);
         let opt = Cell::default();

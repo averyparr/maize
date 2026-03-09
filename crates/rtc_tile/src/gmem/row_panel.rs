@@ -1,23 +1,30 @@
 use rtc_types::{
     codegen::{loops::TransformLooper, typed_func::FnCodegen},
-    ty::{Addrspace, Bool, DereferencableTy, M, R, SizedTy, U32, ValTy},
+    ty::{Bool, DereferencableTy, SizedTy, U32},
     val::Val,
 };
 
-use crate::{FixedWidthWindow, W, gmem::Matrix, group::Group};
+use crate::{DW, W, Window, gmem::Matrix, group::Group};
 
 pub struct RowPanel<'a, RowWindow, Ptr> {
-    #[expect(unused, reason = "This will be used later")]
-    row_window: RowWindow,
+    pub(crate) row_window: RowWindow,
     pub ptr: Val<'a, Ptr>,
-    #[expect(unused, reason = "This will be used later")]
-    num_cols: Val<'a, U32>,
+    pub(crate) num_cols: Val<'a, U32>,
+}
+
+impl<'a, RowWindow: Window + 'a, Ptr> RowPanel<'a, RowWindow, Ptr> {
+    pub fn row_size(&self) -> Val<'a, U32> {
+        self.row_window.size(self.ptr.cx())
+    }
+    pub fn col_size(&self) -> Val<'a, U32> {
+        self.num_cols
+    }
 }
 
 pub struct RowPanelIterLooper<'a, RowWindow, Ptr> {
     row_window: RowWindow,
     ptr: Val<'a, Ptr>,
-    curr_row: Val<'a, U32>,
+    init_row: Val<'a, U32>,
     rows_per_iter: Val<'a, U32>,
     num_cols: Val<'a, U32>,
     last_row: Val<'a, U32>,
@@ -26,7 +33,7 @@ pub struct RowPanelIterLooper<'a, RowWindow, Ptr> {
 impl<'ctx, RowWindow, Ptr> TransformLooper for RowPanelIterLooper<'ctx, RowWindow, Ptr>
 where
     Ptr: DereferencableTy<Pointee: SizedTy>,
-    RowWindow: FixedWidthWindow<ElemT = Ptr::Pointee>,
+    RowWindow: Window<ElemT = Ptr::Pointee>,
 {
     type DecisionItemT = U32;
     type ItemT<'a>
@@ -45,7 +52,7 @@ where
     where
         Self: 'a,
     {
-        self.curr_row
+        self.init_row
     }
 
     fn decision_fn<'a>(&self, curr_row: Val<'a, Self::DecisionItemT>) -> Val<'a, Bool>
@@ -79,46 +86,68 @@ where
     }
 }
 
-impl<'a, 'b, T, Space: Addrspace> Matrix<'a, R<&'b T, Space>> {
-    pub fn collective_row_panel_iter<'c, const N: u32>(
-        &'c mut self,
+impl<'a, 'b, T, Ptr> Matrix<'a, Ptr>
+where
+    Ptr: DereferencableTy<Pointee = T>,
+    T: SizedTy + 'b,
+{
+    pub fn collective_row_panel_iter<const N: u32>(
+        &'b mut self,
         group: impl Group + 'a,
-    ) -> RowPanelIterLooper<'a, W<T, N>, R<&'b T, Space>>
-    where
-        T: ValTy,
+    ) -> impl TransformLooper<ItemT<'b> = RowPanel<'b, W<Ptr::Pointee, N>, Ptr::Parametrized<'b>>>
     {
         let (index, size) = group.index_size();
         let rows_per_iter = size * N;
-        let curr_row = index * N;
+        let init_row = index * N;
         RowPanelIterLooper {
             row_window: W::new(),
-            ptr: self.ptr,
-            curr_row,
+            ptr: Ptr::parametrize(&mut self.ptr),
+            init_row,
             rows_per_iter,
             num_cols: self.ncols,
             last_row: self.nrows,
         }
     }
-}
-
-impl<'a, 'b, T, Space: Addrspace> Matrix<'a, M<&'b mut T, Space>> {
-    pub fn collective_row_panel_iter<'c, const N: u32>(
-        &'c mut self,
+    pub fn collective_aligned_row_panel_iter<const N: u32>(
+        &'b mut self,
         group: impl Group + 'a,
-    ) -> RowPanelIterLooper<'a, W<T, N>, M<&'c mut T, Space>>
+    ) -> (
+        impl TransformLooper<ItemT<'b> = RowPanel<'b, W<T, N>, Ptr>>,
+        RowPanel<'a, DW<'a, T>, Ptr>,
+    )
     where
-        T: ValTy,
+        Ptr: DereferencableTy<Pointee: SizedTy>,
     {
         let (index, size) = group.index_size();
         let rows_per_iter = size * N;
-        let curr_row = index * N;
-        RowPanelIterLooper {
+        let epilogue_size = self.nrows % rows_per_iter;
+        let bulk_rows = self.nrows - epilogue_size;
+        let epilogue_offset = bulk_rows * self.ncols;
+        let init_row = index * N;
+        let bulk_iter = RowPanelIterLooper {
             row_window: W::new(),
-            ptr: self.ptr.reborrow_mut(),
-            curr_row,
+            ptr: unsafe { Ptr::on_underlying_raw(&self.ptr, |raw| raw) },
+            init_row,
             rows_per_iter,
             num_cols: self.ncols,
-            last_row: self.nrows,
-        }
+            last_row: bulk_rows,
+        };
+
+        let rest_ptr = unsafe {
+            Ptr::on_underlying_raw(&self.ptr, |raw| {
+                raw.add(epilogue_offset + init_row * self.ncols)
+            })
+        };
+        let epilogue_width = init_row
+            .lt(epilogue_size)
+            .then(|| (epilogue_size - init_row).min(rows_per_iter.const_like(N)))
+            .or_else(|| rows_per_iter.const_like(0));
+        let rest = RowPanel {
+            row_window: DW::new(epilogue_width),
+            ptr: rest_ptr,
+            num_cols: self.ncols,
+        };
+
+        (bulk_iter, rest)
     }
 }

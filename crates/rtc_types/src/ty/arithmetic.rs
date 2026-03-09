@@ -7,6 +7,7 @@ use inkwell::values::FloatMathValue;
 use inkwell::values::InstructionValue;
 use inkwell::values::IntMathValue;
 
+use crate::ty::SizedTy;
 use crate::ty::ValTy;
 use crate::ty::raw::*;
 use crate::ty::vec::VectorizableTy;
@@ -92,7 +93,7 @@ fn exact_div_or_rem(ins: InstructionValue<'_>) {
 /// with the `builder` other than emit e.g. a (T, T) -> T add
 /// operation. This is true for all implementations in this file,
 /// but downstream implementors must be careful.
-pub unsafe trait MathTy: ValTy {
+pub unsafe trait MathTy: SizedTy {
     /// Primary customization point: Do we use int or float math?
     const MATH_VARIANT: MathVariant;
     /// Secondary customization point: are we using default float types,

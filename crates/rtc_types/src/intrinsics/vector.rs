@@ -192,10 +192,10 @@ where
     pub fn prod(self) -> Val<'a, T> {
         T::call_prod(self)
     }
-    pub fn max(self) -> Val<'a, T> {
+    pub fn max_value(self) -> Val<'a, T> {
         T::call_max(self)
     }
-    pub fn min(self) -> Val<'a, T> {
+    pub fn min_value(self) -> Val<'a, T> {
         T::call_min(self)
     }
 }

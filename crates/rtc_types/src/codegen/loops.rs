@@ -3,12 +3,12 @@ use core::ops::Range;
 use crate::{
     codegen::FnCodegen,
     struct_reflect,
-    ty::{Bool, SizedTy, StructReflectTy, U32},
+    ty::{Bool, StructReflectTy, U32},
     val::Val,
 };
 
 pub trait TransformLooper: Sized {
-    type DecisionItemT: SizedTy + Copy;
+    type DecisionItemT: StructReflectTy + Copy;
     type ItemT<'a>
     where
         Self: 'a;
@@ -90,7 +90,7 @@ impl<A: Copy, B: Copy> Copy for ZippedPair<A, B> {}
 
 pub struct ZippedLooper<A, B>(A, B);
 
-impl<A: TransformLooper, B: TransformLooper> TransformLooper for ZippedLooper<A, B>
+impl<'val, A: TransformLooper, B: TransformLooper> TransformLooper for ZippedLooper<A, B>
 where
     A::DecisionItemT: StructReflectTy,
     B::DecisionItemT: StructReflectTy,
@@ -153,7 +153,7 @@ where
 }
 
 pub trait Looper: TransformLooper {
-    fn for_each<'a, F>(self, mut f: F)
+    fn for_every_value<'a, F>(self, mut f: F)
     where
         F: FnMut(Self::ItemT<'a>),
         Self: 'a,
@@ -191,9 +191,12 @@ pub trait Looper: TransformLooper {
         cx.set_bb(done_block);
     }
 
-    fn zip<OtherLooper>(self, other: OtherLooper) -> ZippedLooper<Self, OtherLooper> {
+    fn zip<'a, OtherLooper: Looper + 'a>(
+        self,
+        other: OtherLooper,
+    ) -> ZippedLooper<Self, OtherLooper> {
         ZippedLooper(self, other)
     }
 }
 
-impl<L: TransformLooper> Looper for L {}
+impl<'val, L> Looper for L where L: TransformLooper {}

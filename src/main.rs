@@ -2,7 +2,7 @@ use rtc_tile::{gmem::Matrix, group::by_block::BlockY, mma::run_test_sync_mma};
 use rtc_types::{
     codegen::{Func, loops::Looper, new_ptx_kernel, target_cpu::cuda::SM, typed_func::FnCodegen},
     inkwell::OptimizationLevel,
-    struct_reflect,
+    kernel_assert, struct_reflect,
     ty::{M, cuda::Global, raw::*},
 };
 
@@ -19,33 +19,43 @@ struct_reflect!(
 
 pub fn test_inner() {
     let kernel = new_ptx_kernel::<(
-        M<&'static mut F32>,
+        M<&'static mut F32, Global>,
         U32,
         U32,
-        M<&'static mut F32>,
+        M<&'static mut F32, Global>,
         U32,
         U32,
         F32,
         F32,
         F32,
         M<&mut F32, Global>,
-    )>();
+    )>()
+    .with_launch_bounds_2d((1, 128), Some(4), None);
     // let mut c_shared = kernel.intrinsics().alloc_aligned_shared::<Tile<TileT>>(16);
     kernel.use_fast_math();
     let (amat, arows, acols, bmat, brows, bcols, per_row, per_col, stored_every_loop, mut to_store) =
         kernel.get_args();
-    let mut amat = Matrix::new(amat, arows, acols);
-    let mut bmat = Matrix::new(bmat, brows, bcols);
+    let mut amat = Matrix::new(amat, arows.const_like(4096), acols.const_like(4096));
+    let mut bmat = Matrix::new(bmat, brows.const_like(4096), bcols.const_like(4096));
 
+    kernel_assert!(kernel.intrinsics().gdim_y().eq_const(128));
     let group = BlockY(kernel.intrinsics());
 
-    let row_iter = amat.collective_row_panel_iter::<16>(group);
-    row_iter.for_each(|mut row| {
-        let col_iter = bmat.collective_col_panel_iter::<16>(group);
-        col_iter.for_each(|mut col| {
-            row.ptr.store(per_row);
-            col.ptr.store(per_col);
-            to_store.store(stored_every_loop);
+    let (a_panels, a_epilogue) = amat.collective_aligned_row_panel_iter::<16>(group);
+    kernel_assert!(a_epilogue.row_size().eq_const(0));
+    a_panels.for_every_value(|mut row_panel| {
+        let (b_panels, b_epilogue) = bmat.collective_aligned_col_panel_iter::<16>(group);
+        kernel_assert!(b_epilogue.col_size().eq_const(0));
+        b_panels.for_every_value(|mut col| {
+            let row_tiles = row_panel.gmem_tiles::<16>();
+            let col_tiles = col.gmem_tiles::<16>();
+            row_tiles
+                .zip(col_tiles)
+                .for_every_value(|(mut a_tile, mut b_tile)| {
+                    a_tile.ptr.store(per_row);
+                    b_tile.ptr.store(per_col);
+                    to_store.store(stored_every_loop);
+                });
         });
     });
 
@@ -58,8 +68,8 @@ pub fn test_inner() {
         &SM::SM90,
         OptimizationLevel::Aggressive,
         // print_at,
-        |_| (),
         print_at,
+        |_| (),
         // |_| (),
     );
 

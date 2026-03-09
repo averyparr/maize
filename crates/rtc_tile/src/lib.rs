@@ -7,6 +7,7 @@ pub mod mma;
 use std::marker::PhantomData;
 
 use rtc_types::{
+    codegen::typed_func::FnCodegen,
     inkwell::{
         context::ContextRef,
         types::{ArrayType, BasicType},
@@ -18,27 +19,63 @@ use rtc_types::{
 };
 
 pub struct W<T, const N: u32>(PhantomData<T>);
+pub struct DW<'a, T>(Val<'a, U32>, PhantomData<T>);
 impl<T, const N: u32> Clone for W<T, N> {
     fn clone(&self) -> Self {
         Self(PhantomData)
     }
 }
+impl<T> Clone for DW<'_, T> {
+    fn clone(&self) -> Self {
+        Self(self.0, PhantomData)
+    }
+}
 impl<T, const N: u32> Copy for W<T, N> {}
+impl<T> Copy for DW<'_, T> {}
+
+pub trait Window: Copy {
+    type ElemT: ValTy;
+    fn size<'v>(&self, cx: &'v FnCodegen) -> Val<'v, U32>
+    where
+        Self: 'v;
+}
+
+pub trait FixedWidthWindow: Window {
+    const WIDTH: u32;
+}
+
+impl<T: ValTy, const N: u32> Window for W<T, N> {
+    type ElemT = T;
+    fn size<'v>(&self, cx: &'v FnCodegen) -> Val<'v, U32>
+    where
+        Self: 'v,
+    {
+        cx.constant_from(N)
+    }
+}
+impl<T: ValTy> Window for DW<'_, T> {
+    type ElemT = T;
+    fn size<'v>(&self, _: &'v FnCodegen) -> Val<'v, U32>
+    where
+        Self: 'v,
+    {
+        self.0
+    }
+}
+impl<T: ValTy, const N: u32> FixedWidthWindow for W<T, N> {
+    const WIDTH: u32 = N;
+}
+
 impl<T, const N: u32> W<T, N> {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self(PhantomData)
     }
 }
 
-trait FixedWidthWindow: Copy {
-    type ElemT: ValTy;
-    #[expect(unused, reason = "I think this will be used later")]
-    const WIDTH: u32;
-}
-
-impl<T: ValTy, const N: u32> FixedWidthWindow for W<T, N> {
-    type ElemT = T;
-    const WIDTH: u32 = N;
+impl<'a, T> DW<'a, T> {
+    pub fn new(val: Val<'a, U32>) -> Self {
+        Self(val, PhantomData)
+    }
 }
 
 pub trait WarpTileTy {

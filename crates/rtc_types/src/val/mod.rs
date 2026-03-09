@@ -145,3 +145,20 @@ impl<'ctx, T: Ty> Val<'ctx, S<T>> {
         Val(self.cx(), val, PhantomData)
     }
 }
+
+pub trait OwnsValue {
+    type Val: ValTy;
+    fn as_stores<'a>(self) -> Val<'a, S<Self::Val>>
+    where
+        Self: 'a;
+}
+
+impl<'ctx, T: ValTy> OwnsValue for Val<'ctx, T> {
+    type Val = T;
+    fn as_stores<'a>(self) -> Val<'a, S<Self::Val>>
+    where
+        Self: 'a,
+    {
+        self.with_storage()
+    }
+}

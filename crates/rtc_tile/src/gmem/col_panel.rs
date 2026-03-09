@@ -1,33 +1,40 @@
 use rtc_types::{
-    codegen::loops::TransformLooper,
-    ty::{Addrspace, DereferencableTy, M, R, SizedTy, U32, ValTy},
+    codegen::{loops::TransformLooper, typed_func::FnCodegen},
+    ty::{DereferencableTy, SizedTy, U32},
     val::Val,
 };
 
-use crate::{FixedWidthWindow, W, gmem::Matrix, group::Group};
+use crate::{DW, W, Window, gmem::Matrix, group::Group};
 
 pub struct ColPanel<'a, ColWindow, Ptr> {
-    #[expect(unused, reason = "This will be used later")]
-    col_window: ColWindow,
+    pub(crate) col_window: ColWindow,
     pub ptr: Val<'a, Ptr>,
-    #[expect(unused, reason = "This will be used later")]
-    num_rows: Val<'a, U32>,
-    #[expect(unused, reason = "This will be used later")]
-    stride_per_row: Val<'a, U32>,
+    pub num_rows: Val<'a, U32>,
+    pub stride_per_row: Val<'a, U32>,
+}
+
+impl<'a, ColWindow: Window + 'a, Ptr> ColPanel<'a, ColWindow, Ptr> {
+    pub fn row_size(&self) -> Val<'a, U32> {
+        self.num_rows
+    }
+    pub fn col_size(&self) -> Val<'a, U32> {
+        self.col_window.size(self.ptr.cx())
+    }
 }
 
 pub struct ColPanelIterLooper<'a, ColWindow, Ptr> {
     col_window: ColWindow,
     ptr: Val<'a, Ptr>,
-    curr_col: Val<'a, U32>,
+    init_col: Val<'a, U32>,
     cols_per_iter: Val<'a, U32>,
     num_rows: Val<'a, U32>,
-    num_cols: Val<'a, U32>,
+    stride_per_row: Val<'a, U32>,
+    last_col: Val<'a, U32>,
 }
 
 impl<'ctx, ColWindow, Ptr> TransformLooper for ColPanelIterLooper<'ctx, ColWindow, Ptr>
 where
-    ColWindow: FixedWidthWindow<ElemT = Ptr::Pointee>,
+    ColWindow: Window<ElemT = Ptr::Pointee>,
     Ptr: DereferencableTy<Pointee: SizedTy>,
 {
     type DecisionItemT = U32;
@@ -35,7 +42,7 @@ where
         = ColPanel<'a, ColWindow, Ptr>
     where
         Self: 'a;
-    fn cx<'a>(&self) -> &'a rtc_types::codegen::typed_func::FnCodegen
+    fn cx<'a>(&self) -> &'a FnCodegen
     where
         Self: 'a,
     {
@@ -46,7 +53,7 @@ where
     where
         Self: 'a,
     {
-        self.curr_col
+        self.init_col
     }
 
     fn decision_fn<'a>(
@@ -56,7 +63,7 @@ where
     where
         Self: 'a,
     {
-        curr_col.lt(self.num_cols)
+        curr_col.lt(self.last_col)
     }
 
     fn transform<'a>(&self, curr_col: Val<'a, Self::DecisionItemT>) -> Self::ItemT<'a>
@@ -69,7 +76,7 @@ where
             col_window: self.col_window,
             ptr: panel_init_ptr,
             num_rows: self.num_rows,
-            stride_per_row: self.num_cols,
+            stride_per_row: self.stride_per_row,
         }
     }
 
@@ -81,46 +88,46 @@ where
     }
 }
 
-impl<'a, 'b, T, Space: Addrspace> Matrix<'a, R<&'b T, Space>> {
-    pub fn collective_col_panel_iter<const N: u32>(
-        &mut self,
+impl<'a, 'b, Ptr, T> Matrix<'a, Ptr>
+where
+    Ptr: DereferencableTy<Pointee = T>,
+    T: SizedTy + 'b,
+{
+    pub fn collective_aligned_col_panel_iter<const N: u32>(
+        &'b mut self,
         group: impl Group + 'a,
-    ) -> ColPanelIterLooper<'a, W<T, N>, R<&'b T, Space>>
-    where
-        T: ValTy,
-    {
+    ) -> (
+        impl TransformLooper<ItemT<'b> = ColPanel<'b, W<T, N>, Ptr>>,
+        ColPanel<'a, DW<'a, Ptr::Pointee>, Ptr>,
+    ) {
         let (index, size) = group.index_size();
         let cols_per_iter = size * N;
-        let curr_col = index * N;
-        ColPanelIterLooper {
+        let epilogue_size = self.ncols % cols_per_iter;
+        let bulk_cols = self.ncols - epilogue_size;
+        let init_col = index * N;
+        let launder_ptr = unsafe { Ptr::on_underlying_raw(&self.ptr, |ptr| ptr) };
+        let bulk_iter = ColPanelIterLooper {
             col_window: W::new(),
-            ptr: self.ptr,
-            curr_col,
+            ptr: launder_ptr,
+            init_col,
             cols_per_iter,
             num_rows: self.nrows,
-            num_cols: self.ncols,
-        }
-    }
-}
+            last_col: bulk_cols,
+            stride_per_row: self.ncols,
+        };
 
-impl<'a, 'b, T, Space: Addrspace> Matrix<'a, M<&'b mut T, Space>> {
-    pub fn collective_col_panel_iter<'c, const N: u32>(
-        &'c mut self,
-        group: impl Group + 'a,
-    ) -> ColPanelIterLooper<'a, W<T, N>, M<&'c mut T, Space>>
-    where
-        T: ValTy,
-    {
-        let (index, size) = group.index_size();
-        let cols_per_iter = size * N;
-        let curr_col = index * N;
-        ColPanelIterLooper {
-            col_window: W::new(),
-            ptr: self.ptr.reborrow_mut(),
-            curr_col,
-            cols_per_iter,
+        let rest_ptr =
+            unsafe { Ptr::on_underlying_raw(&self.ptr, |ptr| ptr.add(bulk_cols + init_col)) };
+        let epilogue_width = init_col
+            .lt(epilogue_size)
+            .then(|| (epilogue_size - init_col).min(index.const_like(N)))
+            .or(index.const_like(0));
+        let rest = ColPanel {
+            col_window: DW::new(epilogue_width),
+            ptr: rest_ptr,
             num_rows: self.nrows,
-            num_cols: self.ncols,
-        }
+            stride_per_row: self.ncols,
+        };
+        (bulk_iter, rest)
     }
 }

@@ -150,6 +150,9 @@ impl<'a> IntrinsicCodegen<'a, CUDA> {
 }
 
 impl IntrinsicsLibrary for CUDA {
+    unsafe fn assume(&self, cond: Val<'_, Bool>) {
+        self.call_assume(cond.ll_typed(), cond.cx());
+    }
     fn assert(&self, cond: Val<'_, Bool>, message: &str, file: &str, line: u32, function: &str) {
         let raw_val = cond.ll_typed();
         let not_cond = !cond;
