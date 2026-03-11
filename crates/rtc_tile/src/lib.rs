@@ -4,7 +4,10 @@ pub mod group;
 mod lane_to_coord;
 mod ldsm;
 pub mod mma;
+mod pair;
 use std::marker::PhantomData;
+
+pub use pair::TilePair;
 
 use rtc_types::{
     codegen::typed_func::FnCodegen,
@@ -14,7 +17,9 @@ use rtc_types::{
         values::{AnyValueEnum, ArrayValue},
     },
     intrinsics::cuda::ldsm::{call_ldsm_x1, call_ldsm_x4},
-    ty::{AlignedTy, AnyTy, BF16, M, SizedTy, Ty, U32, U128, V, ValTy, cuda::Shared},
+    ty::{
+        AlignedTy, AnyTy, BF16, M, SizedTy, StructReflectTy, Ty, U32, U128, V, ValTy, cuda::Shared,
+    },
     val::Val,
 };
 
@@ -111,6 +116,9 @@ impl ConstSizeTileTy for BF16_8x8 {
 impl WarpFragTileTy for BF16_8x8 {
     type FragT = V<BF16, { (Self::ROWS * Self::COLS / 32) as usize }>;
 }
+impl StructReflectTy for Tile<BF16_16x16> {
+    type RealStruct = [u16; 16 * 16];
+}
 
 pub trait WarpSmemLoadTileTy: WarpFragTileTy + Sized {
     fn collective_load<'a, 'b>(
@@ -187,4 +195,11 @@ impl<T: ConstSizeTileTy> AlignedTy for Tile<T> {
 
 impl<T: ConstSizeTileTy> SizedTy for Tile<T> {
     const SIZE: u32 = T::ROWS * T::COLS * T::ElemT::SIZE;
+}
+
+impl<T> StructReflectTy for Tile<T>
+where
+    T: StructReflectTy + ConstSizeTileTy,
+{
+    type RealStruct = [T::ElemT; 0];
 }

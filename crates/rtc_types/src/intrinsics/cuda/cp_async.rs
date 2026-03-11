@@ -88,6 +88,16 @@ pub struct CpAsyncPipeline<'a, 'b, Resource> {
     resource: Val<'a, M<&'b mut Resource, Shared>>,
 }
 
+impl<'a, 'b, Resource> CpAsyncPipeline<'a, 'b, Resource> {
+    pub fn new(depth: u32, smem_resource: Val<'a, M<&'b mut Resource, Shared>>) -> Self {
+        Self {
+            depth,
+            res_index: smem_resource.cx().constant_from(0u32).with_storage(),
+            resource: smem_resource,
+        }
+    }
+}
+
 impl<'a, 'b, Resource, ElemT> CpAsyncPipeline<'a, 'b, Resource>
 where
     Resource: ContiguousUniformTy<ElemT = ElemT>,
@@ -101,32 +111,29 @@ where
     {
         Resource::runtime_element_mut(self.resource.reborrow_mut(), index)
     }
-    pub fn new(depth: u32, smem_resource: Val<'a, M<&'b mut Resource, Shared>>) -> Self {
-        Self {
-            depth,
-            res_index: smem_resource.cx().constant_from(0u32).with_storage(),
-            resource: smem_resource,
-        }
-    }
+
     pub fn prime_with<'looper, 'loop_borrow, 'short_borrow, L, F>(
-        &mut self,
+        mut self,
         looper: &'looper mut L,
         mut f: F,
-    ) where
+    ) -> PrimedCpAsyncPipeline<'a, 'b, Resource>
+    where
         F: FnMut(CpAsyncToken, L::ItemT<'looper>, Val<'a, M<&mut ElemT, Shared>>),
         L: Looper,
         ElemT: 'short_borrow,
     {
         let cp_async_commit_group = "llvm.nvvm.cp.async.commit.group";
+        let cx = self.res_index.cx();
         looper.on_first_n(self.depth as usize, |item| {
-            let index: u32 = 0.try_into().expect("usize -> u32 overflow");
-            let cx = self.res_index.cx();
-            let index = cx.constant_from(index);
-            let res = self.resources_at_mut(index);
+            let cp_index = (self.res_index.as_mut().load() + 1) % self.depth;
+            self.res_index.as_mut().store(cp_index);
+            let res = self.resources_at_mut(cp_index);
             f(CpAsyncToken(()), item, res);
             let cp_async_commit_group = cx.get_intrinsic::<Void, ()>(cp_async_commit_group, true);
             cx.call_void_fn(cp_async_commit_group, ());
         });
+        self.res_index.as_mut().store(cx.constant_from(0u32));
+        PrimedCpAsyncPipeline { inner: self }
     }
 }
 
@@ -138,5 +145,7 @@ impl<'a, 'b, Resource, ElemT> PrimedCpAsyncPipeline<'a, 'b, Resource>
 where
     Resource: ContiguousUniformTy<ElemT = ElemT>,
 {
-    fn async_for_each() {}
+    pub fn at_steady_state<L>(&mut self, looper: L) {
+        todo!();
+    }
 }

@@ -127,7 +127,7 @@ macro_rules! struct_reflect {
                 ),*
             }
 
-            impl$(<$($generics: $crate::ty::ValTy),*>)? $name$(<$($generics),*>)? {
+            impl$(<$($generics: $crate::ty::ValTy $(+ $bounds)?),*>)? $name$(<$($generics),*>)? {
                 pub fn from_fields<'a>($($field_name: $crate::val::Val<'a, $field_type>),*) -> $crate::val::Val<'a, Self> {
                     let num_iters = [$((1,&$field_name).0),*].into_iter().sum();
                     let mut iter = 0..num_iters;
@@ -145,7 +145,7 @@ macro_rules! struct_reflect {
                 }
             }
 
-            impl<'a, $($($generics: $crate::ty::ValTy),*)?> Accessor<'a, $($($generics),*)?> {
+            impl<'a, $($($generics: $crate::ty::ValTy $(+ $bounds)?),*)?> Accessor<'a, $($($generics),*)?> {
                 pub(super) fn new(val: $crate::val::Val<'a, $name$(<$($generics),*>)?>) -> Self {
                     let raw_ty = $crate::val::__structreflect::_lltyped(&val).get_type();
                     let num_fields = raw_ty.count_fields();
@@ -168,7 +168,7 @@ macro_rules! struct_reflect {
                     }
                 }
             }
-            impl<'a, 'b, Space: $crate::ty::Addrspace $($(,$generics: $crate::ty::StructReflectTy)*)?> AccessorRef<'a, 'b, Space $($(, $generics)*)?>
+            impl<'a, 'b, Space: $crate::ty::Addrspace $($(,$generics: $crate::ty::StructReflectTy $(+ $bounds)?)*)?> AccessorRef<'a, 'b, Space $($(, $generics)*)?>
             {
                 pub(super) fn new(val: $crate::val::Val<'a, $crate::ty::R<&'b $name$(<$($generics),*>)?, Space>>) -> Self
                 {
@@ -194,7 +194,7 @@ macro_rules! struct_reflect {
                     }
                 }
             }
-            impl<'a, 'b, Space: $crate::ty::Addrspace $($(,$generics: $crate::ty::StructReflectTy)*)?> AccessorMut<'a, 'b, Space $($(, $generics)*)?>
+            impl<'a, 'b, Space: $crate::ty::Addrspace $($(,$generics: $crate::ty::StructReflectTy $(+ $bounds)?)*)?> AccessorMut<'a, 'b, Space $($(, $generics)*)?>
             {
                 pub(super) fn new(val: $crate::val::Val<'a, $crate::ty::M<&'b mut $name$(<$($generics),*>)?, Space>>) -> Self
                 {
@@ -221,7 +221,7 @@ macro_rules! struct_reflect {
                 }
             }
         }
-        struct_reflect!(impl_traits: $name$(<$($generics),*>)? => ($namespace, Realized, Accessor, AccessorRef, AccessorMut) | $($field_type),*);
+        struct_reflect!(impl_traits: $name$(<$($generics $(: $bounds)?),*>)? => ($namespace, Realized, Accessor, AccessorRef, AccessorMut) | $($field_type),*);
     };
 }
 

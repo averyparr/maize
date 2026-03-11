@@ -2,7 +2,7 @@ use core::ops::Range;
 
 use crate::{
     codegen::FnCodegen,
-    struct_reflect,
+    kernel_assert, struct_reflect,
     ty::{Bool, StructReflectTy, U32},
     val::Val,
 };
@@ -97,6 +97,12 @@ impl<A: Copy, B: Copy> Copy for ZippedPair<A, B> {}
 
 pub struct ZippedLooper<A, B>(A, B);
 
+impl<A, B> ZippedLooper<A, B> {
+    pub fn unzip(self) -> (A, B) {
+        (self.0, self.1)
+    }
+}
+
 impl<'val, A: TransformLooper, B: TransformLooper> TransformLooper for ZippedLooper<A, B>
 where
     A::DecisionItemT: StructReflectTy,
@@ -164,17 +170,18 @@ where
 }
 
 pub trait Looper: TransformLooper {
-    fn on_first<'a, F>(&'a mut self, f: F)
+    fn on_first<'a, 'b, F, U>(&'a mut self, f: F) -> U
     where
-        F: FnOnce(Self::ItemT<'a>),
+        F: FnOnce(Self::ItemT<'b>) -> U,
+        'a: 'b,
     {
         let decision_val = self.init_decision();
         let should_do = self.decision_fn(decision_val);
-        should_do.branch(|| {
-            let transformed = self.transform(decision_val);
-            f(transformed)
-        });
+        kernel_assert!(should_do); // or else we cannot actually return!
+        let transformed = self.transform(decision_val);
+        let ret = f(transformed);
         self.step_n(1);
+        ret
     }
     fn on_first_n<'a, F>(&'a mut self, n: usize, mut f: F)
     where
@@ -184,7 +191,7 @@ pub trait Looper: TransformLooper {
         let cx = decision_val.cx();
         let final_bb = cx.ctx().append_basic_block(cx.func(), "early_skip");
 
-        for _ in 0..n {
+        for i in 0..n {
             let then_block = cx.ctx().append_basic_block(cx.func(), "first_n_block");
             let comparison = self.decision_fn(decision_val).ll_typed();
             let _ins = unsafe {
@@ -198,6 +205,8 @@ pub trait Looper: TransformLooper {
 
         let _ins = unsafe { cx.with_builder(|b| b.build_unconditional_branch(final_bb)) }
             .expect("Unconditional branch should succeed");
+
+        cx.set_bb(final_bb);
         self.step_n(n);
     }
     fn for_every_value<'a, F>(self, mut f: F)

@@ -41,7 +41,7 @@ where
 
     pub fn collective_cp_async<'b, SmemTile: WarpSmemLoadTileTy<ElemT = T>, G: ConstSizeGroup>(
         &self,
-        _: CpAsyncToken,
+        _: &CpAsyncToken,
         tile: Val<'a, M<&'b mut Tile<SmemTile>, Shared>>,
         group: G,
         cp_size: u8,
@@ -391,12 +391,26 @@ where
     Ptr: DereferencableTy<Pointee: SizedTy>,
     RowWindow: Window<ElemT = Ptr::Pointee>,
 {
+    pub fn into_collective_gmem_tiles<const N: u32>(
+        self,
+        group: impl Group + 'a,
+    ) -> ColTileLooper<'a, RowWindow, W<Ptr::Pointee, N>, Ptr> {
+        let (index, size) = group.index_size();
+        let cols_per_iter = size * N;
+        let curr_col = index * N;
+        ColTileLooper {
+            row_window: self.row_window,
+            col_window: W::new(),
+            ptr: self.ptr,
+            init_col: curr_col,
+            cols_per_iter,
+            num_cols: self.num_cols,
+        }
+    }
     pub fn collective_gmem_tiles<const N: u32>(
         &'b mut self,
         group: impl Group + 'a,
-    ) -> impl TransformLooper<
-        ItemT<'b> = GmemTile<'b, RowWindow, W<Ptr::Pointee, N>, Ptr::Parametrized<'b>>,
-    > {
+    ) -> ColTileLooper<'a, RowWindow, W<Ptr::Pointee, N>, Ptr::Parametrized<'b>> {
         let (index, size) = group.index_size();
         let cols_per_iter = size * N;
         let curr_col = index * N;
@@ -412,10 +426,15 @@ where
 
     pub fn gmem_tiles<const N: u32>(
         &'b mut self,
-    ) -> impl TransformLooper<
-        ItemT<'b> = GmemTile<'b, RowWindow, W<Ptr::Pointee, N>, Ptr::Parametrized<'b>>,
-    > {
+    ) -> ColTileLooper<'a, RowWindow, W<Ptr::Pointee, N>, Ptr::Parametrized<'b>> {
         self.collective_gmem_tiles(NullGroup(self.ptr.cx()))
+    }
+
+    pub fn into_gmem_tiles<const N: u32>(
+        self,
+    ) -> ColTileLooper<'a, RowWindow, W<Ptr::Pointee, N>, Ptr> {
+        let cx = self.ptr.cx();
+        self.into_collective_gmem_tiles::<N>(NullGroup(cx))
     }
 }
 
@@ -427,9 +446,7 @@ where
     pub fn collective_gmem_tiles<const N: u32>(
         &'b mut self,
         group: impl Group + 'a,
-    ) -> impl TransformLooper<
-        ItemT<'b> = GmemTile<'b, W<Ptr::Pointee, N>, ColWindow, Ptr::Parametrized<'b>>,
-    > {
+    ) -> RowTileLooper<'a, W<Ptr::Pointee, N>, ColWindow, Ptr::Parametrized<'b>> {
         let (index, size) = group.index_size();
         let rows_per_iter = size * N;
         let init_row = index * N;
@@ -446,9 +463,7 @@ where
 
     pub fn gmem_tiles<const N: u32>(
         &'b mut self,
-    ) -> impl TransformLooper<
-        ItemT<'b> = GmemTile<'b, W<Ptr::Pointee, N>, ColWindow, Ptr::Parametrized<'b>>,
-    > {
+    ) -> RowTileLooper<'a, W<Ptr::Pointee, N>, ColWindow, Ptr::Parametrized<'b>> {
         self.collective_gmem_tiles(NullGroup(self.ptr.cx()))
     }
 }

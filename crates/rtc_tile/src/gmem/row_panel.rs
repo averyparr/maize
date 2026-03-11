@@ -1,6 +1,6 @@
 use rtc_types::{
     codegen::{loops::TransformLooper, typed_func::FnCodegen},
-    ty::{Bool, DereferencableTy, SizedTy, U32},
+    ty::{Addrspace, Bool, DereferencableTy, M, R, SizedTy, U32, ValTy},
     val::Val,
 };
 
@@ -96,28 +96,11 @@ where
     Ptr: DereferencableTy<Pointee = T>,
     T: SizedTy + 'b,
 {
-    pub fn collective_row_panel_iter<const N: u32>(
-        &'b mut self,
-        group: impl Group + 'a,
-    ) -> impl TransformLooper<ItemT<'b> = RowPanel<'b, W<Ptr::Pointee, N>, Ptr::Parametrized<'b>>>
-    {
-        let (index, size) = group.index_size();
-        let rows_per_iter = size * N;
-        let init_row = index * N;
-        RowPanelIterLooper {
-            row_window: W::new(),
-            ptr: Ptr::parametrize_by_ref(&mut self.ptr),
-            init_row,
-            rows_per_iter,
-            num_cols: self.ncols,
-            last_row: self.nrows,
-        }
-    }
-    pub fn collective_aligned_row_panel_iter<const N: u32>(
-        &'b mut self,
+    fn inner_collective_aligned_row_panel_iter<const N: u32>(
+        self,
         group: impl Group + 'a,
     ) -> (
-        impl TransformLooper<ItemT<'b> = RowPanel<'b, W<T, N>, Ptr>>,
+        RowPanelIterLooper<'a, W<T, N>, Ptr>,
         RowPanel<'a, DW<'a, T>, Ptr>,
     )
     where
@@ -129,9 +112,10 @@ where
         let bulk_rows = self.nrows - epilogue_size;
         let epilogue_offset = bulk_rows * self.ncols;
         let init_row = index * N;
+        let offset_ptr = unsafe { Ptr::on_underlying_raw(&self.ptr, |raw| raw) };
         let bulk_iter = RowPanelIterLooper {
             row_window: W::new(),
-            ptr: unsafe { Ptr::on_underlying_raw(&self.ptr, |raw| raw) },
+            ptr: offset_ptr,
             init_row,
             rows_per_iter,
             num_cols: self.ncols,
@@ -154,5 +138,49 @@ where
         };
 
         (bulk_iter, rest)
+    }
+}
+
+impl<'a, 'c, 'b, T> Matrix<'a, R<&'c T>>
+where
+    'c: 'b,
+    T: SizedTy,
+{
+    pub fn collective_aligned_row_panel_iter<const N: u32>(
+        &'b self,
+        group: impl Group + 'a,
+    ) -> (
+        RowPanelIterLooper<'a, W<T, N>, R<&'b T>>,
+        RowPanel<'a, DW<'a, T>, R<&'b T>>,
+    ) {
+        self.reborrow()
+            .inner_collective_aligned_row_panel_iter(group)
+    }
+}
+
+impl<'a, 'c, 'b, T, Space: Addrspace> Matrix<'a, M<&'c mut T, Space>>
+where
+    'c: 'b,
+    T: SizedTy,
+{
+    pub fn collective_aligned_row_panel_iter<const N: u32>(
+        &'b mut self,
+        group: impl Group + 'a,
+    ) -> (
+        RowPanelIterLooper<'a, W<T, N>, R<&'b T, Space>>,
+        RowPanel<'a, DW<'a, T>, R<&'b T, Space>>,
+    ) {
+        self.reborrow()
+            .inner_collective_aligned_row_panel_iter(group)
+    }
+    pub fn collective_aligned_row_panel_iter_mut<const N: u32>(
+        &'b mut self,
+        group: impl Group + 'a,
+    ) -> (
+        RowPanelIterLooper<'a, W<T, N>, M<&'b mut T, Space>>,
+        RowPanel<'a, DW<'a, T>, M<&'b mut T, Space>>,
+    ) {
+        self.reborrow_mut()
+            .inner_collective_aligned_row_panel_iter(group)
     }
 }
