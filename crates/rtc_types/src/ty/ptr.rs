@@ -14,7 +14,7 @@ use crate::{
 #[derive(Clone, Copy)]
 pub struct DefaultAddressSpace;
 
-pub trait Addrspace: Copy {
+pub trait Addrspace: Copy + 'static {
     const AS_U16: u16;
 }
 
@@ -37,7 +37,11 @@ pub trait DereferencableTy:
         + DereferencableTy<Pointee = Self::Pointee, Parametrized<'short> = Self::Parametrized<'short>>
     where
         Self: 'short;
-    fn parametrize<'a, 'b>(val: &'b mut Val<'a, Self>) -> Val<'a, Self::Parametrized<'b>>;
+
+    fn parametrize<'a, 'b>(val: Val<'a, Self>) -> Val<'a, Self::Parametrized<'b>>
+    where
+        Self: 'b;
+    fn parametrize_by_ref<'a, 'b>(val: &'b mut Val<'a, Self>) -> Val<'a, Self::Parametrized<'b>>;
     fn shorten_by_ref<'a, 'b, 'c>(
         val: &'b mut Val<'a, Self::Parametrized<'c>>,
     ) -> Val<'a, Self::Parametrized<'b>>
@@ -48,9 +52,35 @@ pub trait DereferencableTy:
     where
         'c: 'b,
         Self: 'c;
+    fn to_raw<'a>(val: &Val<'a, Self>) -> Val<'a, P<*const Self::Pointee, Self::Space>>;
 }
 
 pub trait PtrTy: DereferencableTy {}
+pub trait RefTy: DereferencableTy {
+    fn as_ref<'a, 'b>(val: &'b Val<'a, Self>) -> Val<'b, R<&'b Self::Pointee, Self::Space>>;
+}
+pub trait MutTy: DereferencableTy {
+    fn as_mut<'a, 'b>(val: &'b mut Val<'a, Self>)
+    -> Val<'b, M<&'b mut Self::Pointee, Self::Space>>;
+}
+
+impl<'borrow, T: ValTy, Space: Addrspace> RefTy for R<&'borrow T, Space> {
+    fn as_ref<'a, 'b>(val: &'b Val<'a, Self>) -> Val<'b, R<&'b Self::Pointee, Self::Space>> {
+        val.reborrow()
+    }
+}
+impl<'borrow, T: ValTy, Space: Addrspace> RefTy for M<&'borrow mut T, Space> {
+    fn as_ref<'a, 'b>(val: &'b Val<'a, Self>) -> Val<'b, R<&'b Self::Pointee, Self::Space>> {
+        val.reborrow()
+    }
+}
+impl<'borrow, T: ValTy, Space: Addrspace> MutTy for M<&'borrow mut T, Space> {
+    fn as_mut<'a, 'b>(
+        val: &'b mut Val<'a, Self>,
+    ) -> Val<'b, M<&'b mut Self::Pointee, Self::Space>> {
+        val.reborrow_mut()
+    }
+}
 
 impl<T: AnyTy, Space: Addrspace> DereferencableTy for P<*const T, Space> {
     type Pointee = T;
@@ -67,7 +97,13 @@ impl<T: AnyTy, Space: Addrspace> DereferencableTy for P<*const T, Space> {
         = Self
     where
         Self: 'short;
-    fn parametrize<'a, 'b>(val: &'b mut Val<'a, Self>) -> Val<'a, Self::Parametrized<'b>> {
+    fn parametrize<'a, 'b>(val: Val<'a, Self>) -> Val<'a, Self::Parametrized<'b>>
+    where
+        Self: 'b,
+    {
+        val
+    }
+    fn parametrize_by_ref<'a, 'b>(val: &'b mut Val<'a, Self>) -> Val<'a, Self::Parametrized<'b>> {
         *val
     }
     fn shorten_by_ref<'a, 'b, 'c>(
@@ -85,6 +121,9 @@ impl<T: AnyTy, Space: Addrspace> DereferencableTy for P<*const T, Space> {
         Self: 'c,
     {
         val
+    }
+    fn to_raw<'a>(val: &Val<'a, Self>) -> Val<'a, P<*const Self::Pointee, Self::Space>> {
+        *val
     }
 }
 impl<T: AnyTy, Space: Addrspace> DereferencableTy for P<*mut T, Space> {
@@ -102,7 +141,13 @@ impl<T: AnyTy, Space: Addrspace> DereferencableTy for P<*mut T, Space> {
         = Self
     where
         Self: 'short;
-    fn parametrize<'a, 'b>(val: &'b mut Val<'a, Self>) -> Val<'a, Self::Parametrized<'b>> {
+    fn parametrize<'a, 'b>(val: Val<'a, Self>) -> Val<'a, Self::Parametrized<'b>>
+    where
+        Self: 'b,
+    {
+        val
+    }
+    fn parametrize_by_ref<'a, 'b>(val: &'b mut Val<'a, Self>) -> Val<'a, Self::Parametrized<'b>> {
         *val
     }
     fn shorten_by_ref<'a, 'b, 'c>(
@@ -120,6 +165,9 @@ impl<T: AnyTy, Space: Addrspace> DereferencableTy for P<*mut T, Space> {
         Self: 'c,
     {
         val
+    }
+    fn to_raw<'a>(val: &Val<'a, Self>) -> Val<'a, P<*const Self::Pointee, Self::Space>> {
+        val.as_const()
     }
 }
 impl<'borrow, T: ValTy, Space: Addrspace> DereferencableTy for R<&'borrow T, Space> {
@@ -137,8 +185,14 @@ impl<'borrow, T: ValTy, Space: Addrspace> DereferencableTy for R<&'borrow T, Spa
         = R<&'short T, Space>
     where
         Self: 'short;
-    fn parametrize<'a, 'b>(val: &'b mut Val<'a, Self>) -> Val<'a, Self::Parametrized<'b>> {
-        val.reborrow()
+    fn parametrize<'a, 'b>(val: Val<'a, Self>) -> Val<'a, Self::Parametrized<'b>>
+    where
+        Self: 'b,
+    {
+        val
+    }
+    fn parametrize_by_ref<'a, 'b>(val: &'b mut Val<'a, Self>) -> Val<'a, Self::Parametrized<'b>> {
+        *val
     }
     fn shorten_by_ref<'a, 'b, 'c>(
         val: &'b mut Val<'a, Self::Parametrized<'c>>,
@@ -156,6 +210,9 @@ impl<'borrow, T: ValTy, Space: Addrspace> DereferencableTy for R<&'borrow T, Spa
     {
         val
     }
+    fn to_raw<'a>(val: &Val<'a, Self>) -> Val<'a, P<*const Self::Pointee, Self::Space>> {
+        val.as_ptr()
+    }
 }
 impl<'borrow, T: ValTy, Space: Addrspace> DereferencableTy for M<&'borrow mut T, Space> {
     type Pointee = T;
@@ -172,7 +229,13 @@ impl<'borrow, T: ValTy, Space: Addrspace> DereferencableTy for M<&'borrow mut T,
         = M<&'short mut T, Space>
     where
         Self: 'short;
-    fn parametrize<'a, 'b>(val: &'b mut Val<'a, Self>) -> Val<'a, Self::Parametrized<'b>> {
+    fn parametrize<'a, 'b>(val: Val<'a, Self>) -> Val<'a, Self::Parametrized<'b>>
+    where
+        Self: 'b,
+    {
+        val
+    }
+    fn parametrize_by_ref<'a, 'b>(val: &'b mut Val<'a, Self>) -> Val<'a, Self::Parametrized<'b>> {
         val.reborrow_mut()
     }
     fn shorten_by_ref<'a, 'b, 'c>(
@@ -190,6 +253,9 @@ impl<'borrow, T: ValTy, Space: Addrspace> DereferencableTy for M<&'borrow mut T,
         Self: 'c,
     {
         val
+    }
+    fn to_raw<'a>(val: &Val<'a, Self>) -> Val<'a, P<*const Self::Pointee, Self::Space>> {
+        val.as_ptr()
     }
 }
 

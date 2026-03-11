@@ -12,7 +12,6 @@ pub struct BlockX<'a>(pub IntrinsicCodegen<'a, CUDA>);
 pub struct BlockY<'a>(pub IntrinsicCodegen<'a, CUDA>);
 #[derive(Clone, Copy)]
 pub struct BlockZ<'a>(pub IntrinsicCodegen<'a, CUDA>);
-
 impl<'ctx> Group for BlockX<'ctx> {
     type Scope = CTA;
     fn index_size<'a>(&self) -> (Val<'a, U32>, Val<'a, U32>)

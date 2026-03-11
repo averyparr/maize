@@ -1,7 +1,7 @@
 use inkwell::values::BasicValueEnum;
 
 use crate::{
-    ty::{AnyTy, BF16, F16, F32, F64, P, V, ValTy, vec::VectorizableTy},
+    ty::{AnyTy, ValTy, raw::*, vec::VectorizableTy},
     val::Val,
 };
 
@@ -10,39 +10,36 @@ pub trait PrintableTy: ValTy {
     fn to_flat_va_args(val: Val<'_, Self>) -> impl Iterator<Item = BasicValueEnum<'static>>;
 }
 
-impl PrintableTy for BF16 {
-    fn format_str() -> impl AsRef<str> {
-        "bf16_%#.4g"
-    }
-    fn to_flat_va_args(val: Val<'_, Self>) -> impl Iterator<Item = BasicValueEnum<'static>> {
-        [val.raw()].into_iter()
-    }
+macro_rules! printable_primitive {
+    ($($tipe: ty => $fmt_str: literal),*$(,)?) => {
+        $(
+            impl PrintableTy for $tipe {
+                fn format_str() -> impl AsRef<str> {
+                    $fmt_str
+                }
+                fn to_flat_va_args(val: Val<'_, Self>) -> impl Iterator<Item = BasicValueEnum<'static>> {
+                    [val.raw()].into_iter()
+                }
+            }
+        )*
+    };
 }
-impl PrintableTy for F16 {
-    fn format_str() -> impl AsRef<str> {
-        "f16_%#.5g"
-    }
-    fn to_flat_va_args(val: Val<'_, Self>) -> impl Iterator<Item = BasicValueEnum<'static>> {
-        [val.raw()].into_iter()
-    }
-}
-impl PrintableTy for F32 {
-    fn format_str() -> impl AsRef<str> {
-        "%#.9g"
-    }
 
-    fn to_flat_va_args(val: Val<'_, Self>) -> impl Iterator<Item = BasicValueEnum<'static>> {
-        [val.raw()].into_iter()
-    }
-}
-impl PrintableTy for F64 {
-    fn format_str() -> impl AsRef<str> {
-        "%#.17g"
-    }
-    fn to_flat_va_args(val: Val<'_, Self>) -> impl Iterator<Item = BasicValueEnum<'static>> {
-        [val.raw()].into_iter()
-    }
-}
+printable_primitive!(
+    BF16 => "bf16_%#.4g",
+    F16 => "f16_%#.5g",
+    F32 => "%#.9g",
+    F64 =>"%#.17g",
+    I8 => "%hhd",
+    I16 => "%hd",
+    I32 => "%d",
+    I64 => "%lld",
+    U8 => "%hhu",
+    U16 => "%hu",
+    U32 => "%u",
+    U64 => "%llu",
+);
+
 impl<T: AnyTy> PrintableTy for P<*const T> {
     fn format_str() -> impl AsRef<str> {
         "%p"

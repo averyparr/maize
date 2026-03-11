@@ -4,15 +4,19 @@ use rtc_types::{
     val::Val,
 };
 
-use crate::{Tile, WarpSmemLoadTileTy, WarpTileTy};
+use crate::{ConstSizeTileTy, Tile, TileTy, WarpFragTileTy, WarpSmemLoadTileTy};
 
 pub struct MmaBf16_16x16;
 
-impl WarpTileTy for MmaBf16_16x16 {
+impl TileTy for MmaBf16_16x16 {
+    type ElemT = BF16;
+}
+impl ConstSizeTileTy for MmaBf16_16x16 {
     const ROWS: u32 = 16;
     const COLS: u32 = 16;
-    type ElemT = BF16;
-    type FragT = V<Self::ElemT, 8>;
+}
+impl WarpFragTileTy for MmaBf16_16x16 {
+    type FragT = V<BF16, { (Self::ROWS * Self::COLS / 32) as usize }>;
 }
 
 impl WarpSmemLoadTileTy for MmaBf16_16x16 {

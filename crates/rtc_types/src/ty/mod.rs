@@ -71,9 +71,11 @@ where
 pub use args::IntoFuncArgs;
 pub use arithmetic::{BitMathTy, IntMathTy, MathTy, MathVariant};
 pub use bitcast::BitcastableTy;
-pub use contiguous::{ContiguousUniformTy, HowToExtractElements, UniformTy};
+pub use contiguous::{
+    ContiguousUniformTy, FixedSizeContiguousUniformTy, HowToExtractElements, UniformTy,
+};
 pub use func::FnRetTy;
-pub use ptr::{Addrspace, DefaultAddressSpace, DereferencableTy, PtrTy};
+pub use ptr::{Addrspace, DefaultAddressSpace, DereferencableTy, MutTy, PtrTy, RefTy};
 pub use raw::{Bool, M, P, R, V, Void, float::*, int::*};
 pub use sized::{AlignedTy, SizedTy};
 pub use struct_ty::{AccessibleStructTy, StructReflectTy};

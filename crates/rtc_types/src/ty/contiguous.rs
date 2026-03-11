@@ -1,7 +1,8 @@
 use inkwell::values::BasicValue;
 
 use crate::{
-    ty::{Addrspace, M, R, V, ValTy, vec::VectorizableTy},
+    kernel_assert,
+    ty::{Addrspace, M, R, U32, V, ValTy, vec::VectorizableTy},
     val::Val,
 };
 
@@ -18,7 +19,60 @@ pub unsafe trait UniformTy: ValTy {
     const EXTRACTION_METHOD: HowToExtractElements;
 }
 
-pub unsafe trait ContiguousUniformTy<const SIZE: usize>: UniformTy {
+pub unsafe trait ContiguousUniformTy: UniformTy {
+    fn size() -> u32;
+    fn element<'a>(val: Val<'a, Self>, index: usize) -> Val<'a, Self::ElemT>
+    where
+        Self: Sized,
+    {
+        let index = u32::try_from(index).expect("u32 overflowed usize");
+        let element = val.cx().extract_elem::<Self::ElemT, Self>(&val, index);
+        unsafe { Val::new(val.cx(), element.as_basic_value_enum()) }
+    }
+    fn element_ref<'a, 'b, Space: Addrspace>(
+        ptr: Val<'a, R<&'b Self, Space>>,
+        index: u32,
+    ) -> Val<'a, R<&'b Self::ElemT, Space>> {
+        assert!(index < Self::size());
+        let cx = ptr.cx();
+        let ptr = cx.get_elem_ptr::<Self::ElemT, _, _>(&ptr.as_ptr(), index);
+        unsafe { Val::new(cx, ptr.as_basic_value_enum()) }
+    }
+
+    fn element_mut<'a, 'b, Space: Addrspace>(
+        ptr: Val<'a, M<&'b mut Self, Space>>,
+        index: u32,
+    ) -> Val<'a, M<&'b mut Self::ElemT, Space>> {
+        assert!(index < Self::size());
+        let cx = ptr.cx();
+        let ptr = cx.get_elem_ptr::<Self::ElemT, _, _>(&ptr.as_ptr(), index);
+        unsafe { Val::new(cx, ptr.as_basic_value_enum()) }
+    }
+
+    fn runtime_element_ref<'a, 'b, Space: Addrspace>(
+        ptr: Val<'a, R<&'b Self, Space>>,
+        index: Val<'a, U32>,
+    ) -> Val<'a, R<&'b Self::ElemT, Space>> {
+        kernel_assert!(index.lt(index.const_like(Self::size())));
+        let cx = ptr.cx();
+        let ptr = cx.get_runtime_elem_ptr::<Self::ElemT, _, _>(&ptr.as_ptr(), index);
+        unsafe { Val::new(cx, ptr.as_basic_value_enum()) }
+    }
+
+    fn runtime_element_mut<'a, 'b, Space: Addrspace>(
+        ptr: Val<'a, M<&'b mut Self, Space>>,
+        index: Val<'a, U32>,
+    ) -> Val<'a, M<&'b mut Self::ElemT, Space>> {
+        kernel_assert!(index.lt(index.const_like(Self::size())));
+        let cx = ptr.cx();
+        let ptr = cx.get_runtime_elem_ptr::<Self::ElemT, _, _>(&ptr.as_ptr(), index);
+        unsafe { Val::new(cx, ptr.as_basic_value_enum()) }
+    }
+}
+
+pub unsafe trait FixedSizeContiguousUniformTy<const SIZE: usize>:
+    ContiguousUniformTy
+{
     const SIZE: usize = SIZE;
     fn elements(val: Val<'_, Self>) -> [Val<'_, Self::ElemT>; SIZE]
     where
@@ -76,34 +130,6 @@ pub unsafe trait ContiguousUniformTy<const SIZE: usize>: UniformTy {
         })
     }
 
-    fn element<'a>(val: Val<'a, Self>, index: usize) -> Val<'a, Self::ElemT>
-    where
-        Self: Sized,
-    {
-        let index = u32::try_from(index).expect("u32 overflowed usize");
-        let element = val.cx().extract_elem::<Self::ElemT, Self>(&val, index);
-        unsafe { Val::new(val.cx(), element.as_basic_value_enum()) }
-    }
-    fn element_ref<'a, 'b, Space: Addrspace>(
-        ptr: Val<'a, R<&'b Self, Space>>,
-        index: u32,
-    ) -> Val<'a, R<&'b Self::ElemT>> {
-        assert!((index as usize) < Self::SIZE);
-        let cx = ptr.cx();
-        let ptr = cx.get_elem_ptr::<Self::ElemT, _, _>(&ptr.as_ptr(), index);
-        unsafe { Val::new(cx, ptr.as_basic_value_enum()) }
-    }
-
-    fn element_mut<'a, 'b, Space: Addrspace>(
-        ptr: Val<'a, M<&'b mut Self, Space>>,
-        index: u32,
-    ) -> Val<'a, M<&'b mut Self::ElemT, Space>> {
-        assert!((index as usize) < Self::SIZE);
-        let cx = ptr.cx();
-        let ptr = cx.get_elem_ptr::<Self::ElemT, _, _>(&ptr.as_ptr(), index);
-        unsafe { Val::new(cx, ptr.as_basic_value_enum()) }
-    }
-
     fn splat<'a>(val: Val<'a, Self::ElemT>) -> Val<'a, Self>
     where
         Self::ElemT: Copy,
@@ -128,6 +154,22 @@ where
     const EXTRACTION_METHOD: HowToExtractElements = HowToExtractElements::Array;
 }
 
-unsafe impl<T, const N: usize> ContiguousUniformTy<N> for V<T, N> where T: VectorizableTy {}
+unsafe impl<T, const N: usize> ContiguousUniformTy for V<T, N>
+where
+    T: VectorizableTy,
+{
+    fn size() -> u32 {
+        N.try_into().expect("usize overflow")
+    }
+}
+unsafe impl<T, const N: usize> FixedSizeContiguousUniformTy<N> for V<T, N> where T: VectorizableTy {}
 
-unsafe impl<T, const N: usize> ContiguousUniformTy<N> for [T; N] where T: ValTy {}
+unsafe impl<T, const N: usize> ContiguousUniformTy for [T; N]
+where
+    T: ValTy,
+{
+    fn size() -> u32 {
+        N.try_into().expect("usize overflow")
+    }
+}
+unsafe impl<T, const N: usize> FixedSizeContiguousUniformTy<N> for [T; N] where T: ValTy {}

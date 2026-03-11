@@ -82,6 +82,32 @@ macro_rules! impl_into_func_args {
     };
 }
 
+impl IntoFuncArgs for () {
+    fn arg_aligns() -> impl AsRef<[u32]> {
+        []
+    }
+
+    fn produce_args<'ctx>(_: ContextRef<'ctx>) -> impl AsRef<[BasicTypeEnum<'ctx>]> {
+        []
+    }
+
+    fn produce_metadata_args<'ctx>(
+        _: ContextRef<'ctx>,
+    ) -> impl AsRef<[BasicMetadataTypeEnum<'ctx>]> {
+        []
+    }
+
+    type ArgValues<'ctx> = ();
+
+    fn try_extract_args<'a>(_: &'a FnCodegen) -> Option<Self::ArgValues<'a>> {
+        Some(())
+    }
+
+    fn args_to_raw(_: Self::ArgValues<'_>) -> impl AsRef<[BasicMetadataValueEnum<'static>]> {
+        []
+    }
+}
+
 impl_into_func_args!(
     A => 0;
 );

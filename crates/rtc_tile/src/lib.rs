@@ -34,7 +34,7 @@ impl<T, const N: u32> Copy for W<T, N> {}
 impl<T> Copy for DW<'_, T> {}
 
 pub trait Window: Copy {
-    type ElemT: ValTy;
+    type ElemT: SizedTy;
     fn size<'v>(&self, cx: &'v FnCodegen) -> Val<'v, U32>
     where
         Self: 'v;
@@ -44,7 +44,7 @@ pub trait FixedWidthWindow: Window {
     const WIDTH: u32;
 }
 
-impl<T: ValTy, const N: u32> Window for W<T, N> {
+impl<T: SizedTy, const N: u32> Window for W<T, N> {
     type ElemT = T;
     fn size<'v>(&self, cx: &'v FnCodegen) -> Val<'v, U32>
     where
@@ -53,7 +53,7 @@ impl<T: ValTy, const N: u32> Window for W<T, N> {
         cx.constant_from(N)
     }
 }
-impl<T: ValTy> Window for DW<'_, T> {
+impl<T: SizedTy> Window for DW<'_, T> {
     type ElemT = T;
     fn size<'v>(&self, _: &'v FnCodegen) -> Val<'v, U32>
     where
@@ -62,7 +62,7 @@ impl<T: ValTy> Window for DW<'_, T> {
         self.0
     }
 }
-impl<T: ValTy, const N: u32> FixedWidthWindow for W<T, N> {
+impl<T: SizedTy, const N: u32> FixedWidthWindow for W<T, N> {
     const WIDTH: u32 = N;
 }
 
@@ -78,29 +78,41 @@ impl<'a, T> DW<'a, T> {
     }
 }
 
-pub trait WarpTileTy {
+pub trait TileTy {
+    type ElemT: SizedTy;
+}
+pub trait ConstSizeTileTy: TileTy {
     const ROWS: u32;
     const COLS: u32;
-    type ElemT: SizedTy;
+}
+pub trait WarpFragTileTy: ConstSizeTileTy {
     type FragT: SizedTy;
 }
 
 pub struct BF16_16x16;
-impl WarpTileTy for BF16_16x16 {
-    const COLS: u32 = 16;
-    const ROWS: u32 = 16;
+impl TileTy for BF16_16x16 {
     type ElemT = BF16;
-    type FragT = V<BF16, { Self::COLS as usize / 2 }>;
+}
+impl ConstSizeTileTy for BF16_16x16 {
+    const ROWS: u32 = 16;
+    const COLS: u32 = 16;
+}
+impl WarpFragTileTy for BF16_16x16 {
+    type FragT = V<BF16, { (Self::ROWS * Self::COLS / 32) as usize }>;
 }
 pub struct BF16_8x8;
-impl WarpTileTy for BF16_8x8 {
-    const COLS: u32 = 8;
-    const ROWS: u32 = 8;
+impl TileTy for BF16_8x8 {
     type ElemT = BF16;
-    type FragT = V<BF16, 2>;
+}
+impl ConstSizeTileTy for BF16_8x8 {
+    const ROWS: u32 = 8;
+    const COLS: u32 = 8;
+}
+impl WarpFragTileTy for BF16_8x8 {
+    type FragT = V<BF16, { (Self::ROWS * Self::COLS / 32) as usize }>;
 }
 
-pub trait WarpSmemLoadTileTy: WarpTileTy + Sized {
+pub trait WarpSmemLoadTileTy: WarpFragTileTy + Sized {
     fn collective_load<'a, 'b>(
         ptr: &mut Val<'a, M<&'b mut Tile<Self>, Shared>>,
         lane: Val<'a, U32>,
@@ -143,14 +155,14 @@ impl WarpSmemLoadTileTy for BF16_8x8 {
 
 pub struct Tile<T>(PhantomData<T>);
 
-impl<T: WarpTileTy> AnyTy for Tile<T> {
+impl<T: ConstSizeTileTy> AnyTy for Tile<T> {
     type AnyType<'ctx> = ArrayType<'ctx>;
     fn any_ty<'ctx>(ctx: ContextRef<'ctx>) -> Self::AnyType<'ctx> {
         T::ElemT::ty(ctx).array_type(T::COLS * T::ROWS)
     }
 }
 
-impl<T: WarpTileTy> ValTy for Tile<T> {
+impl<T: ConstSizeTileTy> ValTy for Tile<T> {
     type Value<'ctx> = ArrayValue<'ctx>;
 
     fn undef<'ctx>(ctx: ContextRef<'ctx>) -> Self::Value<'ctx> {
@@ -169,10 +181,10 @@ impl<T: WarpTileTy> ValTy for Tile<T> {
     }
 }
 
-impl<T: WarpTileTy> AlignedTy for Tile<T> {
+impl<T: ConstSizeTileTy> AlignedTy for Tile<T> {
     const ALIGN: u32 = T::ElemT::ALIGN;
 }
 
-impl<T: WarpTileTy> SizedTy for Tile<T> {
+impl<T: ConstSizeTileTy> SizedTy for Tile<T> {
     const SIZE: u32 = T::ROWS * T::COLS * T::ElemT::SIZE;
 }

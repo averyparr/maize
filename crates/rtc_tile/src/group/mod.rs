@@ -1,6 +1,7 @@
 use rtc_types::{codegen::typed_func::FnCodegen, ty::U32, val::Val};
 
 pub mod by_block;
+pub mod warp;
 
 pub struct GPU;
 pub struct Cluster;
@@ -23,14 +24,24 @@ pub trait Group {
         Self: 'a;
 }
 
+pub trait ConstSizeGroup: Group {
+    fn const_size(&self) -> u32;
+}
+
 pub struct NullGroup<'a>(pub &'a FnCodegen);
 
-impl<'ctx> Group for NullGroup<'ctx> {
+impl Group for NullGroup<'_> {
     type Scope = Thread;
     fn index_size<'a>(&self) -> (Val<'a, U32>, Val<'a, U32>)
     where
         Self: 'a,
     {
         (self.0.constant_from(0u32), self.0.constant_from(1u32))
+    }
+}
+
+impl ConstSizeGroup for NullGroup<'_> {
+    fn const_size(&self) -> u32 {
+        1
     }
 }

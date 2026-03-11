@@ -11,7 +11,7 @@ use inkwell::{
     passes::PassBuilderOptions,
     support::LLVMString,
     targets::{FileType, InitializationConfig, Target, TargetTriple},
-    types::{BasicType, StructType},
+    types::{BasicType, BasicTypeEnum, StructType},
     values::{
         AggregateValue, AnyValue, BasicValue, BasicValueEnum, FunctionValue, InstructionValue,
         PointerValue, StructValue, VectorBaseValue,
@@ -412,6 +412,60 @@ impl FnCodegen {
         };
 
         unsafe { Val::new(agg.cx(), raw_val) }
+    }
+    pub fn get_runtime_elem_ptr<U, T, Space: Addrspace>(
+        &self,
+        ptr: &Val<'_, P<*const T, Space>>,
+        index: Val<'_, U32>,
+    ) -> PointerValue<'static>
+    where
+        T: UniformTy + ?Sized,
+        U: ValTy,
+    {
+        fn extract_as_vec_array(
+            cx: &FnCodegen,
+            pointee_ty: BasicTypeEnum<'static>,
+            ptr: PointerValue<'static>,
+            index: Val<'_, U32>,
+        ) -> PointerValue<'static> {
+            let zero = cx.constant_from(0u64).ll_typed();
+            let index = index.ll_typed();
+            unsafe {
+                cx.with_builder(|b| {
+                    b.build_in_bounds_gep(pointee_ty, ptr, &[zero, index], "svarr_gep")
+                })
+            }
+            .expect("GEP for struct/vec/scalable vec should have succeeded")
+        }
+        let proposed_elem_ty = U::ty(self.ctx()).as_basic_type_enum();
+        let raw_ptr = ptr.ll_typed();
+        let pointee_ty = T::ty(self.ctx()).as_basic_type_enum();
+        match T::EXTRACTION_METHOD {
+            HowToExtractElements::Vector => {
+                let elem_ty = pointee_ty.into_vector_type().get_element_type();
+                assert_eq!(elem_ty, proposed_elem_ty);
+            }
+            HowToExtractElements::ScalableVector => {
+                let elem_ty = pointee_ty.into_scalable_vector_type().get_element_type();
+                assert_eq!(elem_ty, proposed_elem_ty);
+            }
+            HowToExtractElements::Array => {
+                let elem_ty = pointee_ty.into_array_type().get_element_type();
+                assert_eq!(elem_ty, proposed_elem_ty);
+            }
+            HowToExtractElements::Struct => {
+                let index = index
+                    .ll_typed()
+                    .get_zero_extended_constant()
+                    .expect("Index must be a constant uint to ensure safety");
+                let elem_ty = pointee_ty
+                    .into_struct_type()
+                    .get_field_type_at_index(index.try_into().expect("u64 -> u32 overflow"))
+                    .expect("Asked for nonexistint field");
+                assert_eq!(elem_ty, proposed_elem_ty);
+            }
+        }
+        extract_as_vec_array(self, pointee_ty, raw_ptr, index)
     }
     pub fn get_elem_ptr<U, T, Space: Addrspace>(
         &self,

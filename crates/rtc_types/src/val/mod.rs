@@ -1,6 +1,7 @@
 mod array;
 mod assert;
 mod cmp;
+mod const_val;
 mod no_overflow;
 mod ptr;
 mod std_ops;

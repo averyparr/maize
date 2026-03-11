@@ -30,6 +30,7 @@ pub trait TransformLooper: Sized {
     ) -> Val<'a, Self::DecisionItemT>
     where
         Self: 'a;
+    fn step_n(&mut self, n: usize);
 }
 
 impl<'ctx> TransformLooper for Range<Val<'ctx, U32>> {
@@ -69,7 +70,13 @@ impl<'ctx> TransformLooper for Range<Val<'ctx, U32>> {
     where
         Self: 'a,
     {
-        self.cx().constant_from(1u32) + decision_val
+        decision_val + decision_val.const_like(1)
+    }
+    fn step_n(&mut self, n: usize) {
+        self.start = self.start
+            + self
+                .start
+                .const_like(n.try_into().expect("usize -> u32 overflow"));
     }
 }
 
@@ -150,9 +157,49 @@ where
         let new_b = self.1.update_fn(accessor.right);
         ZippedPair::from_fields(new_a, new_b)
     }
+    fn step_n(&mut self, n: usize) {
+        self.0.step_n(n);
+        self.1.step_n(n);
+    }
 }
 
 pub trait Looper: TransformLooper {
+    fn on_first<'a, F>(&'a mut self, f: F)
+    where
+        F: FnOnce(Self::ItemT<'a>),
+    {
+        let decision_val = self.init_decision();
+        let should_do = self.decision_fn(decision_val);
+        should_do.branch(|| {
+            let transformed = self.transform(decision_val);
+            f(transformed)
+        });
+        self.step_n(1);
+    }
+    fn on_first_n<'a, F>(&'a mut self, n: usize, mut f: F)
+    where
+        F: FnMut(Self::ItemT<'a>),
+    {
+        let mut decision_val = self.init_decision();
+        let cx = decision_val.cx();
+        let final_bb = cx.ctx().append_basic_block(cx.func(), "early_skip");
+
+        for _ in 0..n {
+            let then_block = cx.ctx().append_basic_block(cx.func(), "first_n_block");
+            let comparison = self.decision_fn(decision_val).ll_typed();
+            let _ins = unsafe {
+                cx.with_builder(|b| b.build_conditional_branch(comparison, then_block, final_bb))
+                    .expect("Should be able to build conditional branch")
+            };
+            cx.set_bb(then_block);
+            f(self.transform(decision_val));
+            decision_val = self.update_fn(decision_val);
+        }
+
+        let _ins = unsafe { cx.with_builder(|b| b.build_unconditional_branch(final_bb)) }
+            .expect("Unconditional branch should succeed");
+        self.step_n(n);
+    }
     fn for_every_value<'a, F>(self, mut f: F)
     where
         F: FnMut(Self::ItemT<'a>),

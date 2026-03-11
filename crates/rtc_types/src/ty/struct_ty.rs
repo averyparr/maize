@@ -52,11 +52,11 @@ macro_rules! struct_reflect {
         }
         impl$(<$($generics: $crate::ty::StructReflectTy $( + $bounds )?),*>)? $crate::ty::AccessibleStructTy for $name$(<$($generics),*>)? {
             type Accessor<'a> = $mod::$accessor::<'a $($(, $generics)*)?>;
-            type AccessorRef<'a, 'b, Space> = $mod::$accessor_ref<'a, 'b, Space $($(, $generics)*)?>
+            type AccessorRef<'a, 'b, Space: $crate::ty::Addrspace> = $mod::$accessor_ref<'a, 'b, Space $($(, $generics)*)?>
             where
                 'a: 'b,
                 Self: 'b;
-            type AccessorMut<'a, 'b, Space> = $mod::$accessor_mut<'a, 'b, Space $($(, $generics)*)?>
+            type AccessorMut<'a, 'b, Space: $crate::ty::Addrspace> = $mod::$accessor_mut<'a, 'b, Space $($(, $generics)*)?>
             where
                 'a: 'b,
                 Self: 'b;
@@ -288,11 +288,11 @@ where
 
 pub trait AccessibleStructTy: StructReflectTy {
     type Accessor<'a>;
-    type AccessorRef<'a, 'b, Space>
+    type AccessorRef<'a, 'b, Space: Addrspace>
     where
         'a: 'b,
         Self: 'b;
-    type AccessorMut<'a, 'b, Space>
+    type AccessorMut<'a, 'b, Space: Addrspace>
     where
         'a: 'b,
         Self: 'b;

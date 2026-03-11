@@ -1,3 +1,4 @@
+pub mod cp_async;
 pub mod ldsm;
 mod sreg;
 
@@ -13,7 +14,7 @@ use crate::{
     codegen::{FnCodegen, Func, new_ptx_kernel, target_cpu::cuda::SM},
     intrinsics::{
         BinaryIntrinsic, IntrinsicCodegen, IntrinsicsLibrary, StatelessIntrinsicsLibrary,
-        UnaryIntrinsic,
+        UnaryIntrinsic, cuda::cp_async::CpAsyncEngine,
     },
     ty::{Addrspace, M, R, SizedTy, cuda::Shared, raw::*},
     val::Val,
@@ -146,6 +147,10 @@ impl<'a> IntrinsicCodegen<'a, CUDA> {
         global_val.set_initializer(&T::undef(cx.ctx()));
         global_val.set_alignment(T::ALIGN);
         unsafe { Val::new(cx, global_val.as_basic_value_enum()) }
+    }
+
+    pub fn cp_async(self) -> CpAsyncEngine<'a> {
+        CpAsyncEngine(self.0)
     }
 }
 

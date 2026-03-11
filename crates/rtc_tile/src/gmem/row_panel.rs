@@ -84,6 +84,11 @@ where
         // loop anyways. So, it should be OK to assume that it will never overflow
         unsafe { curr_row.add_unchecked(self.rows_per_iter) }
     }
+
+    fn step_n(&mut self, n: usize) {
+        let n: u32 = n.try_into().expect("usize -> u32 overflow");
+        self.init_row = self.init_row + self.rows_per_iter * n;
+    }
 }
 
 impl<'a, 'b, T, Ptr> Matrix<'a, Ptr>
@@ -101,7 +106,7 @@ where
         let init_row = index * N;
         RowPanelIterLooper {
             row_window: W::new(),
-            ptr: Ptr::parametrize(&mut self.ptr),
+            ptr: Ptr::parametrize_by_ref(&mut self.ptr),
             init_row,
             rows_per_iter,
             num_cols: self.ncols,

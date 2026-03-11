@@ -1,5 +1,5 @@
 use crate::{
-    ty::{ContiguousUniformTy, V, vec::VectorizableTy},
+    ty::{ContiguousUniformTy, FixedSizeContiguousUniformTy, V, vec::VectorizableTy},
     val::Val,
 };
 

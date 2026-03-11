@@ -1,5 +1,5 @@
 use crate::{
-    ty::{Addrspace, ContiguousUniformTy, M, R, SizedTy, ValTy},
+    ty::{Addrspace, ContiguousUniformTy, FixedSizeContiguousUniformTy, M, R, SizedTy, U32, ValTy},
     val::Val,
 };
 
@@ -36,8 +36,11 @@ impl<'a, 'b, Space: Addrspace, T, const N: usize> Val<'a, R<&'b [T; N], Space>>
 where
     T: ValTy + 'a,
 {
-    pub fn index_ref<'c>(&'c self, index: usize) -> Val<'a, R<&'c T>> {
+    pub fn index_ref<'c>(&'c self, index: usize) -> Val<'a, R<&'c T, Space>> {
         <[T; N]>::element_ref(self.reborrow(), index.try_into().expect("u32 overflow"))
+    }
+    pub fn runtime_index_ref<'c>(&'c self, index: Val<'a, U32>) -> Val<'a, R<&'c T, Space>> {
+        <[T; N]>::runtime_element_ref(self.reborrow(), index)
     }
     pub fn elements_ref<'c>(&'c self) -> [Val<'a, R<&'c T, Space>>; N] {
         <[T; N]>::elements_ref(self.reborrow())
@@ -48,13 +51,31 @@ impl<'a, 'b, Space: Addrspace, T, const N: usize> Val<'a, M<&'b mut [T; N], Spac
 where
     T: ValTy + 'a,
 {
+    pub fn index_ref<'c>(&'c self, index: usize) -> Val<'a, R<&'c T, Space>> {
+        <[T; N]>::element_ref(self.reborrow(), index.try_into().expect("u32 overflow"))
+    }
     pub fn index_mut<'c>(&'c mut self, index: usize) -> Val<'a, M<&'c mut T, Space>>
     where
-        'a: 'c,
+        'b: 'c,
     {
         <[T; N]>::element_mut(self.reborrow_mut(), index.try_into().expect("u32 overflow"))
     }
+    pub fn runtime_index_ref<'c>(&'c self, index: Val<'a, U32>) -> Val<'a, R<&'c T, Space>>
+    where
+        'b: 'c,
+    {
+        <[T; N]>::runtime_element_ref(self.reborrow(), index)
+    }
+    pub fn runtime_index_mut<'c>(&'c mut self, index: Val<'a, U32>) -> Val<'a, M<&'c mut T, Space>>
+    where
+        'b: 'c,
+    {
+        <[T; N]>::runtime_element_mut(self.reborrow_mut(), index)
+    }
     pub fn elements_mut<'c>(&'c mut self) -> [Val<'a, M<&'c mut T, Space>>; N] {
         <[T; N]>::elements_mut(self.reborrow_mut())
+    }
+    pub fn elements_ref<'c>(&'c self) -> [Val<'a, R<&'c T, Space>>; N] {
+        <[T; N]>::elements_ref(self.reborrow())
     }
 }

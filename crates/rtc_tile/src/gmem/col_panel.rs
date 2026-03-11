@@ -86,6 +86,11 @@ where
     {
         unsafe { curr_col.add_unchecked(self.cols_per_iter) }
     }
+
+    fn step_n(&mut self, n: usize) {
+        let n: u32 = n.try_into().expect("usize -> u32 overflow");
+        self.init_col = self.init_col + self.cols_per_iter * n;
+    }
 }
 
 impl<'a, 'b, Ptr, T> Matrix<'a, Ptr>
