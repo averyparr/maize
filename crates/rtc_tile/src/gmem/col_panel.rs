@@ -1,6 +1,6 @@
 use rtc_types::{
     codegen::{loops::TransformLooper, typed_func::FnCodegen},
-    ty::{DereferencableTy, SizedTy, U32},
+    ty::{Addrspace, DereferencableTy, M, R, SizedTy, U32},
     val::Val,
 };
 
@@ -32,45 +32,30 @@ pub struct ColPanelIterLooper<'a, ColWindow, Ptr> {
     last_col: Val<'a, U32>,
 }
 
-impl<'ctx, ColWindow, Ptr> TransformLooper for ColPanelIterLooper<'ctx, ColWindow, Ptr>
+impl<'ctx, ColWindow, Ptr> TransformLooper<'ctx> for ColPanelIterLooper<'ctx, ColWindow, Ptr>
 where
     ColWindow: Window<ElemT = Ptr::Pointee>,
     Ptr: DereferencableTy<Pointee: SizedTy>,
 {
     type DecisionItemT = U32;
-    type ItemT<'a>
-        = ColPanel<'a, ColWindow, Ptr>
-    where
-        Self: 'a;
-    fn cx<'a>(&self) -> &'a FnCodegen
-    where
-        Self: 'a,
-    {
+    type ItemT = ColPanel<'ctx, ColWindow, Ptr>;
+    fn cx(&self) -> &'ctx FnCodegen {
         self.ptr.cx()
     }
 
-    fn init_decision<'a>(&self) -> Val<'a, Self::DecisionItemT>
-    where
-        Self: 'a,
-    {
+    fn init_decision(&self) -> Val<'ctx, Self::DecisionItemT> {
         self.init_col
     }
 
-    fn decision_fn<'a>(
+    fn decision_fn(
         &self,
-        curr_col: Val<'a, Self::DecisionItemT>,
-    ) -> Val<'a, rtc_types::ty::Bool>
-    where
-        Self: 'a,
-    {
-        curr_col.lt(self.last_col)
+        decision_val: Val<'ctx, Self::DecisionItemT>,
+    ) -> Val<'ctx, rtc_types::ty::Bool> {
+        decision_val.lt(self.last_col)
     }
 
-    fn transform<'a>(&self, curr_col: Val<'a, Self::DecisionItemT>) -> Self::ItemT<'a>
-    where
-        Self: 'a,
-    {
-        let offset = curr_col;
+    fn transform(&self, decision_val: Val<'ctx, Self::DecisionItemT>) -> Self::ItemT {
+        let offset = decision_val;
         let panel_init_ptr = unsafe { Ptr::on_underlying_raw(&self.ptr, |p| p.add(offset)) };
         Self::ItemT {
             col_window: self.col_window,
@@ -80,11 +65,11 @@ where
         }
     }
 
-    fn update_fn<'a>(&self, curr_col: Val<'a, Self::DecisionItemT>) -> Val<'a, Self::DecisionItemT>
-    where
-        Self: 'a,
-    {
-        unsafe { curr_col.add_unchecked(self.cols_per_iter) }
+    fn update_fn<'a>(
+        &self,
+        decision_val: Val<'ctx, Self::DecisionItemT>,
+    ) -> Val<'ctx, Self::DecisionItemT> {
+        unsafe { decision_val.add_unchecked(self.cols_per_iter) }
     }
 
     fn step_n(&mut self, n: usize) {
@@ -98,11 +83,11 @@ where
     Ptr: DereferencableTy<Pointee = T>,
     T: SizedTy + 'b,
 {
-    pub fn collective_aligned_col_panel_iter<const N: u32>(
+    fn inner_collective_aligned_col_panel_iter<const N: u32>(
         &'b mut self,
         group: impl Group + 'a,
     ) -> (
-        impl TransformLooper<ItemT<'b> = ColPanel<'b, W<T, N>, Ptr>>,
+        ColPanelIterLooper<'a, W<T, N>, Ptr>,
         ColPanel<'a, DW<'a, Ptr::Pointee>, Ptr>,
     ) {
         let (index, size) = group.index_size();
@@ -134,5 +119,49 @@ where
             stride_per_row: self.ncols,
         };
         (bulk_iter, rest)
+    }
+}
+
+impl<'a, 'c, 'b, T> Matrix<'a, R<&'c T>>
+where
+    'c: 'b,
+    T: SizedTy,
+{
+    pub fn collective_aligned_col_panel_iter<const N: u32>(
+        &'b self,
+        group: impl Group + 'a,
+    ) -> (
+        ColPanelIterLooper<'a, W<T, N>, R<&'b T>>,
+        ColPanel<'a, DW<'a, T>, R<&'b T>>,
+    ) {
+        self.reborrow()
+            .inner_collective_aligned_col_panel_iter(group)
+    }
+}
+
+impl<'a, 'c, 'b, T, Space: Addrspace> Matrix<'a, M<&'c mut T, Space>>
+where
+    'c: 'b,
+    T: SizedTy,
+{
+    pub fn collective_aligned_col_panel_iter<const N: u32>(
+        &'b mut self,
+        group: impl Group + 'a,
+    ) -> (
+        ColPanelIterLooper<'a, W<T, N>, R<&'b T, Space>>,
+        ColPanel<'a, DW<'a, T>, R<&'b T, Space>>,
+    ) {
+        self.reborrow()
+            .inner_collective_aligned_col_panel_iter(group)
+    }
+    pub fn collective_aligned_col_panel_iter_mut<const N: u32>(
+        &'b mut self,
+        group: impl Group + 'a,
+    ) -> (
+        ColPanelIterLooper<'a, W<T, N>, M<&'b mut T, Space>>,
+        ColPanel<'a, DW<'a, T>, M<&'b mut T, Space>>,
+    ) {
+        self.reborrow_mut()
+            .inner_collective_aligned_col_panel_iter(group)
     }
 }

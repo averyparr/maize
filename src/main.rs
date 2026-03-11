@@ -8,10 +8,11 @@ use rtc_types::{
     codegen::{Func, loops::Looper, new_ptx_kernel, target_cpu::cuda::SM, typed_func::FnCodegen},
     inkwell::OptimizationLevel,
     intrinsics::cuda::cp_async::{CpAsyncPipeline, CpAsyncTicket, CpAsyncToken},
-    struct_reflect,
+    kernel_assert, struct_reflect,
     ty::{
         Addrspace, ContiguousUniformTy, DereferencableTy, M, MutTy, RefTy, UniformTy, ValTy,
-        cuda::Global, raw::*,
+        cuda::{Global, Shared},
+        raw::*,
     },
     val::{S, Val},
 };
@@ -91,28 +92,38 @@ pub fn test_inner() {
     let (a_panels, a_epilogue) = amat.collective_aligned_row_panel_iter::<16>(group);
     let (b_panels, b_epilogue) = bmat.collective_aligned_row_panel_iter::<16>(group);
 
-    let pipe = CpAsyncPipeline::new(PIPE, pipe_shared);
+    let mut pipe = CpAsyncPipeline::new(PIPE, pipe_shared);
 
+    let lane = kernel.intrinsics().sregs().laneid();
     let mut zipped_panels = a_panels.zip(b_panels);
-    let (pipe, tiles) = zipped_panels.on_first(|(mut a_panel, mut b_panel)| {
+
+    fn check_nonzero_product(
+        smem: Val<'_, R<&TilePair<Tile<TileT>, Tile<TileT>>, Shared>>,
+        lane: Val<'_, U32>,
+    ) {
+        let smem_a = &mut smem.accessor().a;
+        let smem_b = &mut smem.accessor().b;
+        let ra = TileT::collective_load(smem_a, lane);
+        let rb = TileT::collective_load(smem_b, lane);
+        let rc = (ra * rb).sum().cast::<F32>();
+        kernel_assert!(rc.ne(rc.zero()));
+    }
+
+    let pipe = zipped_panels.on_first(|(mut a_panel, mut b_panel)| {
         let a_tiles = a_panel.into_gmem_tiles::<16>();
         let b_tiles = b_panel.into_gmem_tiles::<16>();
         let mut tiles = a_tiles.zip(b_tiles);
-        let pipe = pipe.prime_with(&mut tiles, |token, (gmem_a, gmem_b), mut smem| {
+        pipe.prime_with(tiles, |token, (gmem_a, gmem_b), mut smem| {
             let smem_a = smem.accessor_mut().a;
             gmem_a.collective_cp_async(&token, smem_a, warp, 16, false);
             let smem_b = smem.accessor_mut().b;
             gmem_b.collective_cp_async(&token, smem_b, warp, 16, false);
-        });
-        (pipe, tiles)
+        })
+        .at_steady_state(|smem| check_nonzero_product(smem, lane))
+        .finalize(|smem| check_nonzero_product(smem, lane))
     });
 
-    // let lane = kernel.intrinsics().sregs().laneid();
-    // pipe.at_steady_state(|mut smem| {
-    //     let smem_a = smem.accessor_mut().a;
-    //     let r = TileT::collective_load(&mut smem_a, lane);
-    //     let smem_b = smem.accessor_mut().b;
-    // });
+    let t = pipe;
 
     // let (a_panels, b_panels) = zipped_panels.unzip();
     // a_panels.for_every_value(|mut row_panel| {
@@ -142,10 +153,10 @@ pub fn test_inner() {
     let asm = kernel.finalize().compile_asm_at_opt_with_hooks(
         &SM::SM90,
         OptimizationLevel::Aggressive,
-        // print_at,
         |_| (),
+        print_at,
+        // |_| (),
         // print_at,
-        |_| (),
     );
 
     println!("{}", &asm[..asm.len() - 1]);

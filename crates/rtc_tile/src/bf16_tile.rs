@@ -1,6 +1,6 @@
 use rtc_types::{
     intrinsics::cuda::ldsm::call_ldsm_x4,
-    ty::{BF16, M, SizedTy, U32, U128, V, cuda::Shared},
+    ty::{BF16, R, SizedTy, U32, U128, V, cuda::Shared},
     val::Val,
 };
 
@@ -21,7 +21,7 @@ impl WarpFragTileTy for MmaBf16_16x16 {
 
 impl WarpSmemLoadTileTy for MmaBf16_16x16 {
     fn collective_load<'a, 'b>(
-        ptr: &mut Val<'a, M<&'b mut Tile<Self>, Shared>>,
+        ptr: &mut Val<'a, R<&'b Tile<Self>, Shared>>,
         lane: Val<'a, U32>,
     ) -> Val<'a, Self::FragT> {
         let row = lane % 16;

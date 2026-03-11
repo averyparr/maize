@@ -258,7 +258,7 @@ pub struct ColTileLooper<'a, RowWindow, ColWindow, Ptr> {
     num_cols: Val<'a, U32>,
 }
 
-impl<'ctx, RowWindow, ColWindow, Ptr> TransformLooper
+impl<'ctx, RowWindow, ColWindow, Ptr> TransformLooper<'ctx>
     for RowTileLooper<'ctx, RowWindow, ColWindow, Ptr>
 where
     Ptr: DereferencableTy<Pointee: SizedTy>,
@@ -266,39 +266,23 @@ where
     ColWindow: Window<ElemT = Ptr::Pointee>,
 {
     type DecisionItemT = U32;
-    type ItemT<'a>
-        = GmemTile<'a, RowWindow, ColWindow, Ptr>
-    where
-        Self: 'a;
-
-    fn cx<'a>(&self) -> &'a FnCodegen
-    where
-        Self: 'a,
-    {
+    type ItemT = GmemTile<'ctx, RowWindow, ColWindow, Ptr>;
+    fn cx(&self) -> &'ctx FnCodegen {
         self.ptr.cx()
     }
 
-    fn init_decision<'a>(&self) -> Val<'a, Self::DecisionItemT>
-    where
-        Self: 'a,
-    {
+    fn init_decision(&self) -> Val<'ctx, Self::DecisionItemT> {
         self.init_row
     }
 
-    fn decision_fn<'a>(
+    fn decision_fn(
         &self,
-        curr_row: Val<'a, Self::DecisionItemT>,
-    ) -> Val<'a, rtc_types::ty::Bool>
-    where
-        Self: 'a,
-    {
+        curr_row: Val<'ctx, Self::DecisionItemT>,
+    ) -> Val<'ctx, rtc_types::ty::Bool> {
         curr_row.lt(self.last_row)
     }
 
-    fn transform<'a>(&self, curr_row: Val<'a, Self::DecisionItemT>) -> Self::ItemT<'a>
-    where
-        Self: 'a,
-    {
+    fn transform(&self, curr_row: Val<'ctx, Self::DecisionItemT>) -> Self::ItemT {
         let offset = curr_row * self.stride_per_row;
         let panel_init_ptr = unsafe { Ptr::on_underlying_raw(&self.ptr, |p| p.add(offset)) };
         Self::ItemT {
@@ -309,10 +293,10 @@ where
         }
     }
 
-    fn update_fn<'a>(&self, curr_row: Val<'a, Self::DecisionItemT>) -> Val<'a, Self::DecisionItemT>
-    where
-        Self: 'a,
-    {
+    fn update_fn<'a>(
+        &self,
+        curr_row: Val<'ctx, Self::DecisionItemT>,
+    ) -> Val<'ctx, Self::DecisionItemT> {
         unsafe { curr_row.add_unchecked(self.rows_per_iter) }
     }
 
@@ -322,7 +306,7 @@ where
     }
 }
 
-impl<'ctx, RowWindow, ColWindow, Ptr> TransformLooper
+impl<'ctx, RowWindow, ColWindow, Ptr> TransformLooper<'ctx>
     for ColTileLooper<'ctx, RowWindow, ColWindow, Ptr>
 where
     Ptr: DereferencableTy<Pointee: SizedTy>,
@@ -330,39 +314,23 @@ where
     ColWindow: Window<ElemT = Ptr::Pointee>,
 {
     type DecisionItemT = U32;
-    type ItemT<'a>
-        = GmemTile<'a, RowWindow, ColWindow, Ptr>
-    where
-        Self: 'a;
-
-    fn cx<'a>(&self) -> &'a FnCodegen
-    where
-        Self: 'a,
-    {
+    type ItemT = GmemTile<'ctx, RowWindow, ColWindow, Ptr>;
+    fn cx(&self) -> &'ctx FnCodegen {
         self.ptr.cx()
     }
 
-    fn init_decision<'a>(&self) -> Val<'a, Self::DecisionItemT>
-    where
-        Self: 'a,
-    {
+    fn init_decision(&self) -> Val<'ctx, Self::DecisionItemT> {
         self.init_col
     }
 
-    fn decision_fn<'a>(
+    fn decision_fn(
         &self,
-        curr_col: Val<'a, Self::DecisionItemT>,
-    ) -> Val<'a, rtc_types::ty::Bool>
-    where
-        Self: 'a,
-    {
+        curr_col: Val<'ctx, Self::DecisionItemT>,
+    ) -> Val<'ctx, rtc_types::ty::Bool> {
         curr_col.lt(self.num_cols)
     }
 
-    fn transform<'a>(&self, curr_col: Val<'a, Self::DecisionItemT>) -> Self::ItemT<'a>
-    where
-        Self: 'a,
-    {
+    fn transform(&self, curr_col: Val<'ctx, Self::DecisionItemT>) -> Self::ItemT {
         let offset = curr_col;
         let panel_init_ptr = unsafe { Ptr::on_underlying_raw(&self.ptr, |p| p.add(offset)) };
         Self::ItemT {
@@ -373,10 +341,10 @@ where
         }
     }
 
-    fn update_fn<'a>(&self, curr_col: Val<'a, Self::DecisionItemT>) -> Val<'a, Self::DecisionItemT>
-    where
-        Self: 'a,
-    {
+    fn update_fn<'a>(
+        &self,
+        curr_col: Val<'ctx, Self::DecisionItemT>,
+    ) -> Val<'ctx, Self::DecisionItemT> {
         unsafe { curr_col.add_unchecked(self.cols_per_iter) }
     }
 

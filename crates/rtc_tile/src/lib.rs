@@ -18,7 +18,7 @@ use rtc_types::{
     },
     intrinsics::cuda::ldsm::{call_ldsm_x1, call_ldsm_x4},
     ty::{
-        AlignedTy, AnyTy, BF16, M, SizedTy, StructReflectTy, Ty, U32, U128, V, ValTy, cuda::Shared,
+        AlignedTy, AnyTy, BF16, R, SizedTy, StructReflectTy, Ty, U32, U128, V, ValTy, cuda::Shared,
     },
     val::Val,
 };
@@ -122,14 +122,14 @@ impl StructReflectTy for Tile<BF16_16x16> {
 
 pub trait WarpSmemLoadTileTy: WarpFragTileTy + Sized {
     fn collective_load<'a, 'b>(
-        ptr: &mut Val<'a, M<&'b mut Tile<Self>, Shared>>,
+        ptr: &mut Val<'a, R<&'b Tile<Self>, Shared>>,
         lane: Val<'a, U32>,
     ) -> Val<'a, Self::FragT>;
 }
 
 impl WarpSmemLoadTileTy for BF16_16x16 {
     fn collective_load<'a, 'b>(
-        ptr: &mut Val<'a, M<&'b mut Tile<Self>, Shared>>,
+        ptr: &mut Val<'a, R<&'b Tile<Self>, Shared>>,
         lane: Val<'a, U32>,
     ) -> Val<'a, Self::FragT> {
         let tile_ptr = ptr.as_ptr();
@@ -146,7 +146,7 @@ impl WarpSmemLoadTileTy for BF16_16x16 {
 
 impl WarpSmemLoadTileTy for BF16_8x8 {
     fn collective_load<'a, 'b>(
-        ptr: &mut Val<'a, M<&'b mut Tile<Self>, Shared>>,
+        ptr: &mut Val<'a, R<&'b Tile<Self>, Shared>>,
         lane: Val<'a, U32>,
     ) -> Val<'a, Self::FragT> {
         let tile_ptr = ptr.as_ptr();

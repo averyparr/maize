@@ -1,6 +1,6 @@
 use rtc_types::{
     codegen::{loops::TransformLooper, typed_func::FnCodegen},
-    ty::{Addrspace, Bool, DereferencableTy, M, R, SizedTy, U32, ValTy},
+    ty::{Addrspace, Bool, DereferencableTy, M, R, SizedTy, U32},
     val::Val,
 };
 
@@ -30,43 +30,28 @@ pub struct RowPanelIterLooper<'a, RowWindow, Ptr> {
     last_row: Val<'a, U32>,
 }
 
-impl<'ctx, RowWindow, Ptr> TransformLooper for RowPanelIterLooper<'ctx, RowWindow, Ptr>
+impl<'ctx, RowWindow, Ptr> TransformLooper<'ctx> for RowPanelIterLooper<'ctx, RowWindow, Ptr>
 where
     Ptr: DereferencableTy<Pointee: SizedTy>,
     RowWindow: Window<ElemT = Ptr::Pointee>,
 {
     type DecisionItemT = U32;
-    type ItemT<'a>
-        = RowPanel<'a, RowWindow, Ptr>
-    where
-        Self: 'a;
+    type ItemT = RowPanel<'ctx, RowWindow, Ptr>;
 
-    fn cx<'a>(&self) -> &'a FnCodegen
-    where
-        Self: 'a,
-    {
+    fn cx(&self) -> &'ctx FnCodegen {
         self.ptr.cx()
     }
 
-    fn init_decision<'a>(&self) -> Val<'a, Self::DecisionItemT>
-    where
-        Self: 'a,
-    {
+    fn init_decision(&self) -> Val<'ctx, Self::DecisionItemT> {
         self.init_row
     }
 
-    fn decision_fn<'a>(&self, curr_row: Val<'a, Self::DecisionItemT>) -> Val<'a, Bool>
-    where
-        Self: 'a,
-    {
-        curr_row.lt(self.last_row)
+    fn decision_fn(&self, decision_val: Val<'ctx, Self::DecisionItemT>) -> Val<'ctx, Bool> {
+        decision_val.lt(self.last_row)
     }
 
-    fn transform<'a>(&self, curr_row: Val<'a, Self::DecisionItemT>) -> Self::ItemT<'a>
-    where
-        Self: 'a,
-    {
-        let offset = curr_row * self.num_cols;
+    fn transform(&self, decision_val: Val<'ctx, Self::DecisionItemT>) -> Self::ItemT {
+        let offset = decision_val * self.num_cols;
         let panel_init_ptr = unsafe { Ptr::on_underlying_raw(&self.ptr, |p| p.add(offset)) };
         Self::ItemT {
             row_window: self.row_window,
@@ -75,14 +60,14 @@ where
         }
     }
 
-    fn update_fn<'a>(&self, curr_row: Val<'a, Self::DecisionItemT>) -> Val<'a, Self::DecisionItemT>
-    where
-        Self: 'a,
-    {
+    fn update_fn<'a>(
+        &self,
+        decision_val: Val<'ctx, Self::DecisionItemT>,
+    ) -> Val<'ctx, Self::DecisionItemT> {
         // SAFETY: We know that `self.last_row` is < u32::max,
         // so if this would overflow, then we want to break the
         // loop anyways. So, it should be OK to assume that it will never overflow
-        unsafe { curr_row.add_unchecked(self.rows_per_iter) }
+        unsafe { decision_val.add_unchecked(self.rows_per_iter) }
     }
 
     fn step_n(&mut self, n: usize) {

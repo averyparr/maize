@@ -2,7 +2,7 @@ use std::cell::Cell;
 
 use crate::{
     codegen::{FnCodegen, loops::Looper},
-    ty::{ContiguousUniformTy, M, U32, Void, cuda::Shared},
+    ty::{ContiguousUniformTy, M, R, U32, ValTy, Void, cuda::Shared},
     val::{S, Val},
 };
 
@@ -50,15 +50,20 @@ impl<'a> CpAsyncEngine<'a> {
     }
 }
 
+fn wait_group(cx: &FnCodegen, n: u32) {
+    let cp_async_wait_group = "llvm.nvvm.cp.async.wait.group";
+
+    let cp_async_wait_group = cx.get_intrinsic::<Void, (U32,)>(cp_async_wait_group, true);
+    cx.call_void_fn(cp_async_wait_group, (cx.constant_from(n),));
+}
+
+fn commit_group(cx: &FnCodegen) {
+    let cp_async_commit_group = "llvm.nvvm.cp.async.commit.group";
+    let cp_async_commit_group = cx.get_intrinsic::<Void, ()>(cp_async_commit_group, true);
+    cx.call_void_fn(cp_async_commit_group, ());
+}
+
 impl<T> CpAsyncTicket<'_, T> {
-    pub fn wait_group(&self, n: u32) {
-        let cp_async_wait_group = "llvm.nvvm.cp.async.wait.group";
-        let cp_async_wait_group = self
-            .cx
-            .get_intrinsic::<Void, (U32,)>(cp_async_wait_group, true);
-        self.cx
-            .call_void_fn(cp_async_wait_group, (self.cx.constant_from(n),));
-    }
     fn wait(self) -> T {
         let index_to_validate = self.index_in_cp_async;
         let mut ticketing = CP_ASYNC_TICKETING.with(|c| c.get());
@@ -70,7 +75,7 @@ impl<T> CpAsyncTicket<'_, T> {
         const MAX_IN_FLIGHT: u32 = 8;
         // Guaranteed > 0
         let number_behind_head = (ticketing.initialized - index_to_validate).min(MAX_IN_FLIGHT);
-        self.wait_group(number_behind_head);
+        wait_group(&self.cx, number_behind_head);
 
         ticketing.completed = ticketing.initialized - number_behind_head;
         CP_ASYNC_TICKETING.with(|c| c.set(ticketing));
@@ -114,38 +119,92 @@ where
 
     pub fn prime_with<'looper, 'loop_borrow, 'short_borrow, L, F>(
         mut self,
-        looper: &'looper mut L,
+        mut looper: L,
         mut f: F,
-    ) -> PrimedCpAsyncPipeline<'a, 'b, Resource>
+    ) -> PrimedCpAsyncPipeline<'a, 'b, Resource, L, F>
     where
-        F: FnMut(CpAsyncToken, L::ItemT<'looper>, Val<'a, M<&mut ElemT, Shared>>),
-        L: Looper,
+        F: for<'l> FnMut(CpAsyncToken, L::ItemT, Val<'a, M<&mut ElemT, Shared>>),
+        L: Looper<'a>,
         ElemT: 'short_borrow,
     {
-        let cp_async_commit_group = "llvm.nvvm.cp.async.commit.group";
         let cx = self.res_index.cx();
         looper.on_first_n(self.depth as usize, |item| {
-            let cp_index = (self.res_index.as_mut().load() + 1) % self.depth;
-            self.res_index.as_mut().store(cp_index);
+            let cp_index = self.res_index.as_mut().load();
+            let new_index = (cp_index + 1) % self.depth;
+            self.res_index.as_mut().store(new_index);
             let res = self.resources_at_mut(cp_index);
             f(CpAsyncToken(()), item, res);
-            let cp_async_commit_group = cx.get_intrinsic::<Void, ()>(cp_async_commit_group, true);
-            cx.call_void_fn(cp_async_commit_group, ());
+            commit_group(&cx);
         });
         self.res_index.as_mut().store(cx.constant_from(0u32));
-        PrimedCpAsyncPipeline { inner: self }
+        PrimedCpAsyncPipeline {
+            inner: self,
+            looper,
+            copy_func: f,
+        }
     }
 }
 
-pub struct PrimedCpAsyncPipeline<'a, 'b, Resource> {
+pub struct PrimedCpAsyncPipeline<'a, 'b, Resource, L, F> {
+    inner: CpAsyncPipeline<'a, 'b, Resource>,
+    looper: L,
+    copy_func: F,
+}
+
+pub struct DepletedCpAsyncPipeline<'a, 'b, Resource> {
     inner: CpAsyncPipeline<'a, 'b, Resource>,
 }
 
-impl<'a, 'b, Resource, ElemT> PrimedCpAsyncPipeline<'a, 'b, Resource>
+impl<'a, 'b, Resource, ElemT, L, CopyFunc> PrimedCpAsyncPipeline<'a, 'b, Resource, L, CopyFunc>
 where
     Resource: ContiguousUniformTy<ElemT = ElemT>,
+    L: Looper<'a>,
+    CopyFunc: for<'l> FnMut(CpAsyncToken, L::ItemT, Val<'a, M<&mut ElemT, Shared>>),
+    ElemT: ValTy,
 {
-    pub fn at_steady_state<L>(&mut self, looper: L) {
-        todo!();
+    pub fn at_steady_state<F>(mut self, mut f: F) -> DepletedCpAsyncPipeline<'a, 'b, Resource>
+    where
+        F: FnMut(Val<'a, R<&ElemT, Shared>>),
+    {
+        let max_outstanding = self.inner.depth - 1;
+        let cx = self.inner.res_index.cx();
+        self.looper.for_every_value(|item| {
+            let index = self.inner.res_index.as_mut().load();
+            wait_group(&cx, max_outstanding);
+            let resource = self.inner.resources_at_mut(index);
+            f(resource.reborrow());
+            (self.copy_func)(CpAsyncToken(()), item, resource);
+            commit_group(&cx);
+            self.inner
+                .res_index
+                .as_mut()
+                .store((index + 1) % self.inner.depth);
+        });
+
+        DepletedCpAsyncPipeline { inner: self.inner }
+    }
+}
+
+impl<'a, 'b, Resource, ElemT> DepletedCpAsyncPipeline<'a, 'b, Resource>
+where
+    Resource: ContiguousUniformTy<ElemT = ElemT>,
+    ElemT: ValTy,
+{
+    pub fn finalize<F>(mut self, mut f: F) -> CpAsyncPipeline<'a, 'b, Resource>
+    where
+        F: FnMut(Val<'a, R<&ElemT, Shared>>),
+    {
+        let cx = self.inner.res_index.cx();
+        for num_remaining in (0..self.inner.depth).rev() {
+            let index = self.inner.res_index.as_mut().load();
+            wait_group(cx, num_remaining);
+            let resource = self.inner.resources_at_mut(index);
+            f(resource.reborrow());
+            self.inner
+                .res_index
+                .as_mut()
+                .store((index + 1) % self.inner.depth);
+        }
+        self.inner
     }
 }

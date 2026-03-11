@@ -7,69 +7,39 @@ use crate::{
     val::Val,
 };
 
-pub trait TransformLooper: Sized {
+pub trait TransformLooper<'ctx>: Sized {
     type DecisionItemT: StructReflectTy + Copy;
-    type ItemT<'a>
-    where
-        Self: 'a;
-    fn cx<'a>(&self) -> &'a FnCodegen
-    where
-        Self: 'a;
-    fn init_decision<'a>(&self) -> Val<'a, Self::DecisionItemT>
-    where
-        Self: 'a;
-    fn decision_fn<'a>(&self, decision_val: Val<'a, Self::DecisionItemT>) -> Val<'a, Bool>
-    where
-        Self: 'a;
-    fn transform<'a>(&self, decision_val: Val<'a, Self::DecisionItemT>) -> Self::ItemT<'a>
-    where
-        Self: 'a;
+    type ItemT;
+    fn cx(&self) -> &'ctx FnCodegen;
+    fn init_decision(&self) -> Val<'ctx, Self::DecisionItemT>;
+    fn decision_fn(&self, decision_val: Val<'ctx, Self::DecisionItemT>) -> Val<'ctx, Bool>;
+    fn transform(&self, decision_val: Val<'ctx, Self::DecisionItemT>) -> Self::ItemT;
     fn update_fn<'a>(
         &self,
-        decision_val: Val<'a, Self::DecisionItemT>,
-    ) -> Val<'a, Self::DecisionItemT>
-    where
-        Self: 'a;
+        decision_val: Val<'ctx, Self::DecisionItemT>,
+    ) -> Val<'ctx, Self::DecisionItemT>;
     fn step_n(&mut self, n: usize);
 }
 
-impl<'ctx> TransformLooper for Range<Val<'ctx, U32>> {
+impl<'ctx> TransformLooper<'ctx> for Range<Val<'ctx, U32>> {
     type DecisionItemT = U32;
-    type ItemT<'a>
-        = Val<'a, U32>
-    where
-        Self: 'a;
-    fn cx<'a>(&self) -> &'a FnCodegen
-    where
-        Self: 'a,
-    {
+    type ItemT = Val<'ctx, U32>;
+    fn cx(&self) -> &'ctx FnCodegen {
         self.start.cx()
     }
-    fn init_decision<'a>(&self) -> Val<'a, Self::DecisionItemT>
-    where
-        Self: 'a,
-    {
+    fn init_decision(&self) -> Val<'ctx, Self::DecisionItemT> {
         self.start
     }
-    fn decision_fn<'a>(&self, decision_val: Val<'a, Self::DecisionItemT>) -> Val<'a, Bool>
-    where
-        Self: 'a,
-    {
+    fn decision_fn(&self, decision_val: Val<'ctx, Self::DecisionItemT>) -> Val<'ctx, Bool> {
         decision_val.lt(self.end)
     }
-    fn transform<'a>(&self, decision_val: Val<'a, Self::DecisionItemT>) -> Self::ItemT<'a>
-    where
-        Self: 'a,
-    {
+    fn transform(&self, decision_val: Val<'ctx, Self::DecisionItemT>) -> Self::ItemT {
         decision_val
     }
     fn update_fn<'a>(
         &self,
-        decision_val: Val<'a, Self::DecisionItemT>,
-    ) -> Val<'a, Self::DecisionItemT>
-    where
-        Self: 'a,
-    {
+        decision_val: Val<'ctx, Self::DecisionItemT>,
+    ) -> Val<'ctx, Self::DecisionItemT> {
         decision_val + decision_val.const_like(1)
     }
     fn step_n(&mut self, n: usize) {
@@ -103,48 +73,34 @@ impl<A, B> ZippedLooper<A, B> {
     }
 }
 
-impl<'val, A: TransformLooper, B: TransformLooper> TransformLooper for ZippedLooper<A, B>
+impl<'ctx, A: TransformLooper<'ctx>, B: TransformLooper<'ctx>> TransformLooper<'ctx>
+    for ZippedLooper<A, B>
 where
     A::DecisionItemT: StructReflectTy,
     B::DecisionItemT: StructReflectTy,
 {
     type DecisionItemT = ZippedPair<A::DecisionItemT, B::DecisionItemT>;
 
-    type ItemT<'a>
-        = (A::ItemT<'a>, B::ItemT<'a>)
-    where
-        Self: 'a;
+    type ItemT = (A::ItemT, B::ItemT);
 
-    fn cx<'a>(&self) -> &'a FnCodegen
-    where
-        Self: 'a,
-    {
+    fn cx(&self) -> &'ctx FnCodegen {
         self.0.cx()
     }
 
-    fn init_decision<'a>(&self) -> Val<'a, Self::DecisionItemT>
-    where
-        Self: 'a,
-    {
+    fn init_decision(&self) -> Val<'ctx, Self::DecisionItemT> {
         let a = self.0.init_decision();
         let b = self.1.init_decision();
         ZippedPair::from_fields(a, b)
     }
 
-    fn decision_fn<'a>(&self, decision_val: Val<'a, Self::DecisionItemT>) -> Val<'a, Bool>
-    where
-        Self: 'a,
-    {
+    fn decision_fn(&self, decision_val: Val<'ctx, Self::DecisionItemT>) -> Val<'ctx, Bool> {
         let accessor = decision_val.into_accessor();
         let a = self.0.decision_fn(accessor.left);
         let b = self.1.decision_fn(accessor.right);
         a & b
     }
 
-    fn transform<'a>(&self, decision_val: Val<'a, Self::DecisionItemT>) -> Self::ItemT<'a>
-    where
-        Self: 'a,
-    {
+    fn transform(&self, decision_val: Val<'ctx, Self::DecisionItemT>) -> Self::ItemT {
         let accessor = decision_val.into_accessor();
         let a_val = self.0.transform(accessor.left);
         let b_val = self.1.transform(accessor.right);
@@ -153,11 +109,8 @@ where
 
     fn update_fn<'a>(
         &self,
-        decision_val: Val<'a, Self::DecisionItemT>,
-    ) -> Val<'a, Self::DecisionItemT>
-    where
-        Self: 'a,
-    {
+        decision_val: Val<'ctx, Self::DecisionItemT>,
+    ) -> Val<'ctx, Self::DecisionItemT> {
         let accessor = decision_val.into_accessor();
         let new_a = self.0.update_fn(accessor.left);
         let new_b = self.1.update_fn(accessor.right);
@@ -169,11 +122,10 @@ where
     }
 }
 
-pub trait Looper: TransformLooper {
-    fn on_first<'a, 'b, F, U>(&'a mut self, f: F) -> U
+pub trait Looper<'ctx>: TransformLooper<'ctx> {
+    fn on_first<F, U>(&mut self, f: F) -> U
     where
-        F: FnOnce(Self::ItemT<'b>) -> U,
-        'a: 'b,
+        F: FnOnce(Self::ItemT) -> U,
     {
         let decision_val = self.init_decision();
         let should_do = self.decision_fn(decision_val);
@@ -183,9 +135,9 @@ pub trait Looper: TransformLooper {
         self.step_n(1);
         ret
     }
-    fn on_first_n<'a, F>(&'a mut self, n: usize, mut f: F)
+    fn on_first_n<F>(&mut self, n: usize, mut f: F)
     where
-        F: FnMut(Self::ItemT<'a>),
+        F: FnMut(Self::ItemT),
     {
         let mut decision_val = self.init_decision();
         let cx = decision_val.cx();
@@ -209,10 +161,9 @@ pub trait Looper: TransformLooper {
         cx.set_bb(final_bb);
         self.step_n(n);
     }
-    fn for_every_value<'a, F>(self, mut f: F)
+    fn for_every_value<F>(self, mut f: F)
     where
-        F: FnMut(Self::ItemT<'a>),
-        Self: 'a,
+        F: FnMut(Self::ItemT),
     {
         let mut val_alloca = self.init_decision().with_storage();
         let cx = val_alloca.cx();
@@ -247,7 +198,7 @@ pub trait Looper: TransformLooper {
         cx.set_bb(done_block);
     }
 
-    fn zip<'a, OtherLooper: Looper + 'a>(
+    fn zip<'a, OtherLooper: Looper<'ctx>>(
         self,
         other: OtherLooper,
     ) -> ZippedLooper<Self, OtherLooper> {
@@ -255,4 +206,4 @@ pub trait Looper: TransformLooper {
     }
 }
 
-impl<'val, L> Looper for L where L: TransformLooper {}
+impl<'ctx, L> Looper<'ctx> for L where L: TransformLooper<'ctx> {}
