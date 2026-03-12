@@ -1,4 +1,4 @@
-use rtc_types::{
+use maize_types::{
     codegen::loops::Looper,
     intrinsics::cuda::cp_async::CpAsyncPipeline,
     ty::{

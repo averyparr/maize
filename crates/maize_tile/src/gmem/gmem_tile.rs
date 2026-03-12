@@ -1,4 +1,4 @@
-use rtc_types::{
+use maize_core::{
     codegen::{
         loops::{Looper, TransformLooper},
         typed_func::FnCodegen,
@@ -280,7 +280,7 @@ where
     fn decision_fn(
         &self,
         curr_row: Val<'ctx, Self::DecisionItemT>,
-    ) -> Val<'ctx, rtc_types::ty::Bool> {
+    ) -> Val<'ctx, maize_core::ty::Bool> {
         curr_row.lt(self.last_row)
     }
 
@@ -328,7 +328,7 @@ where
     fn decision_fn(
         &self,
         curr_col: Val<'ctx, Self::DecisionItemT>,
-    ) -> Val<'ctx, rtc_types::ty::Bool> {
+    ) -> Val<'ctx, maize_core::ty::Bool> {
         curr_col.lt(self.num_cols)
     }
 

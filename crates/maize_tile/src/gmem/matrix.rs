@@ -1,4 +1,4 @@
-use rtc_types::{
+use maize_core::{
     ty::{Addrspace, DereferencableTy, M, R, U32, ValTy},
     val::Val,
 };

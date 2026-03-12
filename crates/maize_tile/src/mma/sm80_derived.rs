@@ -1,4 +1,4 @@
-use rtc_types::ty::{BF16, ContiguousUniformTy, F32, V};
+use maize_core::ty::{BF16, ContiguousUniformTy, F32, V};
 
 use crate::mma::{SyncMMAOp, sm80::Sm80MmaBf16F32_16x8x16};
 
@@ -10,10 +10,10 @@ impl SyncMMAOp for Sm80MmaBf16F32_16x16x16 {
     type FragC = V<F32, 8>;
 
     fn call<'a>(
-        a: rtc_types::val::Val<'a, Self::FragA>,
-        b: rtc_types::val::Val<'a, Self::FragB>,
-        c: rtc_types::val::Val<'a, Self::FragC>,
-    ) -> rtc_types::val::Val<'a, Self::FragC> {
+        a: maize_core::val::Val<'a, Self::FragA>,
+        b: maize_core::val::Val<'a, Self::FragB>,
+        c: maize_core::val::Val<'a, Self::FragC>,
+    ) -> maize_core::val::Val<'a, Self::FragC> {
         let b_chunks = b.chunks_exact::<4>();
         let b0 = b_chunks[0];
         let b1 = b_chunks[1];

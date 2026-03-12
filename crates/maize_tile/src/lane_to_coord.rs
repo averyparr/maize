@@ -1,4 +1,4 @@
-// use rtc_types::{ty::U32, val::Val};
+// use maize_core::{ty::U32, val::Val};
 
 // use crate::bf16_tile::MmaBf16_16x16;
 

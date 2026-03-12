@@ -9,7 +9,7 @@ use std::marker::PhantomData;
 
 pub use pair::TilePair;
 
-use rtc_types::{
+use maize_core::{
     codegen::typed_func::FnCodegen,
     inkwell::{
         context::ContextRef,

@@ -1,4 +1,4 @@
-use rtc_types::{codegen::typed_func::FnCodegen, ty::U32, val::Val};
+use maize_core::{codegen::typed_func::FnCodegen, ty::U32, val::Val};
 
 pub mod by_block;
 pub mod warp;

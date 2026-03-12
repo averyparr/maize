@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use rtc_types::{
+use maize_core::{
     ty::{E4M3, E5M2, F16, F32, I32, IntoFuncArgs, V, vec::VectorizableTy},
     val::Val,
 };

@@ -1,4 +1,4 @@
-use rtc_types::{
+use maize_core::{
     codegen::{Func, new_ptx_kernel, target_cpu::cuda::SM, typed_func::FnCodegen},
     struct_reflect,
     ty::{

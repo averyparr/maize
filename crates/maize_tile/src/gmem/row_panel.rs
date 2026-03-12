@@ -1,4 +1,4 @@
-use rtc_types::{
+use maize_core::{
     codegen::{loops::TransformLooper, typed_func::FnCodegen},
     ty::{Addrspace, Bool, DereferencableTy, M, R, SizedTy, U32},
     val::Val,

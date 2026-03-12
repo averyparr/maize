@@ -1,4 +1,4 @@
-use rtc_types::{
+use maize_core::{
     codegen::typed_func::FnCodegen,
     intrinsics::{IntrinsicCodegen, IntrinsicsLibrary, cuda::CUDA},
     ty::U32,
