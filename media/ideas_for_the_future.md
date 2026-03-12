@@ -27,3 +27,4 @@ into implementation; the reduction is quite elegant.
 - Loop unrolling supported properly?
 - Try out compiling for aarch64 or amdgpu?
 - Make it simple to call non-inlined functions?
+- Atomics! That's the big thing: we're missing atomics.

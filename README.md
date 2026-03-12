@@ -8,10 +8,11 @@ The hope is to eventually make writing even complex
 kernels fast and easy (easier?), while using a strong
 type system to increase confidence in their correctness.
 
-There is currently a (subtly?) incorrect pipelined BF16
+There is currently a (meaningfully) incorrect pipelined BF16
 kernel available as an example in `src/main.rs`.
-It deliberately ignores edge tiles and copies without swizzle
-to shared memory, but it should give a sense for what the
-system as a whole is capable of. Alternatively, have a
-look at the project [overview](./media/overview.md)
+It deliberately ignores edge tiles, only works for 4k by 4k
+matrices, copies without swizzle to shared memory, but it
+should give a sense for what the system as a whole is capable of.
+It produces PTX visible in [example_ptx/gen.ptx](./example_ptx/gen.ptx).
+Alternatively, have a look at the project [overview](./media/overview.md)
 or [motivation](./media/motivation.md).
