@@ -1,16 +1,22 @@
 use rtc_types::{
     codegen::{Func, new_ptx_kernel, target_cpu::cuda::SM, typed_func::FnCodegen},
     struct_reflect,
-    ty::{F16, F32, F64, IntoFuncArgs, M, R, SizedTy, V, cuda::Global},
+    ty::{
+        Addrspace, F16, F32, F64, IntoFuncArgs, M, R, SizedTy, V,
+        cuda::{Global, Shared},
+    },
     val::Val,
 };
 
+use crate::{Tile, WarpCollectiveTileTy, group::warp::Warp};
+
 pub mod sm75;
 pub mod sm80;
+pub mod sm80_derived;
 pub mod sm89;
 pub mod sm90;
 
-pub trait SyncMMAOp {
+pub trait IntrinsicSyncMMAOp {
     type AFrag: SizedTy + Copy;
     type BFrag: SizedTy + Copy;
     type CFrag: SizedTy + Copy;
@@ -26,23 +32,73 @@ pub trait SyncMMAOp {
         b: Val<'a, Self::BFrag>,
         c: Val<'a, Self::CFrag>,
     ) -> <Self::Args as IntoFuncArgs>::ArgValues<'a>;
+}
+
+pub trait SyncMMAOp {
+    type FragA: SizedTy + Copy;
+    type FragB: SizedTy + Copy;
+    type FragC: SizedTy + Copy;
+
     fn call<'a>(
-        a: Val<'a, Self::AFrag>,
-        b: Val<'a, Self::BFrag>,
-        c: Val<'a, Self::CFrag>,
-    ) -> Val<'a, Self::CFrag> {
-        let cx = a.cx();
-        let args = Self::pack_args(a, b, c);
-        let mma_intrinsic = cx.get_intrinsic::<Self::Ret, Self::Args>(Self::INTRINSIC_NAME, true);
-        let raw_ret = cx.call_fn(mma_intrinsic, args);
-        Self::unpack_args(raw_ret)
-    }
-    fn zero_accum<'a>(cx: &'a FnCodegen) -> Val<'a, Self::CFrag> {
+        a: Val<'a, Self::FragA>,
+        b: Val<'a, Self::FragB>,
+        c: Val<'a, Self::FragC>,
+    ) -> Val<'a, Self::FragC>;
+
+    fn zero_accum<'a>(cx: &'a FnCodegen) -> Val<'a, Self::FragC> {
         Val::zeros(cx)
+    }
+
+    fn load_a<'a, TileA>(ptr: Val<'a, R<&Tile<TileA>, Shared>>) -> Val<'a, Self::FragA>
+    where
+        TileA: WarpCollectiveTileTy<FragT = Self::FragA>,
+    {
+        let lane = Warp::new(ptr.cx()).lane();
+        TileA::collective_load(&ptr, lane)
+    }
+    fn load_b<'a, TileB>(ptr: Val<'a, R<&Tile<TileB>, Shared>>) -> Val<'a, Self::FragB>
+    where
+        TileB: WarpCollectiveTileTy<FragT = Self::FragB>,
+    {
+        let lane = Warp::new(ptr.cx()).lane();
+        TileB::collective_load(&ptr, lane)
+    }
+    fn store_c<'a, TileC, Space: Addrspace>(
+        ptr: Val<'a, M<&mut Tile<TileC>, Space>>,
+        val: Val<'a, Self::FragC>,
+    ) where
+        TileC: WarpCollectiveTileTy<FragT = Self::FragC>,
+    {
+        let lane = Warp::new(ptr.cx()).lane();
+        TileC::collective_store(ptr, val, lane);
     }
 }
 
-pub fn run_test_sync_mma<MMA: SyncMMAOp>(sm: SM) -> String {
+pub trait SmemSyncMMAOp: SyncMMAOp {
+    const M: u32;
+    const N: u32;
+    const K: u32;
+}
+
+impl<Intrins: IntrinsicSyncMMAOp> SyncMMAOp for Intrins {
+    type FragA = Intrins::AFrag;
+    type FragB = Intrins::BFrag;
+    type FragC = Intrins::CFrag;
+    fn call<'a>(
+        a: Val<'a, Intrins::AFrag>,
+        b: Val<'a, Intrins::BFrag>,
+        c: Val<'a, Intrins::CFrag>,
+    ) -> Val<'a, Intrins::CFrag> {
+        let cx = a.cx();
+        let args = Self::pack_args(a, b, c);
+        let mma_intrinsic =
+            cx.get_intrinsic::<Intrins::Ret, Intrins::Args>(Self::INTRINSIC_NAME, true);
+        let raw_ret = cx.call_fn(mma_intrinsic, args);
+        Self::unpack_args(raw_ret)
+    }
+}
+
+pub fn run_test_sync_mma<MMA: IntrinsicSyncMMAOp>(sm: SM) -> String {
     let kernel = new_ptx_kernel::<(
         R<&MMA::AFrag, Global>,
         R<&MMA::BFrag, Global>,

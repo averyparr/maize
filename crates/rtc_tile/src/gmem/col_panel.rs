@@ -6,6 +6,7 @@ use rtc_types::{
 
 use crate::{DW, W, Window, gmem::Matrix, group::Group};
 
+#[derive(Clone, Copy)]
 pub struct ColPanel<'a, ColWindow, Ptr> {
     pub(crate) col_window: ColWindow,
     pub ptr: Val<'a, Ptr>,
@@ -22,6 +23,7 @@ impl<'a, ColWindow: Window + 'a, Ptr> ColPanel<'a, ColWindow, Ptr> {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct ColPanelIterLooper<'a, ColWindow, Ptr> {
     col_window: ColWindow,
     ptr: Val<'a, Ptr>,
@@ -145,7 +147,7 @@ where
     T: SizedTy,
 {
     pub fn collective_aligned_col_panel_iter<const N: u32>(
-        &'b mut self,
+        &'b self,
         group: impl Group + 'a,
     ) -> (
         ColPanelIterLooper<'a, W<T, N>, R<&'b T, Space>>,

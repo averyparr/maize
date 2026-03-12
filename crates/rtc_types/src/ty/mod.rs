@@ -80,3 +80,8 @@ pub use raw::{Bool, M, P, R, V, Void, float::*, int::*};
 pub use sized::{AlignedTy, SizedTy};
 pub use struct_ty::{AccessibleStructTy, StructReflectTy};
 pub use void::VoidTy;
+
+pub mod util {
+    use super::*;
+    pub use sized::{variadic_max, variadic_sum};
+}

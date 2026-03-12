@@ -31,6 +31,20 @@ where
     pub fn element_at(self, index: usize) -> Val<'a, T> {
         V::element(self, index)
     }
+
+    // Ugh, this would be so much neater with generic const exprs
+    pub fn chunks_exact<const M: usize>(self) -> Vec<Val<'a, V<T, M>>> {
+        assert!(N % M == 0, "M must divide N");
+        let mut elements = self.elements().into_iter();
+        let mut ret = Vec::with_capacity(N / M);
+        for _ in 0..N / M {
+            let to_add =
+                ::core::array::from_fn(|_| elements.next().expect("Size should have matched"));
+
+            ret.push(Val::from_elements(to_add));
+        }
+        ret
+    }
 }
 
 impl<'a, T> Val<'a, T>

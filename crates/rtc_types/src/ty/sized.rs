@@ -24,6 +24,28 @@ where
     const ALIGN: u32 = T::ALIGN;
 }
 
+pub const fn variadic_max<const N: usize>(arr: [u32; N]) -> u32 {
+    let mut i = 0;
+    let mut max = 0;
+    while i < N {
+        if arr[i] > max {
+            max = arr[i];
+        }
+        i += 1;
+    }
+    max
+}
+
+pub const fn variadic_sum<const N: usize>(arr: [u32; N]) -> u32 {
+    let mut i = 0;
+    let mut sum = 0;
+    while i < N {
+        sum += arr[i];
+        i += 1;
+    }
+    sum
+}
+
 macro_rules! impl_size_align {
     ($($mock: ty => $materialized: ty),*$(,)?) => {
         $(

@@ -2,7 +2,7 @@ use inkwell::values::BasicValue;
 
 use crate::{
     kernel_assert,
-    ty::{Addrspace, M, R, U32, V, ValTy, vec::VectorizableTy},
+    ty::{Addrspace, M, R, SizedTy, U32, V, ValTy, vec::VectorizableTy},
     val::Val,
 };
 
@@ -28,6 +28,49 @@ pub unsafe trait ContiguousUniformTy: UniformTy {
         let index = u32::try_from(index).expect("u32 overflowed usize");
         let element = val.cx().extract_elem::<Self::ElemT, Self>(&val, index);
         unsafe { Val::new(val.cx(), element.as_basic_value_enum()) }
+    }
+    fn try_from_elements<'a>(
+        mut elements: impl ExactSizeIterator<Item = Val<'a, Self::ElemT>>,
+    ) -> Option<Val<'a, Self>>
+    where
+        Self: Sized,
+    {
+        if elements.len() == Self::size() as usize {
+            let first_element = elements.next().expect("Must have at least one element!");
+            let cx = first_element.cx();
+            let undef = unsafe { Val::new_undef(cx) };
+            let first_def = cx.insert_elem(undef, first_element, 0);
+            let to_ret = (1..Self::size()).fold(first_def, |agg, index| {
+                let new_val = elements.next().expect("Size should have matched!");
+                cx.insert_elem(agg, new_val, index)
+            });
+            Some(to_ret)
+        } else {
+            None
+        }
+    }
+    fn into_element_iter<'a>(
+        val: Val<'a, Self>,
+    ) -> impl ExactSizeIterator<Item = Val<'a, Self::ElemT>>
+    where
+        Self: Sized + 'a,
+    {
+        let cx = val.cx();
+        (0..Self::size()).map(move |index| {
+            let element = cx.extract_elem::<Self::ElemT, Self>(&val, index);
+            unsafe { Val::new(cx, element.as_basic_value_enum()) }
+        })
+    }
+    fn insert_element<'a>(
+        val: Val<'a, Self>,
+        element: Val<'a, Self::ElemT>,
+        index: usize,
+    ) -> Val<'a, Self>
+    where
+        Self: SizedTy,
+    {
+        let index = u32::try_from(index).expect("u32 overflowed usize");
+        val.cx().insert_elem(val, element, index)
     }
     fn element_ref<'a, 'b, Space: Addrspace>(
         ptr: Val<'a, R<&'b Self, Space>>,
@@ -99,13 +142,7 @@ pub unsafe trait FixedSizeContiguousUniformTy<const SIZE: usize>:
     where
         Self: Sized,
     {
-        let cx = values[0].cx();
-        let mut val = unsafe { Val::new_undef(cx) };
-        for (index, scalar) in values.into_iter().enumerate() {
-            let index = u32::try_from(index).expect("u32 overflowed usize");
-            val = cx.insert_elem::<Self::ElemT, Self>(val, scalar, index);
-        }
-        val
+        Self::try_from_elements(values.into_iter()).expect("Size should have matched")
     }
 
     fn elements_ref<'a, 'b, Space: Addrspace>(

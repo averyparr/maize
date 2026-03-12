@@ -1,4 +1,4 @@
-pub mod bf16_tile;
+pub mod gemm;
 pub mod gmem;
 pub mod group;
 mod lane_to_coord;
@@ -16,9 +16,10 @@ use rtc_types::{
         types::{ArrayType, BasicType},
         values::{AnyValueEnum, ArrayValue},
     },
-    intrinsics::cuda::ldsm::{call_ldsm_x1, call_ldsm_x4},
+    intrinsics::cuda::ldsm::call_ldsm_x4,
     ty::{
-        AlignedTy, AnyTy, BF16, R, SizedTy, StructReflectTy, Ty, U32, U128, V, ValTy, cuda::Shared,
+        Addrspace, AlignedTy, AnyTy, BF16, ContiguousUniformTy, M, P, R, SizedTy, StructReflectTy,
+        Ty, U32, V, ValTy, cuda::Shared,
     },
     val::Val,
 };
@@ -91,7 +92,7 @@ pub trait ConstSizeTileTy: TileTy {
     const COLS: u32;
 }
 pub trait WarpFragTileTy: ConstSizeTileTy {
-    type FragT: SizedTy;
+    type FragT: ContiguousUniformTy<ElemT = Self::ElemT>;
 }
 
 pub struct BF16_16x16;
@@ -120,44 +121,110 @@ impl StructReflectTy for Tile<BF16_16x16> {
     type RealStruct = [u16; 16 * 16];
 }
 
-pub trait WarpSmemLoadTileTy: WarpFragTileTy + Sized {
-    fn collective_load<'a, 'b>(
-        ptr: &mut Val<'a, R<&'b Tile<Self>, Shared>>,
-        lane: Val<'a, U32>,
-    ) -> Val<'a, Self::FragT>;
-}
+pub trait WarpCollectiveTileTy: WarpFragTileTy + Sized {
+    type LoadElement: ContiguousUniformTy<ElemT = Self::ElemT> + SizedTy + Copy;
+    type StoreElement: ContiguousUniformTy<ElemT = Self::ElemT> + SizedTy + Copy;
 
-impl WarpSmemLoadTileTy for BF16_16x16 {
-    fn collective_load<'a, 'b>(
-        ptr: &mut Val<'a, R<&'b Tile<Self>, Shared>>,
+    fn row_col_for_load(lane: Val<'_, U32>) -> impl Iterator<Item = (Val<'_, U32>, Val<'_, U32>)>;
+    fn row_col_for_store(lane: Val<'_, U32>) -> impl Iterator<Item = (Val<'_, U32>, Val<'_, U32>)>;
+    fn row_col_to_offset<'a>(row: Val<'a, U32>, col: Val<'a, U32>) -> Val<'a, U32> {
+        Self::COLS * row + col
+    }
+
+    unsafe fn raw_collective_load<Space: Addrspace>(
+        val: Val<'_, P<*const Self::LoadElement, Space>>,
+    ) -> Val<'_, Self::LoadElement>;
+    unsafe fn raw_collective_store<Space: Addrspace>(
+        ptr: Val<'_, P<*mut Self::StoreElement, Space>>,
+        val: Val<'_, Self::StoreElement>,
+    );
+
+    fn collective_load<'a, 'b, Space: Addrspace>(
+        ptr: &Val<'a, R<&'b Tile<Self>, Space>>,
         lane: Val<'a, U32>,
     ) -> Val<'a, Self::FragT> {
-        let tile_ptr = ptr.as_ptr();
-        let elem_ptr = tile_ptr.ptr_cast::<U128>();
-        let row_offset_in_subtile = lane % 8;
-        let subtile_id = lane / 8;
-        let offset = row_offset_in_subtile + subtile_id * 8;
-        let offset_elem_ptr = unsafe { elem_ptr.add(offset) };
+        let loaded_vals = Self::row_col_for_load(lane)
+            .map(|(row, col)| {
+                let raw_ptr = ptr.as_ptr().ptr_cast::<Self::ElemT>();
+                let offset = Self::row_col_to_offset(row, col);
+                let raw_ptr = unsafe { raw_ptr.add(offset) };
+                let raw_ptr = raw_ptr.ptr_cast::<Self::LoadElement>();
+                unsafe { Self::raw_collective_load(raw_ptr) }
+            })
+            .map(|full| {
+                let iter = 0..Self::LoadElement::size();
+                iter.map(move |i| Self::LoadElement::element(full, i as _))
+            })
+            .flatten()
+            .collect::<Vec<_>>();
 
-        let i32_ret = unsafe { call_ldsm_x4(offset_elem_ptr) };
-        unsafe { i32_ret.bitcast() }
+        Self::FragT::try_from_elements(loaded_vals.into_iter())
+            .expect("Incorreect number of values yielded!")
+    }
+    fn collective_store<'a, 'b, Space: Addrspace>(
+        ptr: Val<'a, M<&'b mut Tile<Self>, Space>>,
+        val: Val<'a, Self::FragT>,
+        lane: Val<'a, U32>,
+    ) {
+        let mut elem_iter = Self::FragT::into_element_iter(val);
+        for (row, col) in Self::row_col_for_store(lane) {
+            let raw_ptr = ptr.as_ptr_mut().ptr_cast::<Self::ElemT>();
+            let offset = Self::row_col_to_offset(row, col);
+            let raw_ptr = unsafe { raw_ptr.add(offset) };
+            let raw_ptr = raw_ptr.ptr_cast::<Self::StoreElement>();
+            let elements_for_store = (0..Self::StoreElement::size())
+                .map(|_| elem_iter.next().expect("Size should match!"));
+            let val = Self::StoreElement::try_from_elements(elements_for_store)
+                .expect("This iterator has the correct size");
+            unsafe { Self::raw_collective_store(raw_ptr, val) };
+        }
     }
 }
 
-impl WarpSmemLoadTileTy for BF16_8x8 {
-    fn collective_load<'a, 'b>(
-        ptr: &mut Val<'a, R<&'b Tile<Self>, Shared>>,
-        lane: Val<'a, U32>,
-    ) -> Val<'a, Self::FragT> {
-        let tile_ptr = ptr.as_ptr();
-        let elem_ptr = tile_ptr.ptr_cast::<U128>();
-        let row_offset_in_subtile = lane % 8;
-        let subtile_id = lane / 8;
-        let offset = row_offset_in_subtile + subtile_id * 8;
-        let offset_elem_ptr = unsafe { elem_ptr.add(offset) };
+impl WarpCollectiveTileTy for BF16_16x16 {
+    type LoadElement = V<BF16, 8>;
+    type StoreElement = V<BF16, 2>;
 
-        let i32_ret = unsafe { call_ldsm_x1(offset_elem_ptr) };
-        unsafe { i32_ret.bitcast() }
+    fn row_col_for_load(lane: Val<'_, U32>) -> impl Iterator<Item = (Val<'_, U32>, Val<'_, U32>)> {
+        let subtile_idx = lane / 8;
+        let st_row = subtile_idx % 2;
+        let st_col = subtile_idx / 2;
+        let row = lane % 8 + 8 * st_row;
+        let col = 8 * st_col;
+        [(row, col)].into_iter()
+    }
+
+    fn row_col_for_store(lane: Val<'_, U32>) -> impl Iterator<Item = (Val<'_, U32>, Val<'_, U32>)> {
+        let subtile_row = lane / 4;
+        let subtile_col = (lane % 4) * 2;
+        [
+            (subtile_row + 0, subtile_col + 0),
+            (subtile_row + 8, subtile_col + 0),
+            (subtile_row + 0, subtile_col + 8),
+            (subtile_row + 8, subtile_col + 8),
+        ]
+        .into_iter()
+    }
+    fn row_col_to_offset<'a>(row: Val<'a, U32>, col: Val<'a, U32>) -> Val<'a, U32> {
+        let st_row = row % 8;
+        let st_col = col % 8;
+        let col_half = col / 8;
+        let row_half = row / 8;
+        ((col_half * 2 + row_half) * 8 + st_row * 8) + st_col
+    }
+
+    unsafe fn raw_collective_load<Space: Addrspace>(
+        val: Val<'_, P<*const Self::LoadElement, Space>>,
+    ) -> Val<'_, Self::LoadElement> {
+        assert_eq!(Space::AS_U16, Shared::AS_U16);
+        unsafe { call_ldsm_x4(val.addrspace_cast().ptr_cast()).bitcast() }
+    }
+
+    unsafe fn raw_collective_store<Space: Addrspace>(
+        ptr: Val<'_, P<*mut Self::StoreElement, Space>>,
+        val: Val<'_, Self::StoreElement>,
+    ) {
+        unsafe { ptr.write(val) };
     }
 }
 

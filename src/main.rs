@@ -1,20 +1,18 @@
 use rtc_tile::{
-    BF16_16x16, Tile, TilePair, WarpSmemLoadTileTy,
+    BF16_16x16, Tile, TilePair,
+    gemm::{KTile, sm80_gemm_smem_multibuffer},
     gmem::Matrix,
-    group::{by_block::BlockY, warp::Warp},
-    mma::run_test_sync_mma,
+    group::{
+        by_block::{BlockX, BlockY},
+        warp::Warp,
+    },
+    mma::{run_test_sync_mma, sm80_derived::Sm80MmaBf16F32_16x16x16},
 };
 use rtc_types::{
     codegen::{Func, loops::Looper, new_ptx_kernel, target_cpu::cuda::SM, typed_func::FnCodegen},
     inkwell::OptimizationLevel,
-    intrinsics::cuda::cp_async::{CpAsyncPipeline, CpAsyncTicket, CpAsyncToken},
-    kernel_assert, struct_reflect,
-    ty::{
-        Addrspace, ContiguousUniformTy, DereferencableTy, M, MutTy, RefTy, UniformTy, ValTy,
-        cuda::{Global, Shared},
-        raw::*,
-    },
-    val::{S, Val},
+    struct_reflect,
+    ty::{M, cuda::Global, raw::*},
 };
 
 type MMA = rtc_tile::mma::sm80::Sm80MmaBf16F32_16x8x16;
@@ -30,36 +28,6 @@ struct_reflect!(
 
 type TileT = BF16_16x16;
 
-pub struct Pipeline<'a, 'b, Resource, Space> {
-    depth: u32,
-    res_index: Val<'a, S<U32>>,
-    resource: Val<'a, M<&'b mut Resource, Space>>,
-}
-
-impl<'a, 'b, ElemT, ArrayT, Space: Addrspace> Pipeline<'a, 'b, ArrayT, Space>
-where
-    ArrayT: ContiguousUniformTy<ElemT = ElemT> + 'static,
-    ElemT: 'static,
-{
-    pub fn resource_at<'c>(&'c self, index: Val<'a, U32>) -> Val<'a, R<&'c ElemT, Space>> {
-        ArrayT::runtime_element_ref(self.resource.reborrow(), index)
-    }
-    pub fn resources_at_mut<'c>(
-        &'c mut self,
-        index: Val<'a, U32>,
-    ) -> Val<'a, M<&'c mut ElemT, Space>> {
-        ArrayT::runtime_element_mut(self.resource.reborrow_mut(), index)
-    }
-
-    pub fn new(depth: u32, resource: Val<'a, M<&'b mut ArrayT, Space>>) -> Self {
-        Self {
-            depth,
-            res_index: resource.cx().constant_from(0u32).with_storage(),
-            resource: resource,
-        }
-    }
-}
-
 pub fn test_inner() {
     let kernel = new_ptx_kernel::<(
         M<&mut BF16, Global>,
@@ -68,98 +36,57 @@ pub fn test_inner() {
         M<&mut BF16, Global>,
         U32,
         U32,
-        F32,
-        F32,
-        F32,
-        M<&mut F32, Global>,
     )>()
     .with_launch_bounds_2d((1, 128), None, None);
-    const PIPE: u32 = 3;
-    let pipe_shared = kernel
+    const PIPE: u32 = 4;
+    let mut pipe_shared = kernel
         .intrinsics()
         .alloc_aligned_shared::<[TilePair<Tile<TileT>, Tile<TileT>>; PIPE as _]>(16);
     kernel.use_fast_math();
-    let (amat, arows, acols, bmat, brows, bcols, per_row, per_col, stored_every_loop, mut to_store) =
-        kernel.get_args();
-    let mut amat = Matrix::new(amat, arows.const_like(4096), acols.const_like(4096));
-    let mut bmat = Matrix::new(bmat, brows.const_like(4096), bcols.const_like(4096));
+    let (amat, arows, acols, bmat, brows, bcols) = kernel.get_args();
+    let amat = Matrix::new(amat, arows.const_like(4096), acols.const_like(4096));
+    let bmat = Matrix::new(bmat, brows.const_like(4096), bcols.const_like(4096));
 
-    let group = BlockY(kernel.intrinsics());
-    let warp = Warp(kernel.intrinsics());
+    let a_panel_group = BlockX::new(kernel.cx());
+    let b_panel_group = BlockY::new(kernel.cx());
+    let warp = Warp::new(kernel.cx());
 
-    let cp_async = kernel.intrinsics().cp_async();
+    let trap = || kernel.intrinsics().trap();
 
-    let (a_panels, a_epilogue) = amat.collective_aligned_row_panel_iter::<16>(group);
-    let (b_panels, b_epilogue) = bmat.collective_aligned_row_panel_iter::<16>(group);
+    let (a_panels, _a_epilogue) = amat.collective_aligned_row_panel_iter::<16>(a_panel_group);
+    let (b_panels, _b_epilogue) = bmat.collective_aligned_col_panel_iter::<16>(b_panel_group);
 
-    let mut pipe = CpAsyncPipeline::new(PIPE, pipe_shared);
-
-    let lane = kernel.intrinsics().sregs().laneid();
-    let mut zipped_panels = a_panels.zip(b_panels);
-
-    fn check_nonzero_product(
-        smem: Val<'_, R<&TilePair<Tile<TileT>, Tile<TileT>>, Shared>>,
-        lane: Val<'_, U32>,
-    ) {
-        let smem_a = &mut smem.accessor().a;
-        let smem_b = &mut smem.accessor().b;
-        let ra = TileT::collective_load(smem_a, lane);
-        let rb = TileT::collective_load(smem_b, lane);
-        let rc = (ra * rb).sum().cast::<F32>();
-        kernel_assert!(rc.ne(rc.zero()));
-    }
-
-    let pipe = zipped_panels.on_first(|(mut a_panel, mut b_panel)| {
-        let a_tiles = a_panel.into_gmem_tiles::<16>();
-        let b_tiles = b_panel.into_gmem_tiles::<16>();
-        let mut tiles = a_tiles.zip(b_tiles);
-        pipe.prime_with(tiles, |token, (gmem_a, gmem_b), mut smem| {
-            let smem_a = smem.accessor_mut().a;
-            gmem_a.collective_cp_async(&token, smem_a, warp, 16, false);
-            let smem_b = smem.accessor_mut().b;
-            gmem_b.collective_cp_async(&token, smem_b, warp, 16, false);
-        })
-        .at_steady_state(|smem| check_nonzero_product(smem, lane))
-        .finalize(|smem| check_nonzero_product(smem, lane))
+    a_panels.for_every_value(|a_panel| {
+        let mut smem = pipe_shared.reborrow_mut();
+        b_panels.for_every_value(|b_panel| {
+            let ret = sm80_gemm_smem_multibuffer(
+                &Sm80MmaBf16F32_16x16x16,
+                KTile::<16>,
+                a_panel,
+                b_panel,
+                smem.reborrow_mut(),
+                warp,
+                16,
+            );
+            (ret.sum().eq_const(0.0)).branch(trap);
+        });
     });
-
-    let t = pipe;
-
-    // let (a_panels, b_panels) = zipped_panels.unzip();
-    // a_panels.for_every_value(|mut row_panel| {
-    //     let (b_panels, b_epilogue) = bmat.collective_aligned_col_panel_iter::<16>(group);
-    //     b_panels.for_every_value(|mut col| {
-    //         let row_tiles = row_panel.gmem_tiles::<16>();
-    //         let col_tiles = col.gmem_tiles::<16>();
-    //         row_tiles
-    //             .zip(col_tiles)
-    //             .for_every_value(|(mut a_tile, mut b_tile)| {
-    //                 // let a_smem_tile = a_shared.runtime_index_mut(a_idx);
-    //                 // let a_tile_smem = cp_async.async_transaction(|token| {
-    //                 //     a_tile.collective_cp_async(token, a_smem_tile, warp, 16, false)
-    //                 // });
-    //                 // a_tile.ptr.store(per_row);
-    //                 // b_tile.ptr.store(per_col);
-    //                 // to_store.store(stored_every_loop);
-    //             });
-    //     });
-    // });
 
     #[allow(unused)]
     let print_at = |cx: &FnCodegen| {
         println!("{}", cx.print_module_to_string().to_string_lossy());
     };
 
-    let asm = kernel.finalize().compile_asm_at_opt_with_hooks(
+    let _asm = kernel.finalize().compile_asm_at_opt_with_hooks(
         &SM::SM90,
         OptimizationLevel::Aggressive,
         |_| (),
-        print_at,
-        // |_| (),
+        // print_at,
+        |_| (),
         // print_at,
     );
 
-    println!("{}", &asm[..asm.len() - 1]);
+    // println!("{}", asm);
 }
 
 pub fn test_mma() {

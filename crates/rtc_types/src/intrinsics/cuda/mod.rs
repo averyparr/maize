@@ -152,6 +152,16 @@ impl<'a> IntrinsicCodegen<'a, CUDA> {
     pub fn cp_async(self) -> CpAsyncEngine<'a> {
         CpAsyncEngine(self.0)
     }
+
+    pub fn trap(&self) {
+        let trap = self.0.declare_function::<Void, ()>("llvm.trap");
+        self.0.call_void_fn(trap, ());
+        unsafe {
+            self.0
+                .with_builder(|b| b.build_unreachable())
+                .expect("Unreachable should be buildable")
+        };
+    }
 }
 
 impl IntrinsicsLibrary for CUDA {

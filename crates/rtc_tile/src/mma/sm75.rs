@@ -4,7 +4,7 @@ use rtc_types::{
     val::Val,
 };
 
-use crate::mma::{SyncMMAOp, WarpRetF16_16x8, WarpRetF32_16x8};
+use crate::mma::{IntrinsicSyncMMAOp, WarpRetF16_16x8, WarpRetF32_16x8};
 
 pub struct Sm75MmaF16F16_16x8x8;
 pub struct Sm75MmaF16F32_16x8x8;
@@ -24,7 +24,7 @@ struct_reflect!(
     } => sm75_f16_f32_16x8x8
 );
 
-impl SyncMMAOp for Sm75MmaF16F16_16x8x8 {
+impl IntrinsicSyncMMAOp for Sm75MmaF16F16_16x8x8 {
     type AFrag = V<F16, 4>;
     type BFrag = V<F16, 2>;
     type CFrag = V<F16, 4>;
@@ -54,7 +54,7 @@ impl SyncMMAOp for Sm75MmaF16F16_16x8x8 {
     }
 }
 
-impl SyncMMAOp for Sm75MmaF16F32_16x8x8 {
+impl IntrinsicSyncMMAOp for Sm75MmaF16F32_16x8x8 {
     type AFrag = V<F16, 4>;
     type BFrag = V<F16, 2>;
     type CFrag = V<F32, 4>;

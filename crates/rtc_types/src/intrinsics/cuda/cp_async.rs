@@ -28,6 +28,7 @@ thread_local! {
     static CP_ASYNC_TICKETING: Cell<CpAsyncTicketing> = Cell::default();
 }
 
+#[expect(unused, reason = "I'm deciding whether this should be used at all")]
 impl<'a> CpAsyncEngine<'a> {
     fn async_transaction<T>(&self, f: impl FnOnce(CpAsyncToken) -> T) -> CpAsyncTicket<'a, T> {
         let index_in_cp_async = CP_ASYNC_TICKETING.with(|c| {
@@ -63,6 +64,7 @@ fn commit_group(cx: &FnCodegen) {
     cx.call_void_fn(cp_async_commit_group, ());
 }
 
+#[expect(unused, reason = "I'm deciding whether this should be used at all")]
 impl<T> CpAsyncTicket<'_, T> {
     fn wait(self) -> T {
         let index_to_validate = self.index_in_cp_async;
@@ -117,7 +119,7 @@ where
         Resource::runtime_element_mut(self.resource.reborrow_mut(), index)
     }
 
-    pub fn prime_with<'looper, 'loop_borrow, 'short_borrow, L, F>(
+    pub fn prime_with<L, F>(
         mut self,
         mut looper: L,
         mut f: F,
@@ -125,7 +127,6 @@ where
     where
         F: for<'l> FnMut(CpAsyncToken, L::ItemT, Val<'a, M<&mut ElemT, Shared>>),
         L: Looper<'a>,
-        ElemT: 'short_borrow,
     {
         let cx = self.res_index.cx();
         looper.on_first_n(self.depth as usize, |item| {
@@ -159,10 +160,10 @@ impl<'a, 'b, Resource, ElemT, L, CopyFunc> PrimedCpAsyncPipeline<'a, 'b, Resourc
 where
     Resource: ContiguousUniformTy<ElemT = ElemT>,
     L: Looper<'a>,
-    CopyFunc: for<'l> FnMut(CpAsyncToken, L::ItemT, Val<'a, M<&mut ElemT, Shared>>),
+    CopyFunc: FnMut(CpAsyncToken, L::ItemT, Val<'a, M<&mut ElemT, Shared>>),
     ElemT: ValTy,
 {
-    pub fn at_steady_state<F>(mut self, mut f: F) -> DepletedCpAsyncPipeline<'a, 'b, Resource>
+    pub fn at_steady_state<F>(mut self, f: &mut F) -> DepletedCpAsyncPipeline<'a, 'b, Resource>
     where
         F: FnMut(Val<'a, R<&ElemT, Shared>>),
     {
@@ -190,7 +191,7 @@ where
     Resource: ContiguousUniformTy<ElemT = ElemT>,
     ElemT: ValTy,
 {
-    pub fn finalize<F>(mut self, mut f: F) -> CpAsyncPipeline<'a, 'b, Resource>
+    pub fn finalize<F>(mut self, f: &mut F) -> CpAsyncPipeline<'a, 'b, Resource>
     where
         F: FnMut(Val<'a, R<&ElemT, Shared>>),
     {
@@ -206,5 +207,47 @@ where
                 .store((index + 1) % self.inner.depth);
         }
         self.inner
+    }
+
+    pub fn continue_with<L, CopyFunc, ValueFunc, RolloverFunc>(
+        &mut self,
+        mut looper: L,
+        mut new_cpy_func: CopyFunc,
+        mut per_value: ValueFunc,
+        mut on_rollover: RolloverFunc,
+    ) where
+        CopyFunc: FnMut(CpAsyncToken, L::ItemT, Val<'a, M<&mut ElemT, Shared>>),
+        ValueFunc: FnMut(Val<'a, R<&ElemT, Shared>>),
+        RolloverFunc: FnMut(),
+        L: Looper<'a>,
+    {
+        let n = self.inner.res_index.as_mut().load();
+        let cx = self.inner.res_index.cx();
+        let max_outstanding = self.inner.depth - 1;
+        looper.on_first_n_runtime(n, |item| {
+            let index = self.inner.res_index.as_mut().load();
+            wait_group(cx, max_outstanding);
+            let resource = self.inner.resources_at_mut(index);
+            per_value(resource.reborrow());
+            new_cpy_func(CpAsyncToken(()), item, resource);
+            commit_group(&cx);
+            self.inner
+                .res_index
+                .as_mut()
+                .store((index + 1) % self.inner.depth);
+        });
+        on_rollover();
+        looper.for_every_value(|item| {
+            let index = self.inner.res_index.as_mut().load();
+            wait_group(&cx, max_outstanding);
+            let resource = self.inner.resources_at_mut(index);
+            per_value(resource.reborrow());
+            new_cpy_func(CpAsyncToken(()), item, resource);
+            commit_group(&cx);
+            self.inner
+                .res_index
+                .as_mut()
+                .store((index + 1) % self.inner.depth);
+        });
     }
 }

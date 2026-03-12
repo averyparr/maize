@@ -40,17 +40,25 @@ macro_rules! struct_reflect {
                 }
             }
         }
-        impl$(<$($generics: $crate::ty::StructReflectTy $( + $bounds )?),*>)? $crate::ty::AlignedTy for $name$(<$($generics),*>)? {
-            const ALIGN: u32 = ::std::mem::align_of::<<Self as $crate::ty::StructReflectTy>::RealStruct>() as _;
+        impl$(<$($generics: $crate::ty::AlignedTy + $crate::ty::ValTy $( + $bounds )?),*>)? $crate::ty::AlignedTy for $name$(<$($generics),*>)? {
+            const ALIGN: u32 = $crate::ty::util::variadic_max([
+                $(
+                    <$field_type>::ALIGN,
+                )*
+            ]);
         }
 
-        impl$(<$($generics: $crate::ty::StructReflectTy $( + $bounds )?),*>)? $crate::ty::SizedTy for $name$(<$($generics),*>)? {
-            const SIZE: u32 = ::std::mem::size_of::<<Self as $crate::ty::StructReflectTy>::RealStruct>() as _;
+        impl$(<$($generics: $crate::ty::SizedTy $( + $bounds )?),*>)? $crate::ty::SizedTy for $name$(<$($generics),*>)? {
+            const SIZE: u32 = $crate::ty::util::variadic_sum([
+                $(
+                    <$field_type>::SIZE,
+                )*
+            ]);
         }
         impl$(<$($generics: $crate::ty::StructReflectTy $( + $bounds )?),*>)? $crate::ty::StructReflectTy for $name$(<$($generics),*>)? {
             type RealStruct = $mod::$realized$(<$($generics),*>)?;
         }
-        impl$(<$($generics: $crate::ty::StructReflectTy $( + $bounds )?),*>)? $crate::ty::AccessibleStructTy for $name$(<$($generics),*>)? {
+        impl$(<$($generics: $crate::ty::SizedTy $( + $bounds )?),*>)? $crate::ty::AccessibleStructTy for $name$(<$($generics),*>)? {
             type Accessor<'a> = $mod::$accessor::<'a $($(, $generics)*)?>;
             type AccessorRef<'a, 'b, Space: $crate::ty::Addrspace> = $mod::$accessor_ref<'a, 'b, Space $($(, $generics)*)?>
             where
@@ -168,7 +176,7 @@ macro_rules! struct_reflect {
                     }
                 }
             }
-            impl<'a, 'b, Space: $crate::ty::Addrspace $($(,$generics: $crate::ty::StructReflectTy $(+ $bounds)?)*)?> AccessorRef<'a, 'b, Space $($(, $generics)*)?>
+            impl<'a, 'b, Space: $crate::ty::Addrspace $($(,$generics: $crate::ty::ValTy $(+ $bounds)?)*)?> AccessorRef<'a, 'b, Space $($(, $generics)*)?>
             {
                 pub(super) fn new(val: $crate::val::Val<'a, $crate::ty::R<&'b $name$(<$($generics),*>)?, Space>>) -> Self
                 {
@@ -194,7 +202,7 @@ macro_rules! struct_reflect {
                     }
                 }
             }
-            impl<'a, 'b, Space: $crate::ty::Addrspace $($(,$generics: $crate::ty::StructReflectTy $(+ $bounds)?)*)?> AccessorMut<'a, 'b, Space $($(, $generics)*)?>
+            impl<'a, 'b, Space: $crate::ty::Addrspace $($(,$generics: $crate::ty::ValTy $(+ $bounds)?)*)?> AccessorMut<'a, 'b, Space $($(, $generics)*)?>
             {
                 pub(super) fn new(val: $crate::val::Val<'a, $crate::ty::M<&'b mut $name$(<$($generics),*>)?, Space>>) -> Self
                 {
@@ -286,7 +294,7 @@ where
     type RealStruct = &'a T::RealStruct;
 }
 
-pub trait AccessibleStructTy: StructReflectTy {
+pub trait AccessibleStructTy: SizedTy {
     type Accessor<'a>;
     type AccessorRef<'a, 'b, Space: Addrspace>
     where

@@ -13,7 +13,7 @@ use rtc_types::{
 };
 
 use crate::{
-    Tile, W, WarpSmemLoadTileTy, Window,
+    Tile, W, WarpCollectiveTileTy, Window,
     gmem::{ColPanel, RowPanel},
     group::{ConstSizeGroup, Group, NullGroup},
 };
@@ -39,7 +39,7 @@ where
         self.col_window.size(self.ptr.cx())
     }
 
-    pub fn collective_cp_async<'b, SmemTile: WarpSmemLoadTileTy<ElemT = T>, G: ConstSizeGroup>(
+    pub fn collective_cp_async<'b, SmemTile: WarpCollectiveTileTy<ElemT = T>, G: ConstSizeGroup>(
         &self,
         _: &CpAsyncToken,
         tile: Val<'a, M<&'b mut Tile<SmemTile>, Shared>>,
@@ -239,6 +239,7 @@ where
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct RowTileLooper<'a, RowWindow, ColWindow, Ptr> {
     row_window: RowWindow,
     col_window: ColWindow,
@@ -249,6 +250,7 @@ pub struct RowTileLooper<'a, RowWindow, ColWindow, Ptr> {
     last_row: Val<'a, U32>,
 }
 
+#[derive(Clone, Copy)]
 pub struct ColTileLooper<'a, RowWindow, ColWindow, Ptr> {
     row_window: RowWindow,
     col_window: ColWindow,
@@ -411,6 +413,24 @@ where
     Ptr: DereferencableTy<Pointee: SizedTy>,
     ColWindow: Window<ElemT = Ptr::Pointee>,
 {
+    pub fn into_collective_gmem_tiles<const N: u32>(
+        self,
+        group: impl Group + 'a,
+    ) -> RowTileLooper<'a, W<Ptr::Pointee, N>, ColWindow, Ptr> {
+        let (index, size) = group.index_size();
+        let rows_per_iter = size * N;
+        let init_row = index * N;
+        RowTileLooper {
+            row_window: W::new(),
+            col_window: self.col_window,
+            ptr: self.ptr,
+            init_row,
+            rows_per_iter,
+            stride_per_row: self.stride_per_row,
+            last_row: self.num_rows,
+        }
+    }
+
     pub fn collective_gmem_tiles<const N: u32>(
         &'b mut self,
         group: impl Group + 'a,
@@ -433,6 +453,13 @@ where
         &'b mut self,
     ) -> RowTileLooper<'a, W<Ptr::Pointee, N>, ColWindow, Ptr::Parametrized<'b>> {
         self.collective_gmem_tiles(NullGroup(self.ptr.cx()))
+    }
+
+    pub fn into_gmem_tiles<const N: u32>(
+        self,
+    ) -> RowTileLooper<'a, W<Ptr::Pointee, N>, ColWindow, Ptr> {
+        let cx = self.ptr.cx();
+        self.into_collective_gmem_tiles(NullGroup(cx))
     }
 }
 

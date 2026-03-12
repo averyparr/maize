@@ -5,7 +5,7 @@ use rtc_types::{
     val::Val,
 };
 
-use crate::mma::{SyncMMAOp, WarpRetF16_16x8, WarpRetF32_16x8};
+use crate::mma::{IntrinsicSyncMMAOp, WarpRetF16_16x8, WarpRetF32_16x8};
 
 #[deprecated(
     note = "e4m3×e4m3→f32 m16n8k16 MMA not supported: LLVM NVPTX backend lacks instruction selection for this intrinsic"
@@ -54,7 +54,7 @@ impl F8Matmul for (E5M2, E5M2) {
     deprecated,
     reason = "This is necessary to make them work in the future"
 )]
-impl<F8A, F8B> SyncMMAOp for Sm89MmaF8F32_16x8x16<F8A, F8B>
+impl<F8A, F8B> IntrinsicSyncMMAOp for Sm89MmaF8F32_16x8x16<F8A, F8B>
 where
     (F8A, F8B): F8Matmul,
     F8A: VectorizableTy + Copy,
@@ -85,7 +85,7 @@ where
     }
 }
 
-impl<F8A, F8B> SyncMMAOp for Sm89MmaF8F32_16x8x32<F8A, F8B>
+impl<F8A, F8B> IntrinsicSyncMMAOp for Sm89MmaF8F32_16x8x32<F8A, F8B>
 where
     (F8A, F8B): F8Matmul,
     F8A: VectorizableTy + Copy,
@@ -120,7 +120,7 @@ where
     deprecated,
     reason = "This is necessary to make them work in the future"
 )]
-impl<F8A, F8B> SyncMMAOp for Sm89MmaF8F16_16x8x16<F8A, F8B>
+impl<F8A, F8B> IntrinsicSyncMMAOp for Sm89MmaF8F16_16x8x16<F8A, F8B>
 where
     (F8A, F8B): F8Matmul,
     F8A: VectorizableTy + Copy,
@@ -157,7 +157,7 @@ where
     }
 }
 
-impl<F8A, F8B> SyncMMAOp for Sm89MmaF8F16_16x8x32<F8A, F8B>
+impl<F8A, F8B> IntrinsicSyncMMAOp for Sm89MmaF8F16_16x8x32<F8A, F8B>
 where
     (F8A, F8B): F8Matmul,
     F8A: VectorizableTy + Copy,

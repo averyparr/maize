@@ -73,6 +73,41 @@ impl<A, B> ZippedLooper<A, B> {
     }
 }
 
+pub struct RepeatLoop<T> {
+    val: T,
+}
+
+impl<'ctx, T: TransformLooper<'ctx> + Copy> TransformLooper<'ctx> for RepeatLoop<T> {
+    type DecisionItemT = U32;
+    type ItemT = T;
+
+    fn cx(&self) -> &'ctx FnCodegen {
+        self.val.cx()
+    }
+
+    fn init_decision(&self) -> Val<'ctx, Self::DecisionItemT> {
+        self.cx().constant(0u32)
+    }
+
+    fn decision_fn(&self, _: Val<'ctx, Self::DecisionItemT>) -> Val<'ctx, Bool> {
+        self.cx().constant(true)
+    }
+
+    fn transform(&self, _: Val<'ctx, Self::DecisionItemT>) -> Self::ItemT {
+        self.val
+    }
+
+    fn update_fn<'a>(&self, _: Val<'ctx, Self::DecisionItemT>) -> Val<'ctx, Self::DecisionItemT> {
+        self.init_decision()
+    }
+
+    fn step_n(&mut self, _: usize) {}
+}
+
+pub fn repeat_value<T>(val: T) -> RepeatLoop<T> {
+    RepeatLoop { val }
+}
+
 impl<'ctx, A: TransformLooper<'ctx>, B: TransformLooper<'ctx>> TransformLooper<'ctx>
     for ZippedLooper<A, B>
 where
@@ -135,6 +170,44 @@ pub trait Looper<'ctx>: TransformLooper<'ctx> {
         self.step_n(1);
         ret
     }
+    fn on_first_n_runtime<F>(&mut self, n: Val<'_, U32>, mut f: F)
+    where
+        F: FnMut(Self::ItemT),
+    {
+        let mut n_alloca = n.zero().with_storage();
+        let mut val_alloca = self.init_decision().with_storage();
+        let cx = val_alloca.cx();
+        let init_mut = val_alloca.as_mut();
+        let n_mut = n_alloca.as_mut();
+
+        let header_block = cx.ctx().append_basic_block(cx.func(), "loop_header");
+        let _jmp_header =
+            unsafe { cx.with_builder(|b| b.build_unconditional_branch(header_block)) }
+                .expect("pre -> header uni branch should work");
+        cx.set_bb(header_block);
+        let decision = self.decision_fn(init_mut.load()) & n_mut.load().lt(n);
+
+        let loop_block = cx.ctx().append_basic_block(cx.func(), "loop_block");
+        let done_block = cx.ctx().append_basic_block(cx.func(), "done_block");
+        let _jne = unsafe {
+            cx.with_builder(|b| {
+                b.build_conditional_branch(decision.ll_typed(), loop_block, done_block)
+            })
+        }
+        .expect("conditional jump should work");
+
+        cx.set_bb(loop_block);
+
+        let ret = self.transform(init_mut.load());
+        f(ret);
+
+        let curr_val = val_alloca.as_ref().load();
+        val_alloca.as_mut().store(self.update_fn(curr_val));
+
+        let _jmp = unsafe { cx.with_builder(|b| b.build_unconditional_branch(header_block)) }
+            .expect("uni br should succeed");
+        cx.set_bb(done_block);
+    }
     fn on_first_n<F>(&mut self, n: usize, mut f: F)
     where
         F: FnMut(Self::ItemT),
@@ -143,7 +216,7 @@ pub trait Looper<'ctx>: TransformLooper<'ctx> {
         let cx = decision_val.cx();
         let final_bb = cx.ctx().append_basic_block(cx.func(), "early_skip");
 
-        for i in 0..n {
+        for _ in 0..n {
             let then_block = cx.ctx().append_basic_block(cx.func(), "first_n_block");
             let comparison = self.decision_fn(decision_val).ll_typed();
             let _ins = unsafe {

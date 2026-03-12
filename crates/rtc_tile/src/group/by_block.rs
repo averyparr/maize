@@ -1,4 +1,5 @@
 use rtc_types::{
+    codegen::typed_func::FnCodegen,
     intrinsics::{IntrinsicCodegen, IntrinsicsLibrary, cuda::CUDA},
     ty::U32,
     val::Val,
@@ -7,11 +8,46 @@ use rtc_types::{
 use crate::group::{CTA, Group};
 
 #[derive(Clone, Copy)]
-pub struct BlockX<'a>(pub IntrinsicCodegen<'a, CUDA>);
+pub struct BlockX<'a>(IntrinsicCodegen<'a, CUDA>);
 #[derive(Clone, Copy)]
-pub struct BlockY<'a>(pub IntrinsicCodegen<'a, CUDA>);
+pub struct BlockY<'a>(IntrinsicCodegen<'a, CUDA>);
 #[derive(Clone, Copy)]
-pub struct BlockZ<'a>(pub IntrinsicCodegen<'a, CUDA>);
+pub struct BlockZ<'a>(IntrinsicCodegen<'a, CUDA>);
+
+impl<'a> BlockX<'a> {
+    pub fn new(cx: &'a FnCodegen) -> Self {
+        Self(IntrinsicCodegen::new(cx))
+    }
+    pub fn block_dim(&self) -> Val<'a, U32> {
+        self.index_size().0
+    }
+    pub fn grid_dim(&self) -> Val<'a, U32> {
+        self.index_size().1
+    }
+}
+impl<'a> BlockY<'a> {
+    pub fn new(cx: &'a FnCodegen) -> Self {
+        Self(IntrinsicCodegen::new(cx))
+    }
+    pub fn block_dim(&self) -> Val<'a, U32> {
+        self.index_size().0
+    }
+    pub fn grid_dim(&self) -> Val<'a, U32> {
+        self.index_size().1
+    }
+}
+impl<'a> BlockZ<'a> {
+    pub fn new(cx: &'a FnCodegen) -> Self {
+        Self(IntrinsicCodegen::new(cx))
+    }
+    pub fn block_dim(&self) -> Val<'a, U32> {
+        self.index_size().0
+    }
+    pub fn grid_dim(&self) -> Val<'a, U32> {
+        self.index_size().1
+    }
+}
+
 impl<'ctx> Group for BlockX<'ctx> {
     type Scope = CTA;
     fn index_size<'a>(&self) -> (Val<'a, U32>, Val<'a, U32>)

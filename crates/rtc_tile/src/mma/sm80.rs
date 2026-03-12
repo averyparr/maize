@@ -3,7 +3,7 @@ use rtc_types::{
     val::Val,
 };
 
-use crate::mma::{SyncMMAOp, WarpRetF16_16x8, WarpRetF32_16x8, WarpRetF64_8x8};
+use crate::mma::{IntrinsicSyncMMAOp, WarpRetF16_16x8, WarpRetF32_16x8, WarpRetF64_8x8};
 
 pub struct Sm80MmaF16F16_16x8x16;
 pub struct Sm80MmaF16F32_16x8x16;
@@ -13,7 +13,7 @@ pub struct Sm80MmaTf32F32_16x8x4;
 pub struct Sm80MmaTf32F32_16x8x8;
 pub struct SM80MmaF64F64_8x8x4;
 
-impl SyncMMAOp for Sm80MmaF16F16_16x8x16 {
+impl IntrinsicSyncMMAOp for Sm80MmaF16F16_16x8x16 {
     type AFrag = V<F16, 8>;
     type BFrag = V<F16, 4>;
     type CFrag = V<F16, 4>;
@@ -58,7 +58,7 @@ impl SyncMMAOp for Sm80MmaF16F16_16x8x16 {
     }
 }
 
-impl SyncMMAOp for Sm80MmaF16F32_16x8x16 {
+impl IntrinsicSyncMMAOp for Sm80MmaF16F32_16x8x16 {
     type AFrag = V<F16, 8>;
     type BFrag = V<F16, 4>;
     type CFrag = V<F32, 4>;
@@ -107,7 +107,7 @@ impl SyncMMAOp for Sm80MmaF16F32_16x8x16 {
     }
 }
 
-impl SyncMMAOp for Sm80MmaBf16F32_16x8x8 {
+impl IntrinsicSyncMMAOp for Sm80MmaBf16F32_16x8x8 {
     type AFrag = V<BF16, 4>;
     type BFrag = V<BF16, 2>;
     type CFrag = V<F32, 4>;
@@ -133,7 +133,7 @@ impl SyncMMAOp for Sm80MmaBf16F32_16x8x8 {
     }
 }
 
-impl SyncMMAOp for Sm80MmaBf16F32_16x8x16 {
+impl IntrinsicSyncMMAOp for Sm80MmaBf16F32_16x8x16 {
     type AFrag = V<BF16, 8>;
     type BFrag = V<BF16, 4>;
     type CFrag = V<F32, 4>;
@@ -159,7 +159,7 @@ impl SyncMMAOp for Sm80MmaBf16F32_16x8x16 {
     }
 }
 
-impl SyncMMAOp for Sm80MmaTf32F32_16x8x4 {
+impl IntrinsicSyncMMAOp for Sm80MmaTf32F32_16x8x4 {
     type AFrag = V<F32, 2>;
     type BFrag = V<F32, 1>;
     type CFrag = V<F32, 4>;
@@ -186,7 +186,7 @@ impl SyncMMAOp for Sm80MmaTf32F32_16x8x4 {
     }
 }
 
-impl SyncMMAOp for Sm80MmaTf32F32_16x8x8 {
+impl IntrinsicSyncMMAOp for Sm80MmaTf32F32_16x8x8 {
     type AFrag = V<F32, 4>;
     type BFrag = V<F32, 2>;
     type CFrag = V<F32, 4>;
@@ -213,7 +213,7 @@ impl SyncMMAOp for Sm80MmaTf32F32_16x8x8 {
     }
 }
 
-impl SyncMMAOp for SM80MmaF64F64_8x8x4 {
+impl IntrinsicSyncMMAOp for SM80MmaF64F64_8x8x4 {
     type AFrag = V<F64, 1>;
     type BFrag = V<F64, 1>;
     type CFrag = V<F64, 2>;

@@ -16,7 +16,7 @@ impl GroupScope for CTA {}
 impl GroupScope for Warp {}
 impl GroupScope for Thread {}
 
-pub trait Group {
+pub trait Group: Copy {
     type Scope: GroupScope;
 
     fn index_size<'a>(&self) -> (Val<'a, U32>, Val<'a, U32>)
@@ -28,6 +28,7 @@ pub trait ConstSizeGroup: Group {
     fn const_size(&self) -> u32;
 }
 
+#[derive(Clone, Copy)]
 pub struct NullGroup<'a>(pub &'a FnCodegen);
 
 impl Group for NullGroup<'_> {
