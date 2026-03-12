@@ -69,7 +69,7 @@ where
 }
 
 pub use args::IntoFuncArgs;
-pub use arithmetic::{BitMathTy, IntMathTy, MathTy, MathVariant};
+pub use arithmetic::{BitMathTy, FastMathFlags, IntMathTy, MathTy, MathVariant};
 pub use bitcast::BitcastableTy;
 pub use contiguous::{
     ContiguousUniformTy, FixedSizeContiguousUniformTy, HowToExtractElements, UniformTy,

@@ -1,4 +1,10 @@
-use rtc_tile::{
+use maize_core::{
+    codegen::{Func, loops::Looper, new_ptx_kernel, target_cpu::cuda::SM, typed_func::FnCodegen},
+    inkwell::OptimizationLevel,
+    struct_reflect,
+    ty::{M, cuda::Global, raw::*},
+};
+use maize_tile::{
     BF16_16x16, Tile, TilePair,
     gemm::{KTile, sm80_gemm_smem_multibuffer},
     gmem::Matrix,
@@ -8,14 +14,8 @@ use rtc_tile::{
     },
     mma::{run_test_sync_mma, sm80_derived::Sm80MmaBf16F32_16x16x16},
 };
-use rtc_types::{
-    codegen::{Func, loops::Looper, new_ptx_kernel, target_cpu::cuda::SM, typed_func::FnCodegen},
-    inkwell::OptimizationLevel,
-    struct_reflect,
-    ty::{M, cuda::Global, raw::*},
-};
 
-type MMA = rtc_tile::mma::sm80::Sm80MmaBf16F32_16x8x16;
+type MMA = maize_tile::mma::sm80::Sm80MmaBf16F32_16x8x16;
 
 struct_reflect!(
     #[repr(align(16))]
@@ -77,7 +77,7 @@ pub fn test_inner() {
         println!("{}", cx.print_module_to_string().to_string_lossy());
     };
 
-    let _asm = kernel.finalize().compile_asm_at_opt_with_hooks(
+    let asm = kernel.finalize().compile_asm_at_opt_with_hooks(
         &SM::SM90,
         OptimizationLevel::Aggressive,
         |_| (),
@@ -86,7 +86,7 @@ pub fn test_inner() {
         // print_at,
     );
 
-    // println!("{}", asm);
+    println!("{}", asm);
 }
 
 pub fn test_mma() {

@@ -1,6 +1,8 @@
 use std::u32;
 
-use inkwell::values::{FastMathFlags, InstructionValue};
+use inkwell::values::InstructionValue;
+
+use crate::ty::FastMathFlags;
 
 #[derive(Clone, Copy)]
 pub struct InstructionOpt {
@@ -33,8 +35,8 @@ const ALLOW_REASSOC: u32 = 1 << 6;
 impl InstructionOpt {
     pub fn post_process_instruction(&self, ins: InstructionValue<'_>) {
         if ins.can_use_fast_math_flags() {
-            ins.set_fast_math_flags(self.float_flags)
-                .expect("Should not fail");
+            ins.set_fast_math_flags(self.float_flags.get())
+            // .expect("Should not fail");
         }
     }
     pub fn allow_approx_funcs(self) -> bool {

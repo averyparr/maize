@@ -1,4 +1,4 @@
-use maize_types::{
+use maize_core::{
     codegen::loops::Looper,
     intrinsics::cuda::cp_async::CpAsyncPipeline,
     ty::{

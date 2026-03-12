@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-rtc_tile = { path = "./crates/rtc_tile" }
-rtc_types = { path = "./crates/rtc_types" }
+maize_core = { path = "./crates/maize_core" }
+maize_tile = { path = "./crates/maize_tile" }
 
 [profile.release]
 debug = true
