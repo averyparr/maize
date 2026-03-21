@@ -16,7 +16,11 @@ use crate::{
         BinaryIntrinsic, IntrinsicCodegen, IntrinsicsLibrary, StatelessIntrinsicsLibrary,
         UnaryIntrinsic, cuda::cp_async::CpAsyncEngine,
     },
-    ty::{Addrspace, M, R, SizedTy, cuda::Shared, raw::*},
+    ty::{
+        Addrspace, M, R, SizedTy,
+        cuda::{Generic, Global, Shared},
+        raw::*,
+    },
     val::Val,
 };
 
@@ -62,10 +66,16 @@ impl CUDA {
             assertfail.add_attribute(AttributeLoc::Function, attr);
         }
 
-        let global_address_space = Some(AddressSpace::from(1));
-        let msg_ptr = cx.insert_str(msg, global_address_space, "msg");
-        let file_ptr = cx.insert_str(file, global_address_space, "file");
-        let func_ptr = cx.insert_str(func, global_address_space, "func");
+        let global_address_space = Some(AddressSpace::from(Global::AS_U16));
+        let msg_ptr = cx
+            .insert_str(msg, global_address_space, "msg")
+            .addrspace_cast::<Generic>();
+        let file_ptr = cx
+            .insert_str(file, global_address_space, "file")
+            .addrspace_cast::<Generic>();
+        let func_ptr = cx
+            .insert_str(func, global_address_space, "func")
+            .addrspace_cast::<Generic>();
         unsafe {
             cx.with_builder(|b| {
                 let _call = b

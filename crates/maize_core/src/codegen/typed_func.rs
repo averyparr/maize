@@ -201,10 +201,23 @@ impl FnCodegen {
         };
 
         let param_types = Args::produce_args(self.ctx());
+        let param_ref = if intrinsic.is_overloaded() {
+            param_types.as_ref()
+        } else {
+            &[]
+        };
         let ret = intrinsic
-            .get_declaration(self.module(), param_types.as_ref())
+            .get_declaration(self.module(), param_ref)
             .expect("Should be a function with this declaration");
-        // Do this so that we get intrinsic type checking
+        // So we're losing the safety of using our own param types
+        if param_ref.len() == 0 {
+            let true_params = ret.get_type().get_param_types();
+            assert!(
+                true_params
+                    .into_iter()
+                    .eq(param_types.as_ref().into_iter().map(|&e| e.into()))
+            );
+        }
         let should_ret = RawFunc::new(ret);
         if use_raw_name {
             self.declare_function(name)

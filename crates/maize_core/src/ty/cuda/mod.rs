@@ -1,6 +1,12 @@
 use crate::ty::Addrspace;
 
 #[derive(Clone, Copy)]
+pub struct Generic;
+impl Addrspace for Generic {
+    const AS_U16: u16 = 0;
+}
+
+#[derive(Clone, Copy)]
 pub struct Global;
 impl Addrspace for Global {
     const AS_U16: u16 = 1;
