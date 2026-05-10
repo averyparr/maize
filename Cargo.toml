@@ -6,6 +6,8 @@ edition = "2024"
 [dependencies]
 maize_core = { path = "./crates/maize_core" }
 maize_tile = { path = "./crates/maize_tile" }
+maize_py = { path = "./crates/maize_py" }
+maize_cob = { path = "./crates/maize_cob" }
 
 [profile.release]
 debug = true

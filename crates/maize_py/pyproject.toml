@@ -1,0 +1,19 @@
+[project]
+name = "maize"
+version = "0.1.0"
+description = "Exposing the `maize` library to Python"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+dependencies = []
+
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[project.optional-dependencies]
+dev = ["maturin>=1.0,<2.0"]
+
+[tool.maturin]
+features = ["pyo3/extension-module"]
+module-name = "maize._bindings"
+python-source = "python"
