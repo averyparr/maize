@@ -1,11 +1,14 @@
-use inkwell::{types::FloatType, values::BasicValue};
+use inkwell::{
+    types::FloatType,
+    values::{BasicValue, FastMathFlags},
+};
 
 use crate::{
     intrinsics::{
         UnaryIntrinsic, call_binary_intrinsic, call_unary_intrinsic,
         cuda::{Log2Approx, Log2ApproxFtz},
     },
-    ty::{BF16, F16, F32, FastMathFlags, MathTy, V, vec::VectorizableTy},
+    ty::{BF16, F16, F32, MathTy, V, vec::VectorizableTy},
     val::Val,
 };
 
@@ -112,8 +115,8 @@ impl<'a, T: TranscendentalTy> Val<'a, T> {
         // This is necessary because these intrinsics
         // are _only_ available in approx variants
         if let Some(ins) = res.ll_typed().as_basic_value_enum().as_instruction_value() {
-            ins.set_fast_math_flags(FastMathFlags::ApproxFunc())
-            // .expect("Setting approx function should not fail on a fn ret val");
+            ins.set_fast_math_flags(FastMathFlags::ApproxFunc)
+                .expect("Setting approx function should not fail on a fn ret val");
         }
         res
     }
@@ -122,8 +125,8 @@ impl<'a, T: TranscendentalTy> Val<'a, T> {
         // This is necessary because these intrinsics
         // are _only_ available in approx variants
         if let Some(ins) = res.ll_typed().as_basic_value_enum().as_instruction_value() {
-            ins.set_fast_math_flags(FastMathFlags::ApproxFunc())
-            // .expect("Setting approx function should not fail on a fn ret val");
+            ins.set_fast_math_flags(FastMathFlags::ApproxFunc)
+                .expect("Setting approx function should not fail on a fn ret val");
         }
         res
     }

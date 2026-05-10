@@ -2,6 +2,7 @@ use inkwell::builder::Builder;
 use inkwell::types::IntMathType;
 use inkwell::values::BasicValue;
 use inkwell::values::BasicValueEnum;
+use inkwell::values::FastMathFlags;
 use inkwell::values::FloatMathValue;
 use inkwell::values::InstructionValue;
 use inkwell::values::IntMathValue;
@@ -17,46 +18,6 @@ pub enum MathVariant {
     Float,
     SignedInt,
     UnsignedInt,
-}
-
-#[derive(Clone, Copy)]
-pub struct FastMathFlags(u32);
-
-#[expect(non_snake_case)]
-impl FastMathFlags {
-    pub fn NoNaNs() -> u32 {
-        1 << 0
-    }
-    pub fn NoInfs() -> u32 {
-        1 << 1
-    }
-    pub fn NoSignedZeros() -> u32 {
-        1 << 2
-    }
-    pub fn AllowReciprocal() -> u32 {
-        1 << 3
-    }
-    pub fn AllowContract() -> u32 {
-        1 << 4
-    }
-    pub fn ApproxFunc() -> u32 {
-        1 << 5
-    }
-    pub fn AllowReassoc() -> u32 {
-        1 << 6
-    }
-    pub fn all() -> Self {
-        Self((1 << 7) - 1)
-    }
-    pub fn empty() -> Self {
-        Self(0)
-    }
-    pub fn contains(&self, func: impl Fn() -> u32) -> bool {
-        (self.0 & func()) == func()
-    }
-    pub fn get(&self) -> u32 {
-        self.0
-    }
 }
 
 macro_rules! add_dispatched_binary_function {
@@ -115,18 +76,18 @@ macro_rules! add_dispatched_binary_function {
 }
 
 fn no_special_float_values(ins: InstructionValue<'_>) {
-    let flags = FastMathFlags::NoNaNs()
-        | FastMathFlags::NoInfs()
-        | FastMathFlags::NoSignedZeros()
-        | FastMathFlags::AllowContract();
+    let flags = FastMathFlags::NoNaNs
+        | FastMathFlags::NoInfs
+        | FastMathFlags::NoSignedZeros
+        | FastMathFlags::AllowContract;
     ins.set_fast_math_flags(flags)
-    // .expect("Setting fast math flags on float add should work");
+        .expect("Setting fast math flags on float add should work");
 }
 
-fn exact_div_or_rem(_ins: InstructionValue<'_>) {
+fn exact_div_or_rem(ins: InstructionValue<'_>) {
     // TODO: inkwell doesn't support this as of 0.8.0
-    // ins.set_exact_flag(true)
-    //     .expect("Called on an invalid math op")
+    ins.set_exact_flag(true)
+        .expect("Called on an invalid math op")
 }
 
 /// Safety: Implementing this trait requires that nothing is done
