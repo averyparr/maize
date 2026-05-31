@@ -10,7 +10,7 @@ pub use vec::{V, VecTy};
 
 use inkwell::{
     context::ContextRef,
-    types::{BasicType, FloatType, IntType},
+    types::{BasicType, BasicTypeEnum, FloatType, IntType},
     values::{BasicValue, FloatValue, IntValue},
 };
 
@@ -42,6 +42,25 @@ pub trait Ty {
     fn const_val(self, fn_ref: FnRef) -> Val<Self>
     where
         Self: Copy;
+    fn undef_val(fn_ref: FnRef) -> Val<Self>
+    where
+        Self: Sized,
+    {
+        let undef = match Self::raw_ty(fn_ref.ctx()).as_basic_type_enum() {
+            BasicTypeEnum::ArrayType(array_type) => array_type.get_undef().as_basic_value_enum(),
+            BasicTypeEnum::FloatType(float_type) => float_type.get_undef().as_basic_value_enum(),
+            BasicTypeEnum::IntType(int_type) => int_type.get_undef().as_basic_value_enum(),
+            BasicTypeEnum::PointerType(pointer_type) => {
+                pointer_type.get_undef().as_basic_value_enum()
+            }
+            BasicTypeEnum::StructType(struct_type) => struct_type.get_undef().as_basic_value_enum(),
+            BasicTypeEnum::VectorType(vector_type) => vector_type.get_undef().as_basic_value_enum(),
+            BasicTypeEnum::ScalableVectorType(scalable_vector_type) => {
+                scalable_vector_type.get_undef().as_basic_value_enum()
+            }
+        };
+        unsafe { Val::new(fn_ref, UntypedValue(undef)) }
+    }
     fn type_metadata(_: &FnCtx, _: &mut UntypedValue) {}
     fn type_metadata_on_function(_: &FnCtx, _: u32) {}
 }

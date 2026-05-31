@@ -17,6 +17,7 @@ use inkwell::{
     intrinsics::Intrinsic,
     passes::PassBuilderOptions,
     targets::{FileType, InitializationConfig, Target, TargetMachine, TargetTriple},
+    types::{AnyTypeEnum, BasicType},
     values::BasicValue,
 };
 
@@ -236,6 +237,7 @@ impl FnRef {
     pub fn get_intrinsic<Ret: FnRetTy, Args: FnArgs>(
         &self,
         name: &str,
+        overload_with_ret: bool,
     ) -> Result<ExternFunc<Ret, Args>, IntrinsicError> {
         let intrins = Intrinsic::find(name);
         let Some(intrins) = intrins else {
@@ -243,16 +245,42 @@ impl FnRef {
         };
         let args = Args::raw_type_sequence(self.llvm.ctx());
         let expected_type = Ret::erased_func_type(self.llvm.ctx(), &args).0;
-        let args: Vec<_> = args.into_iter().map(|e| e.0).collect();
-        let _args = if intrins.is_overloaded() {
-            args.as_slice()
+        let mut overload_sig = if overload_with_ret {
+            let ret_ty = match Ret::raw_inkwell_type(self.ctx()) {
+                AnyTypeEnum::ArrayType(array_type) => array_type.as_basic_type_enum(),
+                AnyTypeEnum::FloatType(float_type) => float_type.as_basic_type_enum(),
+                AnyTypeEnum::IntType(int_type) => int_type.as_basic_type_enum(),
+                AnyTypeEnum::PointerType(pointer_type) => pointer_type.as_basic_type_enum(),
+                AnyTypeEnum::StructType(struct_type) => struct_type.as_basic_type_enum(),
+                AnyTypeEnum::VectorType(vector_type) => vector_type.as_basic_type_enum(),
+                AnyTypeEnum::ScalableVectorType(scalable_vector_type) => {
+                    scalable_vector_type.as_basic_type_enum()
+                }
+                AnyTypeEnum::FunctionType(_) => {
+                    unreachable!("Should never have function type returned")
+                }
+                AnyTypeEnum::VoidType(_) => {
+                    unreachable!("Should never be overloaded on void type")
+                }
+            };
+            vec![ret_ty]
         } else {
+            vec![]
+        };
+        overload_sig.extend(args.into_iter().map(|e| e.0));
+        let _args = if intrins.is_overloaded() {
+            println!("Intrinsic {name} was overloaded");
+            overload_sig.as_slice()
+        } else {
+            println!("Intrinsic {name} was not overloaded");
             &[]
         };
         let Some(intrins) = intrins.get_declaration(self.llvm.module(), _args) else {
             return Err(IntrinsicError::DeclarationNotFound);
         };
+        println!("Found {intrins} for {name}");
         let intrinsic_type = intrins.get_type();
+        println!("Found intrinsic type {intrinsic_type} for {name}");
         if intrinsic_type != expected_type {
             return Err(IntrinsicError::MismatchedType(
                 intrinsic_type,

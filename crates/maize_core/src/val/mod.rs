@@ -54,6 +54,21 @@ impl<T> Val<T> {
         unsafe { ret.get_mut().as_mut_ptr().write(self) };
         ret
     }
+    pub fn bitcast<U: Ty>(self) -> Val<U>
+    where
+        T: Ty,
+    {
+        let b = unsafe { self.fn_ref().curr_bb_builder() };
+        let raw_out = b
+            .build_bit_cast(self.1.0, U::raw_ty(self.fn_ref().ctx()), "bitcast")
+            .expect("Bitcast should have succeeded");
+        assert_eq!(
+            T::size(),
+            U::size(),
+            "Attempted to bitcast between types of different sizes"
+        );
+        unsafe { Val::new(self.fn_ref().clone(), UntypedValue(raw_out)) }
+    }
 }
 
 impl<T> Val<S<T>> {

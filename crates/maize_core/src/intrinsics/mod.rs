@@ -1,14 +1,21 @@
 pub mod cvt;
+pub mod shfl;
 
 use inkwell::types::FunctionType;
 
 use crate::{
     backend::{FnRef, VoidType},
     control_flow::If,
-    func::callconv::CallConv,
+    func::{FnArgs, FnRetTy, callconv::CallConv},
     tipe::A,
     val::Val,
 };
+
+pub trait Intrinsic {
+    type Args: FnArgs;
+    type Ret: FnRetTy;
+    fn call(self, args: <Self::Args as FnArgs>::ArgValues) -> <Self::Ret as FnRetTy>::RetVal;
+}
 
 pub trait IntrinsicsLibrary {
     unsafe fn assume(&self, cond: Val<bool>);
@@ -38,7 +45,7 @@ impl CUDA {
     pub unsafe fn assume(&self, cond: Val<bool>) {
         let func = self
             .0
-            .get_intrinsic::<VoidType, (bool,)>("llvm.assume")
+            .get_intrinsic::<VoidType, (bool,)>("llvm.assume", false)
             .expect("llvm.assume should exist");
         self.0.call_extern(func, (cond,), None)
     }

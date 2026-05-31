@@ -1,6 +1,10 @@
 use std::rc::Rc;
 
-use inkwell::{context::ContextRef, types::BasicType, values::CallSiteValue};
+use inkwell::{
+    context::ContextRef,
+    types::{AnyType, AnyTypeEnum, BasicType},
+    values::CallSiteValue,
+};
 
 use crate::{
     backend::{ErasedFuncType, ErasedType, FnCtx, FnRef, UntypedValue, VoidType, llvm::LLVM},
@@ -12,6 +16,7 @@ use crate::{
 pub trait FnRetTy {
     fn erased_func_type(ctx: ContextRef<'static>, args: &[ErasedType]) -> ErasedFuncType;
     fn define_func<Args: FnArgs>(llvm: Rc<LLVM>, name: &str) -> FnCtx;
+    fn raw_inkwell_type(ctx: ContextRef<'static>) -> AnyTypeEnum<'static>;
     type RetVal;
     unsafe fn extract_call_site_value(fn_ref: FnRef, csv: CallSiteValue<'static>) -> Self::RetVal;
 }
@@ -26,6 +31,9 @@ impl<T: Ty> FnRetTy for T {
         let fn_type = ret_ty.func_type(&types);
         let func = llvm.insert_untyped_func(name, fn_type);
         FnCtx::new(llvm, func)
+    }
+    fn raw_inkwell_type(ctx: ContextRef<'static>) -> AnyTypeEnum<'static> {
+        Self::raw_ty(ctx).as_any_type_enum()
     }
     type RetVal = Val<Self>;
     unsafe fn extract_call_site_value(fn_ref: FnRef, csv: CallSiteValue<'static>) -> Self::RetVal {
@@ -51,6 +59,9 @@ impl FnRetTy for VoidType {
         let fn_type = ret_ty.func_type(&types);
         let func = llvm.insert_untyped_func(name, fn_type);
         FnCtx::new(llvm, func)
+    }
+    fn raw_inkwell_type(ctx: ContextRef<'static>) -> AnyTypeEnum<'static> {
+        ctx.void_type().into()
     }
     type RetVal = ();
     unsafe fn extract_call_site_value(_: FnRef, csv: CallSiteValue<'static>) -> Self::RetVal {

@@ -50,6 +50,12 @@ impl<Ret, Args: FnArgs> Func<Ret, Args> {
     pub unsafe fn assume_callable(self) -> CallableFunc<Ret, Args> {
         CallableFunc(self)
     }
+    pub fn constant<T: Ty>(&self, val: T) -> Val<T>
+    where
+        T: Copy,
+    {
+        val.const_val(self.0.clone())
+    }
 }
 
 impl<Args: FnArgs> Func<VoidType, Args> {

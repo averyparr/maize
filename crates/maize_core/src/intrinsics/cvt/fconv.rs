@@ -1,4 +1,4 @@
-use super::{FloatRoundMode, Intrinsic};
+use super::{super::Intrinsic, FloatRoundMode};
 
 use crate::{
     func::{FnArgs, FnRetTy},
@@ -16,7 +16,7 @@ macro_rules! impl_intrinsics {
                 fn call(self, args: <Self::Args as FnArgs>::ArgValues) -> <Self::Ret as FnRetTy>::RetVal {
                     let fn_ref = args.0.fn_ref().clone();
                     let func = fn_ref
-                        .get_intrinsic::<Self::Ret, Self::Args>($name)
+                        .get_intrinsic::<Self::Ret, Self::Args>($name, false)
                         .expect("This intrinsic should exist");
                     fn_ref.call_extern(func, args, None)
                 }
