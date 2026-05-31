@@ -12,6 +12,12 @@ use crate::{
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct V<T, const N: usize>([T; N]);
 
+impl<T, const N: usize> V<T, N> {
+    pub fn new(arr: [T; N]) -> Self {
+        Self(arr)
+    }
+}
+
 pub trait VecTy: Ty + Copy {
     fn vectorize(raw_ty: Self::LLType, size: u32) -> VectorType<'static>;
     fn splat(

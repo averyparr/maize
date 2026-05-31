@@ -26,7 +26,7 @@ pub use crate::backend::{cpu::ToCPU, llvm::LLVM, opt::Opt};
 use crate::{
     func::{ExternFunc, FnArgs, FnRetTy, callconv::CallConv},
     intrinsics::IntrinsicError,
-    tipe::{A, Ty, constant::IntoConst},
+    tipe::{A, Ty},
     val::{S, Val},
 };
 
@@ -214,8 +214,11 @@ impl FnRef {
     pub fn llvm(&self) -> &LLVM {
         &self.0.llvm
     }
-    pub fn constant<C: IntoConst>(&self, c: C) -> Val<C> {
-        C::as_const_val(c, self.clone())
+    pub fn constant<C: Ty>(&self, c: C) -> Val<C>
+    where
+        C: Copy,
+    {
+        C::const_val(c, self.clone())
     }
     pub fn alloca<T: Ty>(&self) -> Val<S<T>> {
         let bb = self

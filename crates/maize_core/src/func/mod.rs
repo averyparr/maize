@@ -8,7 +8,7 @@ use crate::{
         FnRef, InstructionFlags, Opt, ToCPU, UntypedFunc, UntypedValue, VoidType, llvm::LLVM,
     },
     func::callconv::CallConv,
-    intrinsics::CUDA,
+    intrinsics::cuda::CUDA,
     tipe::Ty,
     val::Val,
 };

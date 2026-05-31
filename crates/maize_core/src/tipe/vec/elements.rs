@@ -105,4 +105,29 @@ impl<T: VecTy, const N: usize> Val<V<T, N>> {
         });
         (windows, rest)
     }
+
+    pub fn map_elementwise<U: VecTy>(self, map: impl Fn(Val<T>) -> Val<U>) -> Val<V<U, N>> {
+        Val::from_elements(self.elements().map(map))
+    }
+
+    pub fn map_windows<const W: usize, U: VecTy>(
+        self,
+        mapv: impl Fn(Val<V<T, W>>) -> Val<V<U, W>>,
+        map: impl Fn(Val<T>) -> Val<U>,
+    ) -> Val<V<U, N>> {
+        let mut ret = V::undef_val(self.fn_ref().clone());
+        let (vecs, elems) = self.windows();
+        let mut offset = 0;
+        for v in vecs {
+            let trans = mapv(v);
+            ret = ret.insert_vec(trans, offset);
+            offset += W;
+        }
+        for e in elems {
+            let trans = map(e);
+            ret = ret.insert_element(trans, offset);
+            offset += 1;
+        }
+        ret
+    }
 }

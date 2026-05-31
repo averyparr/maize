@@ -9,6 +9,20 @@ pub trait FnArgs {
     fn arg_arr(args: Self::ArgValues) -> impl IntoIterator<Item = UntypedValue>;
 }
 
+impl FnArgs for () {
+    type ArgValues = ();
+    fn raw_type_sequence(_: ContextRef<'static>) -> Vec<ErasedType> {
+        vec![]
+    }
+    fn extract_and_type_args(fn_ref: FnRef) -> Self::ArgValues {
+        let mut args = fn_ref.args();
+        assert_eq!(args.next(), None);
+    }
+    fn arg_arr(_: Self::ArgValues) -> impl IntoIterator<Item = UntypedValue> {
+        []
+    }
+}
+
 macro_rules! derive_fn_args {
     ($($tipes: ident),*) => {
         impl<$($tipes: $crate::tipe::Ty),*> $crate::func::args::FnArgs for ($($tipes,)*) {

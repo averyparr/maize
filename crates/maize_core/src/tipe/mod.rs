@@ -5,6 +5,7 @@ mod math;
 mod ptr;
 mod vec;
 
+pub use math::MathTy;
 pub use ptr::A;
 pub use vec::{V, VecTy};
 

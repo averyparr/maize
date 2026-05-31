@@ -1,29 +1,10 @@
-use super::{super::Intrinsic, FloatRoundMode};
+use super::FloatRoundMode;
+use crate::intrinsics::{Intrinsic, impl_intrinsics};
 
 use crate::{
     func::{FnArgs, FnRetTy},
     tipe::{BF16, F8E4M3, F8E5M2, F16, V},
 };
-
-macro_rules! impl_intrinsics {
-    ($($struct_name: ident : $name: literal ($($args: ty),*) -> $ret: ty),* $(,)?) => {
-        $(
-            #[derive(Default)]
-            pub struct $struct_name;
-            impl Intrinsic for $struct_name {
-                type Args = ($($args,)*);
-                type Ret = $ret;
-                fn call(self, args: <Self::Args as FnArgs>::ArgValues) -> <Self::Ret as FnRetTy>::RetVal {
-                    let fn_ref = args.0.fn_ref().clone();
-                    let func = fn_ref
-                        .get_intrinsic::<Self::Ret, Self::Args>($name, false)
-                        .expect("This intrinsic should exist");
-                    fn_ref.call_extern(func, args, None)
-                }
-            }
-        )*
-    };
-}
 
 impl_intrinsics!(
     F32CvtBF16Rn: "llvm.nvvm.f2bf16.rn"(f32) -> BF16,

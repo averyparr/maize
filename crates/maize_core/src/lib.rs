@@ -11,16 +11,22 @@ mod test {
 
     use crate::{
         backend::{Opt, cpu::cuda::SM, llvm::LLVM},
+        control_flow::If,
         func::implement_ptx_kernel,
-        tipe::{A, BF16, FromF32, Ty, V},
+        intrinsics::cuda::CUDA,
+        tipe::{A, BF16, FromF32, V},
     };
     #[test]
     fn is_aligned() {
         let func = implement_ptx_kernel::<(
-            A<&i32, 1>,
-            i32,
+            &V<BF16, 4>,
+            &V<f32, 4>,
+            A<*const f32, 3>,
+            A<*mut u64, 3>,
+            A<*mut u64, 7>,
             A<&V<BF16, 4>, 1>,
             A<&BF16, 1>,
+            A<&mut u64, 1>,
             A<&mut V<BF16, 4>, 1>,
         )>(LLVM::new(), "func");
         func.set_ins_flags(|flags| {
@@ -29,14 +35,21 @@ mod test {
             flags.signed_wrap = true;
         });
         {
-            let (a, v, b, c, mut d) = func.args();
-            let single = BF16::const_val(BF16::from_f32(5.0), a.fn_ref().clone());
-            let cond = a.load().eq(v);
-            // func.cuda()
-            //     .assert(cond.copy(), "assert_failed", file!(), line!(), "function");
-            unsafe { func.cuda().assume(cond.copy()) };
-            let c = c.load_nc().splat();
-            d.store(c + single.splat() * b.load_nc().shfl_idx_uniform(func.constant(0)))
+            let (e, f, addr, mbar, cluster_mbar, b, c, mut mbar_stor, mut d) = func.args();
+            let cluster = func.constant(3);
+            mbar_stor.store(CUDA::mbar_arrive(mbar.copy()));
+            // mbar_stor.store();
+            let one = func.constant(3);
+            let token = CUDA::mbar_arrive(mbar.copy());
+            let waited = CUDA::mbar_try_wait(mbar.copy(), token.copy());
+            let waited = CUDA::mbar_try_wait_timed(mbar.copy(), token.copy(), one.copy());
+            let waited = CUDA::mbar_try_wait_parity_timed(mbar.copy(), waited, one.copy());
+            CUDA::mbar_init(mbar.copy(), token.cvt());
+            If(waited).then(|| CUDA::mbar_inval(mbar.copy()));
+            // CUDA::mbar_expect_tx(mbar, one.copy());
+            // CUDA::cluster_mbar_expect_tx(mbar_cluster, one.copy());
+            let cluster_ptr = addr.mapa(cluster);
+            // d.store(unsafe { cluster_ptr.read().tanh().splat().cvt() });
         }
         func.return_void();
         func.run_passes(SM::SM90, Opt::O3);

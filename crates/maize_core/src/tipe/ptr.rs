@@ -282,6 +282,28 @@ impl<T: Ty> Val<*const T> {
         // Safety: User promised!
         unsafe { Val::new(fn_ref.clone(), UntypedValue(raw)) }
     }
+
+    pub fn as_u64(self) -> Val<u64> {
+        let fn_ref = self.fn_ref().clone();
+        let b = unsafe { fn_ref.curr_bb_builder() };
+        let raw = b
+            .build_ptr_to_int(self.typed(), u64::raw_ty(fn_ref.ctx()), "ptr_to_u64")
+            .expect("ptr->int should succeed");
+        unsafe { Val::new(fn_ref, UntypedValue(raw.into())) }
+    }
+
+    pub unsafe fn assume_space<const SPACE: u16>(self) -> Val<A<*mut T, SPACE>> {
+        let fn_ref = self.fn_ref().clone();
+        let b = unsafe { fn_ref.curr_bb_builder() };
+        let raw = b
+            .build_address_space_cast(
+                self.typed(),
+                A::<*mut T, SPACE>::raw_ty(fn_ref.ctx()),
+                "generic_to_space",
+            )
+            .expect("addrspace cast should succced");
+        unsafe { Val::new(fn_ref, UntypedValue(raw.into())) }
+    }
 }
 
 impl<T: Ty> Val<*mut T> {
@@ -312,6 +334,28 @@ impl<T: Ty> Val<*mut T> {
         let b = unsafe { fn_ref.curr_bb_builder() };
         b.build_store(self.typed(), val.raw().0)
             .expect("Store should have succeeded")
+    }
+
+    pub fn as_u64(self) -> Val<u64> {
+        let fn_ref = self.fn_ref().clone();
+        let b = unsafe { fn_ref.curr_bb_builder() };
+        let raw = b
+            .build_ptr_to_int(self.typed(), u64::raw_ty(fn_ref.ctx()), "ptr_to_u64")
+            .expect("ptr->int should succeed");
+        unsafe { Val::new(fn_ref, UntypedValue(raw.into())) }
+    }
+
+    pub unsafe fn assume_space<const SPACE: u16>(self) -> Val<A<*mut T, SPACE>> {
+        let fn_ref = self.fn_ref().clone();
+        let b = unsafe { fn_ref.curr_bb_builder() };
+        let raw = b
+            .build_address_space_cast(
+                self.typed(),
+                A::<*mut T, SPACE>::raw_ty(fn_ref.ctx()),
+                "generic_to_space",
+            )
+            .expect("addrspace cast should succced");
+        unsafe { Val::new(fn_ref, UntypedValue(raw.into())) }
     }
 }
 
@@ -402,6 +446,24 @@ impl<T: Ty, const ADDRSPACE: u16> Val<A<*const T, ADDRSPACE>> {
         // Safety: User promised!
         unsafe { Val::new(fn_ref.clone(), UntypedValue(raw)) }
     }
+
+    pub fn as_u64(self) -> Val<u64> {
+        let fn_ref = self.fn_ref().clone();
+        let b = unsafe { fn_ref.curr_bb_builder() };
+        let raw = b
+            .build_ptr_to_int(self.typed(), u64::raw_ty(fn_ref.ctx()), "ptr_to_u64")
+            .expect("ptr->int should succeed");
+        unsafe { Val::new(fn_ref, UntypedValue(raw.into())) }
+    }
+
+    pub fn to_generic(self) -> Val<*const T> {
+        let fn_ref = self.fn_ref().clone();
+        let b = unsafe { fn_ref.curr_bb_builder() };
+        let raw = b
+            .build_address_space_cast(self.typed(), <*const T>::raw_ty(fn_ref.ctx()), "to_generic")
+            .expect("addrspace cast should succeed");
+        unsafe { Val::new(fn_ref, UntypedValue(raw.into())) }
+    }
 }
 
 impl<T: Ty, const ADDRSPACE: u16> Val<A<*mut T, ADDRSPACE>> {
@@ -432,6 +494,24 @@ impl<T: Ty, const ADDRSPACE: u16> Val<A<*mut T, ADDRSPACE>> {
         let b = unsafe { fn_ref.curr_bb_builder() };
         b.build_store(self.typed(), val.raw().0)
             .expect("Store should have succeeded")
+    }
+
+    pub fn as_u64(self) -> Val<u64> {
+        let fn_ref = self.fn_ref().clone();
+        let b = unsafe { fn_ref.curr_bb_builder() };
+        let raw = b
+            .build_ptr_to_int(self.typed(), u64::raw_ty(fn_ref.ctx()), "ptr_to_u64")
+            .expect("ptr->int should succeed");
+        unsafe { Val::new(fn_ref, UntypedValue(raw.into())) }
+    }
+
+    pub fn to_generic(self) -> Val<*mut T> {
+        let fn_ref = self.fn_ref().clone();
+        let b = unsafe { fn_ref.curr_bb_builder() };
+        let raw = b
+            .build_address_space_cast(self.typed(), <*const T>::raw_ty(fn_ref.ctx()), "to_generic")
+            .expect("addrspace cast should succeed");
+        unsafe { Val::new(fn_ref, UntypedValue(raw.into())) }
     }
 }
 
