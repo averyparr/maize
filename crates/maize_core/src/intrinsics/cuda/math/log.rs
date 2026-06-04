@@ -73,12 +73,16 @@ impl<const N: usize> NVVMLog for V<f32, N> {
 // seems to act like an optimization barrier.
 impl<const N: usize> NVVMLog for V<BF16, N> {
     fn log2(val: Val<Self>) -> Val<Self> {
-        Val::from_elements(val.cvt::<V<f32, N>>().elements().map(|e| e.nvvm_log2())).cvt()
+        val.cvt::<V<f32, N>>()
+            .map_elementwise(|e| e.nvvm_log2())
+            .cvt()
     }
 }
 
 impl<const N: usize> NVVMLog for V<F16, N> {
     fn log2(val: Val<Self>) -> Val<Self> {
-        Val::from_elements(val.cvt::<V<f32, N>>().elements().map(|e| e.nvvm_log2())).cvt()
+        val.cvt::<V<f32, N>>()
+            .map_elementwise(|e| e.nvvm_log2())
+            .cvt()
     }
 }

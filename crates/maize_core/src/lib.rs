@@ -37,18 +37,19 @@ mod test {
         {
             let (e, f, addr, mbar, cluster_mbar, b, c, mut mbar_stor, mut d) = func.args();
             let cluster = func.constant(3);
-            mbar_stor.store(CUDA::mbar_arrive(mbar.copy()));
+            // mbar_stor.store(CUDA::mbar_arrive(mbar.copy()));
             // mbar_stor.store();
-            let one = func.constant(3);
-            let token = CUDA::mbar_arrive(mbar.copy());
-            let waited = CUDA::mbar_try_wait(mbar.copy(), token.copy());
-            let waited = CUDA::mbar_try_wait_timed(mbar.copy(), token.copy(), one.copy());
-            let waited = CUDA::mbar_try_wait_parity_timed(mbar.copy(), waited, one.copy());
-            CUDA::mbar_init(mbar.copy(), token.cvt());
-            If(waited).then(|| CUDA::mbar_inval(mbar.copy()));
-            // CUDA::mbar_expect_tx(mbar, one.copy());
-            // CUDA::cluster_mbar_expect_tx(mbar_cluster, one.copy());
-            let cluster_ptr = addr.mapa(cluster);
+            // let one = func.constant(3);
+            // let token = CUDA::mbar_arrive(mbar.copy());
+            // let waited = CUDA::mbar_try_wait(mbar.copy(), token.copy());
+            // let waited = CUDA::mbar_try_wait_timed(mbar.copy(), token.copy(), one.copy());
+            // let waited = CUDA::mbar_try_wait_parity_timed(mbar.copy(), waited, one.copy());
+            // CUDA::mbar_init(mbar.copy(), token.cvt());
+            // If(waited).then(|| CUDA::mbar_inval(mbar.copy()));
+            // // CUDA::mbar_expect_tx(mbar, one.copy());
+            // // CUDA::cluster_mbar_expect_tx(mbar_cluster, one.copy());
+            // let cluster_ptr = addr.mapa(cluster);
+            d.store(f.load().cvt().nvvm_log2());
             // d.store(unsafe { cluster_ptr.read().tanh().splat().cvt() });
         }
         func.return_void();
