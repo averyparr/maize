@@ -48,7 +48,7 @@ impl<T: HasLLVMTrig> Val<T> {
             f.fast_math.insert(FastMathFlags::ApproxFunc);
         });
         let func = fn_ref
-            .get_intrinsic::<T, (T,)>(name, false)
+            .get_intrinsic::<T, (T,)>(name, false, &[])
             .unwrap_or_else(|e| panic!("{name} has no LLVM intrinsic, but found error {e:?}"));
         let ret = fn_ref.call_extern(func, (self,), None);
         fn_ref.set_ins_flags(|f| f.fast_math = old_flags.expect("Should be set"));

@@ -5,7 +5,11 @@ use inkwell::{
     values::{BasicValue, GlobalValue},
 };
 
-use crate::{backend::untyped::ErasedFuncType, tipe::Ty, val::Val};
+use crate::{
+    backend::{FnCtx, FnRef, untyped::ErasedFuncType},
+    tipe::Ty,
+    val::Val,
+};
 
 use super::untyped::UntypedFunc;
 
@@ -58,6 +62,15 @@ impl LLVM {
         global.set_unnamed_addr(true);
         global
     }
+    pub fn insert_global<T: Ty>(
+        &self,
+        name: &str,
+        address_space: Option<AddressSpace>,
+    ) -> GlobalValue<'static> {
+        let ty = T::raw_ty(self.ctx());
+        let global = self.module().add_global(ty, address_space, name);
+        global
+    }
     pub fn insert_const<T: Ty>(
         &self,
         v: Val<T>,
@@ -65,8 +78,7 @@ impl LLVM {
         address_space: Option<AddressSpace>,
     ) -> GlobalValue<'static> {
         assert!(v.raw().0.is_const());
-        let ty = T::ty(v.fn_ref()).0;
-        let global = self.module().add_global(ty, address_space, name);
+        let global = self.insert_global::<T>(name, address_space);
         global.set_initializer(&v.typed());
         global.set_linkage(Linkage::Internal);
         global.set_unnamed_addr(true);

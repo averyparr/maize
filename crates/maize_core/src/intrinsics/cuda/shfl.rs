@@ -18,7 +18,7 @@ macro_rules! shfl_intrinsic {
                 ) -> <Self::Ret as FnRetTy>::RetVal {
                     let fn_ref = args.0.fn_ref().clone();
                     let func = fn_ref
-                        .get_intrinsic::<Self::Ret, Self::Args>($intrinsic, false)
+                        .get_intrinsic::<Self::Ret, Self::Args>($intrinsic, false,  &[])
                         .expect("Intrinsic should exist");
                     fn_ref.call_extern(func, args, None)
                 }

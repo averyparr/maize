@@ -44,7 +44,7 @@ impl<T: VecTy, const N: usize> Val<V<T, N>> {
     pub fn extract_vec<const E: usize>(self, offset: usize) -> Val<V<T, E>> {
         let fn_ref = self.fn_ref().clone();
         let intrins = fn_ref
-            .get_intrinsic::<V<T, E>, (V<T, N>, i64)>("llvm.vector.extract", true)
+            .get_intrinsic::<V<T, E>, (V<T, N>, i64)>("llvm.vector.extract", true, &[])
             .expect("Should have a llvm vector extract");
         let offset = fn_ref.constant(offset as _);
         fn_ref.call_extern(intrins, (self, offset), None)
@@ -53,7 +53,7 @@ impl<T: VecTy, const N: usize> Val<V<T, N>> {
     pub fn insert_vec<const E: usize>(self, other: Val<V<T, E>>, offset: usize) -> Self {
         let fn_ref = self.fn_ref().clone();
         let intrins = fn_ref
-            .get_intrinsic::<V<T, N>, (V<T, N>, V<T, E>, i64)>("llvm.vector.insert", false)
+            .get_intrinsic::<V<T, N>, (V<T, N>, V<T, E>, i64)>("llvm.vector.insert", false, &[])
             .expect("Should have a llvm vector extract");
         let offset = fn_ref.constant(offset as _);
         fn_ref.call_extern(intrins, (self, other, offset), None)

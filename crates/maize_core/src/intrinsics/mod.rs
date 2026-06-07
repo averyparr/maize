@@ -27,7 +27,7 @@ pub enum IntrinsicError {
 }
 
 macro_rules! impl_intrinsics {
-    ($($struct_name: ident : $name: literal ($($args: ty),*) -> $ret: ty),* $(,)?) => {
+    ($($(#[$($attr: ident$(($val: literal))?),*])? $struct_name: ident : $name: literal ($($args: ty),*) -> $ret: ty),* $(,)?) => {
         $(
             #[derive(Default)]
             pub struct $struct_name;
@@ -37,7 +37,11 @@ macro_rules! impl_intrinsics {
                 fn call(self, args: <Self::Args as $crate::func::FnArgs>::ArgValues) -> <Self::Ret as $crate::func::FnRetTy>::RetVal {
                     let fn_ref = args.0.fn_ref().clone();
                     let func = fn_ref
-                        .get_intrinsic::<Self::Ret, Self::Args>($name, false)
+                        .get_intrinsic::<Self::Ret, Self::Args>($name, false,  &[
+                            $($(
+                                (stringify!($attr), None$(.or(Some($val)))?)
+                            ),*)?
+                        ])
                         .expect(concat!("intrinsic '", $name, "' should exist"));
                     fn_ref.call_extern(func, args, None)
                 }
@@ -56,7 +60,7 @@ macro_rules! impl_argless_intrinsics {
                 fn call(self, _: ()) -> <Self::Ret as $crate::func::FnRetTy>::RetVal {
                     let fn_ref = self.0;
                     let func = fn_ref
-                        .get_intrinsic::<$ret, ()>($name, false)
+                        .get_intrinsic::<$ret, ()>($name, false,  &[])
                         .expect(concat!("intrinsic '", $name, "' should exist"));
                     fn_ref.call_extern(func, (), None)
                 }

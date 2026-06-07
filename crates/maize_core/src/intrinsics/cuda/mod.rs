@@ -1,9 +1,11 @@
+use inkwell::AddressSpace;
+
 use crate::{
-    backend::{FnRef, VoidType},
+    backend::{FnRef, UntypedValue, VoidType},
     control_flow::If,
     func::callconv::CallConv,
     intrinsics::IntrinsicsLibrary,
-    tipe::A,
+    tipe::{A, Ty},
     val::Val,
 };
 
@@ -22,6 +24,7 @@ pub mod nanosleep;
 pub mod set_max_reg;
 pub mod shfl;
 pub mod tma;
+pub mod tmem;
 pub mod vote;
 
 impl IntrinsicsLibrary for CUDA {
@@ -40,7 +43,7 @@ impl CUDA {
     pub unsafe fn assume(&self, cond: Val<bool>) {
         let func = self
             .0
-            .get_intrinsic::<VoidType, (bool,)>("llvm.assume", false)
+            .get_intrinsic::<VoidType, (bool,)>("llvm.assume", false, &[])
             .expect("llvm.assume should exist");
         self.0.call_extern(func, (cond,), None)
     }
@@ -68,5 +71,27 @@ impl CUDA {
             );
         });
         unsafe { self.assume(cond) };
+    }
+
+    pub fn alloc_dynamic_shared<T: Ty>(self) -> Val<A<&'static mut T, 3>> {
+        let gv = self
+            .0
+            .llvm()
+            .insert_global::<T>("extern_smem", Some(AddressSpace::from(3)));
+        gv.set_linkage(inkwell::module::Linkage::External);
+        let ptr = gv.as_pointer_value();
+        unsafe { Val::new(self.0.clone(), UntypedValue(ptr.into())) }
+    }
+
+    pub fn alloc_shared<T: Ty>(self) -> Val<A<&'static mut T, 3>> {
+        let gv = self
+            .0
+            .llvm()
+            .insert_global::<T>("smem", Some(AddressSpace::from(3)));
+        gv.set_linkage(inkwell::module::Linkage::Internal);
+        gv.set_unnamed_addr(true);
+        gv.set_initializer(&T::undef_val(self.0.clone()).typed());
+        let ptr = gv.as_pointer_value();
+        unsafe { Val::new(self.0.clone(), UntypedValue(ptr.into())) }
     }
 }

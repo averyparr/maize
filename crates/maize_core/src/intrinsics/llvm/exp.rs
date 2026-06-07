@@ -43,7 +43,7 @@ impl<T: HasLLVMExp> Val<T> {
     pub fn exp2(self) -> Self {
         let fn_ref = self.fn_ref().clone();
         let exp2 = fn_ref
-            .get_intrinsic::<T, (T,)>("llvm.exp2", false)
+            .get_intrinsic::<T, (T,)>("llvm.exp2", false, &[])
             .expect("ex2 should exist");
         fn_ref.call_extern(exp2, (self,), None)
     }

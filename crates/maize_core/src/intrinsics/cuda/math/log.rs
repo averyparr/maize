@@ -7,8 +7,11 @@ use crate::{
 };
 
 impl_intrinsics!(
+    #[nocreateundeforpoison, speculatable]
     Lg2ApproxF64: "llvm.nvvm.lg2.approx.d"(f64) -> f64,
+    #[nocreateundeforpoison, speculatable]
     Lg2ApproxF32: "llvm.nvvm.lg2.approx.f"(f32) -> f32,
+    #[nocreateundeforpoison, speculatable]
     Lg2ApproxFtzF32: "llvm.nvvm.lg2.approx.ftz.f"(f32) -> f32,
 );
 

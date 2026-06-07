@@ -241,6 +241,7 @@ impl FnRef {
         &self,
         name: &str,
         overload_with_ret: bool,
+        attributes: &[(&'static str, Option<u64>)],
     ) -> Result<ExternFunc<Ret, Args>, IntrinsicError> {
         let intrins = Intrinsic::find(name);
         let Some(intrins) = intrins else {
@@ -272,18 +273,20 @@ impl FnRef {
         };
         overload_sig.extend(args.into_iter().map(|e| e.0));
         let _args = if intrins.is_overloaded() {
-            println!("Intrinsic {name} was overloaded");
             overload_sig.as_slice()
         } else {
-            println!("Intrinsic {name} was not overloaded");
             &[]
         };
         let Some(intrins) = intrins.get_declaration(self.llvm.module(), _args) else {
             return Err(IntrinsicError::DeclarationNotFound);
         };
-        println!("Found {intrins} for {name}");
+        for (attr_name, val) in attributes {
+            let kind = Attribute::get_named_enum_kind_id(attr_name);
+            assert!(kind != 0);
+            let attribute = self.ctx().create_enum_attribute(kind, val.unwrap_or(0));
+            intrins.add_attribute(AttributeLoc::Function, attribute);
+        }
         let intrinsic_type = intrins.get_type();
-        println!("Found intrinsic type {intrinsic_type} for {name}");
         if intrinsic_type != expected_type {
             return Err(IntrinsicError::MismatchedType(
                 intrinsic_type,

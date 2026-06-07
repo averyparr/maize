@@ -71,3 +71,31 @@ derive_fn_args!(A, B, C, D, E, F, G);
 derive_fn_args!(A, B, C, D, E, F, G, H);
 derive_fn_args!(A, B, C, D, E, F, G, H, I);
 derive_fn_args!(A, B, C, D, E, F, G, H, I, J);
+derive_fn_args!(A, B, C, D, E, F, G, H, I, J, K);
+derive_fn_args!(A, B, C, D, E, F, G, H, I, J, K, L);
+derive_fn_args!(A, B, C, D, E, F, G, H, I, J, K, L, M);
+derive_fn_args!(A, B, C, D, E, F, G, H, I, J, K, L, M, N);
+derive_fn_args!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O);
+derive_fn_args!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P);
+derive_fn_args!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q);
+derive_fn_args!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R);
+derive_fn_args!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S);
+derive_fn_args!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T);
+derive_fn_args!(
+    A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U
+);
+derive_fn_args!(
+    A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V
+);
+derive_fn_args!(
+    A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W
+);
+derive_fn_args!(
+    A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X
+);
+derive_fn_args!(
+    A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y
+);
+derive_fn_args!(
+    A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z
+);

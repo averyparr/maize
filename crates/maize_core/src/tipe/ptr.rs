@@ -223,7 +223,7 @@ where
 
     fn const_val(self, _: crate::backend::FnRef) -> Val<Self>
     where
-        Self: Copy,
+        Self: Sized,
     {
         panic!("Pointers should not be used for const values!")
     }
@@ -254,7 +254,7 @@ where
 
     fn const_val(self, _: crate::backend::FnRef) -> Val<Self>
     where
-        Self: Copy,
+        Self: Sized,
     {
         panic!("Pointers should not be used for const values!")
     }

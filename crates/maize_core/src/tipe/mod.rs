@@ -1,8 +1,10 @@
+mod array;
 mod cmp;
 pub mod constant;
 mod cvt;
 mod math;
 mod ptr;
+mod reflection;
 mod vec;
 
 pub use math::MathTy;
@@ -42,7 +44,7 @@ pub trait Ty {
     fn type_val(val: UntypedValue) -> Self::LLVal;
     fn const_val(self, fn_ref: FnRef) -> Val<Self>
     where
-        Self: Copy;
+        Self: Sized;
     fn undef_val(fn_ref: FnRef) -> Val<Self>
     where
         Self: Sized,
