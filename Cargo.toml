@@ -5,10 +5,12 @@ edition = "2024"
 
 [dependencies]
 maize_core = { path = "./crates/maize_core" }
-maize_tile = { path = "./crates/maize_tile" }
+maize_types = { path = "./crates/maize_types" }
+maize_pipe = { path = "./crates/maize_pipe" }
+# maize_tile = { path = "./crates/maize_tile" }
 maize_py = { path = "./crates/maize_py" }
 maize_cob = { path = "./crates/maize_cob" }
-old_maize_core = { path = "./crates/old_maize_core" }
+# old_maize_core = { path = "./crates/old_maize_core" }
 
 [profile.release]
 debug = true

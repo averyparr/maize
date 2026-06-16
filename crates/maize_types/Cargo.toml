@@ -1,0 +1,7 @@
+[package]
+name = "maize_types"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+maize_core = { path = "../maize_core" }
