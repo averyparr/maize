@@ -1,4 +1,4 @@
-use std::ops::{Add, Div, Mul, Neg, Sub};
+use std::ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Neg, Sub};
 
 use inkwell::{
     builder::{Builder, BuilderError},
@@ -43,6 +43,27 @@ pub trait MathTy: Ty + Sized {
         rhs: UntypedValue,
     ) -> Result<Val<Self>, BuilderError>;
     const DIV_TYPE: DivType;
+}
+
+pub trait BitTy: Ty + Sized {
+    fn try_emit_xor(
+        b: Builder<'static>,
+        fn_ref: FnRef,
+        lhs: UntypedValue,
+        rhs: UntypedValue,
+    ) -> Result<Val<Self>, BuilderError>;
+    fn try_emit_and(
+        b: Builder<'static>,
+        fn_ref: FnRef,
+        lhs: UntypedValue,
+        rhs: UntypedValue,
+    ) -> Result<Val<Self>, BuilderError>;
+    fn try_emit_or(
+        b: Builder<'static>,
+        fn_ref: FnRef,
+        lhs: UntypedValue,
+        rhs: UntypedValue,
+    ) -> Result<Val<Self>, BuilderError>;
 }
 
 pub trait SignedTy: MathTy {
@@ -136,6 +157,50 @@ float_add_impl!(F16, BF16, f32, f64);
 unsigned_add_impl!(u8, u16, u32, u64);
 signed_add_impl!(i8, i16, i32, i64);
 
+macro_rules! bit_math_impl {
+    ($($tipes: ty),*) => {
+        $(
+            impl BitTy for $tipes {
+                fn try_emit_xor(
+                    b: Builder<'static>,
+                    fn_ref: FnRef,
+                    lhs: UntypedValue,
+                    rhs: UntypedValue,
+                ) -> Result<Val<Self>, BuilderError> {
+                    b.build_xor(Self::type_val(lhs), Self::type_val(rhs), "bxor")
+                    .map(|v| UntypedValue(v.as_basic_value_enum()))
+                    // Safety: primitive impls do produce the right output type
+                    .map(|uv| unsafe { Val::new(fn_ref, uv) })
+                }
+                fn try_emit_and(
+                    b: Builder<'static>,
+                    fn_ref: FnRef,
+                    lhs: UntypedValue,
+                    rhs: UntypedValue,
+                ) -> Result<Val<Self>, BuilderError> {
+                    b.build_and(Self::type_val(lhs), Self::type_val(rhs), "bxor")
+                    .map(|v| UntypedValue(v.as_basic_value_enum()))
+                    // Safety: primitive impls do produce the right output type
+                    .map(|uv| unsafe { Val::new(fn_ref, uv) })
+                }
+                fn try_emit_or(
+                    b: Builder<'static>,
+                    fn_ref: FnRef,
+                    lhs: UntypedValue,
+                    rhs: UntypedValue,
+                ) -> Result<Val<Self>, BuilderError> {
+                    b.build_or(Self::type_val(lhs), Self::type_val(rhs), "bxor")
+                    .map(|v| UntypedValue(v.as_basic_value_enum()))
+                    // Safety: primitive impls do produce the right output type
+                    .map(|uv| unsafe { Val::new(fn_ref, uv) })
+                }
+            }
+        )*
+    };
+}
+
+bit_math_impl!(bool, u8, u16, u32, u64, i8, i16, i32, i64);
+
 impl<T> Add for Val<T>
 where
     T: MathTy,
@@ -190,6 +255,42 @@ where
         let b = unsafe { self.fn_ref().curr_bb_builder() };
         let fn_ref = self.fn_ref().clone();
         T::try_emit_neg(b, fn_ref, self.raw()).expect("Neg should have succeeded")
+    }
+}
+
+impl<T> BitAnd for Val<T>
+where
+    T: BitTy,
+{
+    type Output = Self;
+    fn bitand(self, rhs: Self) -> Self::Output {
+        let b = unsafe { self.fn_ref().curr_bb_builder() };
+        let fn_ref = self.fn_ref().clone();
+        T::try_emit_and(b, fn_ref, self.raw(), rhs.raw()).expect("BitAnd should have succeeded")
+    }
+}
+
+impl<T> BitOr for Val<T>
+where
+    T: BitTy,
+{
+    type Output = Self;
+    fn bitor(self, rhs: Self) -> Self::Output {
+        let b = unsafe { self.fn_ref().curr_bb_builder() };
+        let fn_ref = self.fn_ref().clone();
+        T::try_emit_or(b, fn_ref, self.raw(), rhs.raw()).expect("BitAnd should have succeeded")
+    }
+}
+
+impl<T> BitXor for Val<T>
+where
+    T: BitTy,
+{
+    type Output = Self;
+    fn bitxor(self, rhs: Self) -> Self::Output {
+        let b = unsafe { self.fn_ref().curr_bb_builder() };
+        let fn_ref = self.fn_ref().clone();
+        T::try_emit_xor(b, fn_ref, self.raw(), rhs.raw()).expect("BitAnd should have succeeded")
     }
 }
 

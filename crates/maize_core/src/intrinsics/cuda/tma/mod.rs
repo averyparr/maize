@@ -1,18 +1,16 @@
-use inkwell::{context::ContextRef, types::StructType, values::StructValue};
+use crate::{ContextRef, StructType, StructValue, tipe::Ty, val::Val};
 
-use crate::{tipe::Ty, val::Val};
-
-mod cp_async_bulk;
-mod scatter_gather;
-mod tensor_tile;
-mod tensormap;
+pub mod cp_async_bulk;
+pub mod scatter_gather;
+pub mod tensor_tile;
+pub mod tensormap;
 
 pub struct TensorMap;
 impl Ty for TensorMap {
-    type LLType = StructType<'static>;
-    type LLVal = StructValue<'static>;
+    type LLType = StructType;
+    type LLVal = StructValue;
 
-    fn raw_ty(ctx: ContextRef<'static>) -> Self::LLType {
+    fn raw_ty(ctx: ContextRef) -> Self::LLType {
         let data = ctx.i64_type().array_type(16);
         ctx.struct_type(&[data.into()], false)
     }

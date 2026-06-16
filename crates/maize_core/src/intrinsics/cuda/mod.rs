@@ -1,3 +1,5 @@
+use std::mem::MaybeUninit;
+
 use inkwell::AddressSpace;
 
 use crate::{
@@ -28,6 +30,9 @@ pub mod tmem;
 pub mod vote;
 
 impl IntrinsicsLibrary for CUDA {
+    fn likely(&self, cond: Val<bool>) -> Val<bool> {
+        Self::likely(cond)
+    }
     unsafe fn assume(&self, cond: Val<bool>) {
         unsafe { self.assume(cond) };
     }
@@ -37,9 +42,22 @@ impl IntrinsicsLibrary for CUDA {
     }
 }
 
+pub fn cuda(fn_ref: FnRef) -> CUDA {
+    CUDA(fn_ref)
+}
+
+#[derive(Debug)]
 pub struct CUDA(pub(crate) FnRef);
 
 impl CUDA {
+    pub fn likely(cond: Val<bool>) -> Val<bool> {
+        let fn_ref = cond.fn_ref().clone();
+        let intrins = fn_ref
+            .get_intrinsic::<bool, (bool, bool)>("llvm.expect", false, &[])
+            .expect("Intrinsic should exist");
+        let expected = cond.constant(true);
+        fn_ref.call_extern(intrins, (cond, expected), None)
+    }
     pub unsafe fn assume(&self, cond: Val<bool>) {
         let func = self
             .0
@@ -63,7 +81,7 @@ impl CUDA {
                 "__assertfail",
             );
         let char_size: Val<u32> = self.0.constant(1);
-        If(cond.copy()).then(|| ()).or_else(|| {
+        If(Self::likely(cond.copy())).then(|| ()).or_else(|| {
             let _ = self.0.call_extern(
                 assert_false,
                 (raw_msg, raw_file, raw_line.load(), raw_func, char_size),
@@ -83,7 +101,7 @@ impl CUDA {
         unsafe { Val::new(self.0.clone(), UntypedValue(ptr.into())) }
     }
 
-    pub fn alloc_shared<T: Ty>(self) -> Val<A<&'static mut T, 3>> {
+    pub fn alloc_shared<T: Ty>(self) -> Val<A<&'static mut MaybeUninit<T>, 3>> {
         let gv = self
             .0
             .llvm()
@@ -92,6 +110,7 @@ impl CUDA {
         gv.set_unnamed_addr(true);
         gv.set_initializer(&T::undef_val(self.0.clone()).typed());
         let ptr = gv.as_pointer_value();
-        unsafe { Val::new(self.0.clone(), UntypedValue(ptr.into())) }
+        // Safety: this is definitely passing in a pointer type
+        unsafe { Val::new_untyped(self.0.clone(), UntypedValue(ptr.into())) }
     }
 }

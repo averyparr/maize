@@ -1,5 +1,11 @@
+use crate::{
+    backend::FnRef,
+    intrinsics::{IntrinsicsLibrary, cuda::CUDA},
+};
+
 use super::ToCPU;
 
+#[derive(Clone, Copy, Debug)]
 pub enum SM {
     // Volta
     SM70,
@@ -49,5 +55,9 @@ impl ToCPU for SM {
     }
     fn triple(&self) -> &str {
         "nvptx64-nvidia-cuda"
+    }
+    fn provide_intrinsics(&self, fn_ref: FnRef, f: &dyn Fn(&dyn IntrinsicsLibrary)) {
+        let cuda = CUDA(fn_ref);
+        f(&cuda)
     }
 }

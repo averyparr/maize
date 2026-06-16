@@ -31,12 +31,12 @@ impl<Ret, Args: FnArgs> Func<Ret, Args> {
     pub fn args(&self) -> Args::ArgValues {
         Args::extract_and_type_args(self.0.clone())
     }
-    pub fn run_passes(&self, cpu: impl ToCPU, opt: Opt) {
-        self.0.run_passes(&cpu, opt);
+    pub fn run_passes(&self, opt: Opt) {
+        self.0.run_passes(opt);
     }
-    pub fn compile(self, cpu: impl ToCPU, opt: Opt) -> Box<[u8]> {
+    pub fn compile(self, opt: Opt) -> Box<[u8]> {
         let single_context = self.0.try_get().expect("Should be only owner!");
-        single_context.compile(&cpu, opt)
+        single_context.compile(opt)
     }
     pub fn module_string(&self) -> String {
         self.0.module_string()

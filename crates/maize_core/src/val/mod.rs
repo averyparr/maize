@@ -12,7 +12,7 @@ pub struct Val<T>(FnRef, UntypedValue, PhantomData<T>);
 pub struct S<T>(PhantomData<T>);
 
 impl<T> Val<T> {
-    pub fn decompose(self) -> (FnRef, UntypedValue) {
+    pub(crate) fn decompose(self) -> (FnRef, UntypedValue) {
         (self.0, self.1)
     }
     pub fn copy(&self) -> Self
@@ -33,13 +33,16 @@ impl<T> Val<T> {
         fn_ref.apply_ins_flags(&mut value);
         Self(fn_ref, value, PhantomData)
     }
-    pub(crate) fn fn_ref(&self) -> &FnRef {
+    pub fn constant<U: Ty + Copy>(&self, val: U) -> Val<U> {
+        self.fn_ref().constant(val)
+    }
+    pub fn fn_ref(&self) -> &FnRef {
         &self.0
     }
     pub(crate) fn raw(&self) -> UntypedValue {
         self.1
     }
-    pub(crate) fn typed(&self) -> T::LLVal
+    pub fn typed(&self) -> T::LLVal
     where
         T: Ty,
     {

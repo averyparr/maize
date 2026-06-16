@@ -1,17 +1,20 @@
-use inkwell::{context::ContextRef, types::BasicType};
+use inkwell::types::BasicType;
 
-use crate::backend::{ErasedType, FnRef, UntypedValue};
+use crate::{
+    ContextRef,
+    backend::{ErasedType, FnRef, UntypedValue},
+};
 
 pub trait FnArgs {
     type ArgValues;
-    fn raw_type_sequence(ctx: ContextRef<'static>) -> Vec<ErasedType>;
+    fn raw_type_sequence(ctx: ContextRef) -> Vec<ErasedType>;
     fn extract_and_type_args(fn_ref: FnRef) -> Self::ArgValues;
     fn arg_arr(args: Self::ArgValues) -> impl IntoIterator<Item = UntypedValue>;
 }
 
 impl FnArgs for () {
     type ArgValues = ();
-    fn raw_type_sequence(_: ContextRef<'static>) -> Vec<ErasedType> {
+    fn raw_type_sequence(_: ContextRef) -> Vec<ErasedType> {
         vec![]
     }
     fn extract_and_type_args(fn_ref: FnRef) -> Self::ArgValues {
@@ -27,30 +30,26 @@ macro_rules! derive_fn_args {
     ($($tipes: ident),*) => {
         impl<$($tipes: $crate::tipe::Ty),*> $crate::func::args::FnArgs for ($($tipes,)*) {
             type ArgValues = ($($crate::val::Val<$tipes>,)*);
-            fn raw_type_sequence(ctx: ::inkwell::context::ContextRef<'static>) -> ::std::vec::Vec<$crate::backend::ErasedType> {
-                vec![$($crate::backend::ErasedType($tipes::raw_ty(ctx).as_basic_type_enum())),*]
+            fn raw_type_sequence(ctx: ContextRef) -> ::std::vec::Vec<$crate::backend::ErasedType> {
+                Vec::from_iter(::std::iter::empty()$(.chain($tipes::function_arg_types(ctx)))*)
             }
             fn extract_and_type_args(fn_ref: FnRef) -> Self::ArgValues {
-                let mut param = 0;
+                let mut params = 0..;
                 $(
-                    $tipes::type_metadata_on_function(&fn_ref, param);
-                    param += 1;
+                    $tipes::type_metadata_on_function(&fn_ref, &mut params);
                 )*
-                let _ = param;
-                let mut args = fn_ref.args();
-                #[allow(non_snake_case)]
-                if $(let Some($tipes) = args.next() && )* let None = args.next() {
-                    (
-                        $(
-                            // Safety: Raw construction from function args
-                            unsafe {
-                                $crate::val::Val::new(fn_ref.clone(), $tipes)
-                            },
-                        )*
-                    )
-                } else {
+                let nparams = params.next().unwrap();
+                let mut args = Vec::from_iter(fn_ref.args()).into_iter();
+
+                let ret = unsafe { (
+                    $($tipes::extract_arg(fn_ref.clone(), &mut args),)*
+                ) };
+
+                let None = args.next() else {
                     panic!("Incorrect argument sequence!");
-                }
+                };
+
+                ret
             }
             fn arg_arr(args: Self::ArgValues) -> impl IntoIterator<Item = UntypedValue> {
                 #[allow(non_snake_case)]

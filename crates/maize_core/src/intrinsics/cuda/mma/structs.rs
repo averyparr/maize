@@ -1,6 +1,5 @@
-use inkwell::{context::ContextRef, types::StructType, values::StructValue};
-
 use crate::{
+    ContextRef, StructType, StructValue,
     backend::{FnRef, UntypedValue},
     tipe::{F16, Ty, V},
     val::Val,
@@ -14,10 +13,10 @@ macro_rules! impl_mma_struct {
         #[derive(Clone, Copy)]
         pub struct $name([$elem; $len]);
         impl Ty for $name {
-            type LLType = StructType<'static>;
-            type LLVal = StructValue<'static>;
+            type LLType = StructType;
+            type LLVal = StructValue;
 
-            fn raw_ty(ctx: ContextRef<'static>) -> Self::LLType {
+            fn raw_ty(ctx: ContextRef) -> Self::LLType {
                 ctx.struct_type(&[<$elem>::raw_ty(ctx).into(); $len], false)
             }
 

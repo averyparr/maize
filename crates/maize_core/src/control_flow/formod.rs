@@ -14,7 +14,10 @@ pub trait Looper {
     fn next(&self, val: &mut Self::Decision);
     fn load(&self, val: &Self::Decision) -> Self::Input;
 
-    fn for_each(&self, mut f: impl FnMut(Self::Input)) {
+    fn for_each(self, mut f: impl FnMut(Self::Input))
+    where
+        Self: Sized,
+    {
         let fn_ref = self.fn_ref();
         let init_block = fn_ref.get_current_bb();
         let mut init = self.init();

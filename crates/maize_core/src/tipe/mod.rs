@@ -2,22 +2,26 @@ mod array;
 mod cmp;
 pub mod constant;
 mod cvt;
+pub mod indexing;
 mod math;
 mod ptr;
-mod reflection;
+pub mod reflection;
+mod slice;
+mod uninit;
 mod vec;
 
+use std::mem::MaybeUninit;
+
+use inkwell::{
+    types::{BasicType, BasicTypeEnum},
+    values::BasicValue,
+};
 pub use math::MathTy;
 pub use ptr::A;
 pub use vec::{V, VecTy};
 
-use inkwell::{
-    context::ContextRef,
-    types::{BasicType, BasicTypeEnum, FloatType, IntType},
-    values::{BasicValue, FloatValue, IntValue},
-};
-
 use crate::{
+    ContextRef, FloatType, FloatValue, IntType, IntValue,
     backend::{ErasedType, FnCtx, FnRef, UntypedValue},
     val::Val,
 };
@@ -25,7 +29,7 @@ use crate::{
 pub trait Ty {
     type LLType: BasicType<'static>;
     type LLVal: BasicValue<'static>;
-    fn raw_ty(ctx: ContextRef<'static>) -> Self::LLType;
+    fn raw_ty(ctx: ContextRef) -> Self::LLType;
     fn ty(cg: &FnCtx) -> ErasedType {
         ErasedType(Self::raw_ty(cg.ctx()).as_basic_type_enum())
     }
@@ -65,7 +69,16 @@ pub trait Ty {
         unsafe { Val::new(fn_ref, UntypedValue(undef)) }
     }
     fn type_metadata(_: &FnCtx, _: &mut UntypedValue) {}
-    fn type_metadata_on_function(_: &FnCtx, _: u32) {}
+    fn function_arg_types(ctx: ContextRef) -> impl ExactSizeIterator<Item = ErasedType> {
+        [ErasedType(Self::raw_ty(ctx).as_basic_type_enum())].into_iter()
+    }
+    fn type_metadata_on_function(_: &FnCtx, _: &mut impl Iterator<Item = u32>) {}
+    unsafe fn extract_arg(fn_ref: FnRef, iter: &mut impl Iterator<Item = UntypedValue>) -> Val<Self>
+    where
+        Self: Sized,
+    {
+        unsafe { Val::new(fn_ref, iter.next().expect("Should be in range")) }
+    }
 }
 
 macro_rules! basic_impl_ty {
@@ -74,9 +87,9 @@ macro_rules! basic_impl_ty {
     ),* $(,)?) => {
         $(
             impl Ty for $tipes {
-                type LLType = $llty<'static>;
-                type LLVal = $llval<'static>;
-                fn raw_ty(ctx: ContextRef<'static>) -> Self::LLType {
+                type LLType = $llty;
+                type LLVal = $llval;
+                fn raw_ty(ctx: ContextRef) -> Self::LLType {
                     ctx.$type_fns()
                 }
                 fn type_val(val: UntypedValue) -> Self::LLVal {
@@ -391,35 +404,35 @@ impl FromF32 for F8E5M2 {
     }
 }
 
-fn const_into_i64(ty: IntType<'static>, val: impl Into<i64>) -> IntValue<'static> {
+fn const_into_i64(ty: IntType, val: impl Into<i64>) -> IntValue {
     ty.const_int(val.into() as u64, false)
 }
 
-fn const_u64(ty: IntType<'static>, val: u64) -> IntValue<'static> {
+fn const_u64(ty: IntType, val: u64) -> IntValue {
     ty.const_int(val, false)
 }
 
-fn const_i128(_: IntType<'static>, _: i128) -> IntValue<'static> {
+fn const_i128(_: IntType, _: i128) -> IntValue {
     todo!("Unable to represent const i128s for now");
 }
 
-fn const_u128(_: IntType<'static>, _: u128) -> IntValue<'static> {
+fn const_u128(_: IntType, _: u128) -> IntValue {
     todo!("Unable to represent const u128s for now");
 }
 
-fn const_e4m3(ty: IntType<'static>, val: F8E4M3) -> IntValue<'static> {
+fn const_e4m3(ty: IntType, val: F8E4M3) -> IntValue {
     ty.const_int(val.0 as _, false)
 }
 
-fn const_e5m2(ty: IntType<'static>, val: F8E5M2) -> IntValue<'static> {
+fn const_e5m2(ty: IntType, val: F8E5M2) -> IntValue {
     ty.const_int(val.0 as _, false)
 }
 
-fn const_e8m0(ty: IntType<'static>, val: F8E8M0) -> IntValue<'static> {
+fn const_e8m0(ty: IntType, val: F8E8M0) -> IntValue {
     ty.const_int(val.0 as _, false)
 }
 
-fn const_f16(ty: FloatType<'static>, val: F16) -> FloatValue<'static> {
+fn const_f16(ty: FloatType, val: F16) -> FloatValue {
     let val = {
         let bits = val.0;
         let sign = (bits >> 15) & 0x1;
@@ -464,13 +477,13 @@ fn const_f16(ty: FloatType<'static>, val: F16) -> FloatValue<'static> {
     ty.const_float(val as _)
 }
 
-fn const_bf16(ty: FloatType<'static>, val: BF16) -> FloatValue<'static> {
+fn const_bf16(ty: FloatType, val: BF16) -> FloatValue {
     let bits = val.0;
     let val = f32::from_bits((bits as u32) << 16);
     ty.const_float(val as _)
 }
 
-fn const_into_f64(ty: FloatType<'static>, val: impl Into<f64>) -> FloatValue<'static> {
+fn const_into_f64(ty: FloatType, val: impl Into<f64>) -> FloatValue {
     ty.const_float(val.into())
 }
 
@@ -497,10 +510,10 @@ basic_impl_ty!(
 );
 
 impl Ty for bool {
-    type LLType = IntType<'static>;
-    type LLVal = IntValue<'static>;
+    type LLType = IntType;
+    type LLVal = IntValue;
 
-    fn raw_ty(ctx: ContextRef<'static>) -> Self::LLType {
+    fn raw_ty(ctx: ContextRef) -> Self::LLType {
         ctx.bool_type()
     }
 

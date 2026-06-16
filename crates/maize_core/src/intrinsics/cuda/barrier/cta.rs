@@ -1,6 +1,6 @@
 use crate::{
     backend::VoidType,
-    intrinsics::{Intrinsic, cuda::CUDA, impl_intrinsics},
+    intrinsics::{Intrinsic, cuda::CUDA, impl_argless_intrinsics, impl_intrinsics},
     val::Val,
 };
 
@@ -10,7 +10,10 @@ impl_intrinsics!(
     CtaReduceOrCount: "llvm.nvvm.barrier.cta.red.or.count" (u32, u32, bool) -> bool,
     CtaReducePopcCount: "llvm.nvvm.barrier.cta.red.popc.count" (u32, u32, bool) -> u32,
     CtaSyncCount: "llvm.nvvm.barrier.cta.sync.count" (u32, u32) -> VoidType,
+    CtaSync: "llvm.nvvm.barrier.cta.sync.aligned.all"(u32) -> VoidType,
 );
+
+impl_argless_intrinsics!();
 
 impl CUDA {
     pub fn cta_arrive_count(num_threads: Val<u32>, barrier_id: u32) {
@@ -44,5 +47,12 @@ impl CUDA {
     pub fn cta_sync_count(num_threads: Val<u32>, barrier_id: u32) {
         assert!(barrier_id < 16);
         CtaSyncCount.call((num_threads.fn_ref().constant(barrier_id), num_threads))
+    }
+    pub fn cta_sync(&self, barrier_id: u32) {
+        assert!(barrier_id < 16);
+        CtaSync.call((self.0.constant(barrier_id),))
+    }
+    pub fn sync_threads(&self) {
+        self.cta_sync(0);
     }
 }

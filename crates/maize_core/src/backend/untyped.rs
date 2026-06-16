@@ -5,7 +5,7 @@ use inkwell::{
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 #[repr(transparent)]
-pub struct UntypedValue(pub(crate) BasicValueEnum<'static>);
+pub struct UntypedValue(pub BasicValueEnum<'static>);
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 #[repr(transparent)]
 pub struct ErasedType(pub(crate) BasicTypeEnum<'static>);
@@ -17,6 +17,9 @@ pub struct UntypedFunc(pub(crate) FunctionValue<'static>);
 pub struct ErasedFuncType(pub(crate) FunctionType<'static>);
 
 impl ErasedType {
+    pub fn new(val: impl Into<BasicTypeEnum<'static>>) -> Self {
+        Self(val.into())
+    }
     pub(crate) fn func_type(&self, args: &[ErasedType]) -> ErasedFuncType {
         // Safety: repr-transparent
         let param_types = unsafe { std::mem::transmute(args) };
@@ -25,8 +28,8 @@ impl ErasedType {
 }
 
 impl UntypedValue {
-    pub(crate) fn new(val: BasicValueEnum<'static>) -> Self {
-        Self(val)
+    pub fn new(val: impl Into<BasicValueEnum<'static>>) -> Self {
+        Self(val.into())
     }
 
     pub fn erased_type(&self) -> ErasedType {

@@ -165,6 +165,8 @@ impl CUDASreg {
         lanemask_le => LanemaskLe,
         lanemask_lt => LanemaskLt,
 
+        laneid => LaneId,
+
         num_sms => NSms,
         sm_id => SMId,
         num_warps => NWarps,

@@ -13,7 +13,6 @@ use inkwell::{
     attributes::{Attribute, AttributeLoc},
     basic_block::BasicBlock,
     builder::Builder,
-    context::ContextRef,
     intrinsics::Intrinsic,
     passes::PassBuilderOptions,
     targets::{FileType, InitializationConfig, Target, TargetMachine, TargetTriple},
@@ -24,8 +23,9 @@ use inkwell::{
 pub use crate::backend::ins::InstructionFlags;
 pub use crate::backend::{cpu::ToCPU, llvm::LLVM, opt::Opt};
 use crate::{
+    ContextRef,
     func::{ExternFunc, FnArgs, FnRetTy, callconv::CallConv},
-    intrinsics::IntrinsicError,
+    intrinsics::{IntrinsicError, IntrinsicsLibrary},
     tipe::{A, Ty},
     val::{S, Val},
 };
@@ -53,7 +53,7 @@ impl FnCtx {
             alignment.try_into().expect("usize -> u32 overflow"),
         );
     }
-    pub(crate) fn set_param_metadata(&self, param_index: u32, metadata: &str, val: u64) {
+    pub fn set_param_metadata(&self, param_index: u32, metadata: &str, val: u64) {
         let kind_id = Attribute::get_named_enum_kind_id(metadata);
         let attribute = self.llvm.ctx().create_enum_attribute(kind_id, val);
         self.func
@@ -79,7 +79,7 @@ impl FnCtx {
     pub fn void_ty(&self) -> VoidType {
         VoidType(self.ctx().void_type())
     }
-    pub(crate) fn ctx(&self) -> ContextRef<'static> {
+    pub fn ctx(&self) -> ContextRef {
         self.llvm.ctx()
     }
     pub(crate) fn with_bb_as<U>(&self, bb: BB, f: impl FnOnce() -> U) -> U {
@@ -90,7 +90,7 @@ impl FnCtx {
         ret
     }
 
-    pub fn initialize(cpu: &impl ToCPU) {
+    pub fn initialize(cpu: &dyn ToCPU) {
         let config = &InitializationConfig::default();
         match cpu.triple() {
             "nvptx64-nvidia-cuda" => Target::initialize_nvptx(config),
@@ -128,15 +128,15 @@ impl FnCtx {
         }
     }
 
-    fn create_machine(&self, cpu: &impl ToCPU, opt: Opt) -> TargetMachine {
-        FnCtx::initialize(cpu);
-        let triple = TargetTriple::create(cpu.triple());
+    fn create_machine(&self, opt: Opt) -> TargetMachine {
+        FnCtx::initialize(self.llvm.cpu());
+        let triple = TargetTriple::create(self.llvm.cpu().triple());
         let target = Target::from_triple(&triple).expect("cpu.triple() invalid for LLVM");
         target
             .create_target_machine(
                 &triple,
-                cpu.cpu(),
-                cpu.features(),
+                self.llvm.cpu().cpu(),
+                self.llvm.cpu().features(),
                 opt.as_optimization_level(),
                 inkwell::targets::RelocMode::Default,
                 inkwell::targets::CodeModel::Default,
@@ -144,25 +144,26 @@ impl FnCtx {
             .expect("Could not create a compiler with the given option")
     }
 
-    pub fn run_passes(&self, cpu: &impl ToCPU, opt: Opt) {
+    pub fn run_passes(&self, opt: Opt) {
         let passes = opt.default_passes();
         let options = PassBuilderOptions::create();
-        let machine = self.create_machine(cpu, opt);
+        let machine = self.create_machine(opt);
         self.llvm
             .module()
             .run_passes(passes, &machine, options)
             .expect("Was unable to run passes");
     }
 
-    pub fn compile(self, cpu: &impl ToCPU, opt: Opt) -> Box<[u8]> {
+    pub fn compile(self, opt: Opt) -> Box<[u8]> {
+        let cpu = self.llvm.cpu();
         Self::initialize(cpu);
         let inner = self.llvm.inner();
 
         self.validate_all_function_bbs_terminated();
 
-        self.run_passes(cpu, opt);
+        self.run_passes(opt);
 
-        let machine = self.create_machine(cpu, opt);
+        let machine = self.create_machine(opt);
 
         let maybe_ret = machine
             .write_to_memory_buffer(&inner, FileType::Assembly)
@@ -205,6 +206,12 @@ impl FnCtx {
 pub struct FnRef(Rc<FnCtx>);
 
 impl FnRef {
+    pub fn intrinsic<I: IntrinsicsLibrary>(&self, f: impl FnOnce(Self) -> I) -> I {
+        f(self.clone())
+    }
+    pub fn with_intrinsic(&self, f: impl Fn(&dyn IntrinsicsLibrary)) {
+        self.llvm().cpu().provide_intrinsics(self.clone(), &f);
+    }
     pub fn new(ctx: FnCtx) -> Self {
         Self(Rc::new(ctx))
     }
@@ -298,8 +305,13 @@ impl FnRef {
     pub fn declare_extern<Ret: FnRetTy, Args: FnArgs>(&self, name: &str) -> ExternFunc<Ret, Args> {
         let args = Args::raw_type_sequence(self.llvm.ctx());
         let fn_type = Ret::erased_func_type(self.llvm.ctx(), &args).0;
-        let new_func = self.0.llvm.module().add_function(name, fn_type, None);
-        unsafe { ExternFunc::new(UntypedFunc(new_func)) }
+        if let Some(fn_val) = self.0.llvm.module().get_function(name) {
+            assert_eq!(fn_val.get_type(), fn_type);
+            unsafe { ExternFunc::new(UntypedFunc(fn_val)) }
+        } else {
+            let new_func = self.0.llvm.module().add_function(name, fn_type, None);
+            unsafe { ExternFunc::new(UntypedFunc(new_func)) }
+        }
     }
     pub fn call_extern<Ret, Args>(
         &self,

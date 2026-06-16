@@ -1,10 +1,12 @@
+mod indexing;
+
 use inkwell::{
-    context::ContextRef,
     types::{ArrayType, BasicType},
     values::ArrayValue,
 };
 
 use crate::{
+    ContextRef,
     backend::{FnRef, UntypedValue},
     tipe::Ty,
     val::Val,
@@ -17,7 +19,7 @@ where
     type LLType = ArrayType<'static>;
     type LLVal = ArrayValue<'static>;
 
-    fn raw_ty(ctx: ContextRef<'static>) -> Self::LLType {
+    fn raw_ty(ctx: ContextRef) -> Self::LLType {
         T::raw_ty(ctx).array_type(N as _)
     }
 

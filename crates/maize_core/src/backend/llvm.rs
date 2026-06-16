@@ -1,35 +1,54 @@
+use std::{cell::RefCell, collections::HashMap};
+
 use inkwell::{
     AddressSpace,
-    context::{Context, ContextRef},
+    context::Context,
     module::{Linkage, Module},
     values::{BasicValue, GlobalValue},
 };
 
 use crate::{
-    backend::{FnCtx, FnRef, untyped::ErasedFuncType},
+    ContextRef,
+    backend::{FnCtx, FnRef, ToCPU, untyped::ErasedFuncType},
     tipe::Ty,
     val::Val,
 };
 
 use super::untyped::UntypedFunc;
 
-#[derive(PartialEq, Debug)]
+#[derive(Debug)]
 pub struct LLVM {
     module: Module<'static>,
+    strings: RefCell<HashMap<&'static str, GlobalValue<'static>>>,
+    cpu: &'static dyn ToCPU,
+}
+
+impl PartialEq for LLVM {
+    fn eq(&self, other: &Self) -> bool {
+        self.module == other.module
+    }
 }
 
 impl LLVM {
-    pub fn new_named(name: &str) -> Self {
+    pub fn cpu(&self) -> &dyn ToCPU {
+        self.cpu
+    }
+    pub fn new_named(name: &str, cpu: &'static dyn ToCPU) -> Self {
         thread_local! {
             static CTX: &'static Context = Box::leak(Box::new(Context::create()));
         }
         let module = CTX.with(|c| c.create_module(name));
-        Self { module }
+        let strings = RefCell::new(HashMap::new());
+        Self {
+            module,
+            strings,
+            cpu,
+        }
     }
-    pub fn new() -> Self {
-        Self::new_named("module")
+    pub fn new(cpu: &'static dyn ToCPU) -> Self {
+        Self::new_named("module", cpu)
     }
-    pub(crate) fn ctx(&self) -> ContextRef<'static> {
+    pub(crate) fn ctx(&self) -> ContextRef {
         self.module.get_context()
     }
 
@@ -48,6 +67,9 @@ impl LLVM {
         name: &str,
         address_space: Option<AddressSpace>,
     ) -> GlobalValue<'static> {
+        if let Some(v) = self.strings.borrow().get(s) {
+            return *v;
+        }
         let ctx = self.ctx();
         let i8_ty = ctx.i8_type();
         let ty = i8_ty.array_type((s.len() + 1).try_into().expect("usize -> u32 overflow"));
@@ -60,6 +82,9 @@ impl LLVM {
         global.set_initializer(&i8_ty.const_array(mapped_chars.as_slice()));
         global.set_linkage(Linkage::Internal);
         global.set_unnamed_addr(true);
+        self.strings
+            .borrow_mut()
+            .insert(String::leak(String::from(s)), global);
         global
     }
     pub fn insert_global<T: Ty>(

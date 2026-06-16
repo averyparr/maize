@@ -173,7 +173,7 @@ macro_rules! test_tcgen05_ld {
                     concat!("test_", stringify!($name)),
                 );
                 {
-                    let (tmem_ptr, val_mut1, val_mut2) = func.args();
+                    let (tmem_ptr, mut val_mut1, mut val_mut2) = func.args();
                     $(let $extra = func.constant(64);)?
                     let with = $name(tmem_ptr.copy(), $($extra.copy(),)? func.constant(false));
                     let without = $name(tmem_ptr.copy(), $($extra.copy(),)? func.constant(true));

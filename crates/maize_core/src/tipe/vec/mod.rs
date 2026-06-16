@@ -1,9 +1,10 @@
 mod elements;
 mod math;
 
-use inkwell::{builder::Builder, context::ContextRef, types::VectorType, values::VectorValue};
+use inkwell::{builder::Builder, types::VectorType, values::VectorValue};
 
 use crate::{
+    ContextRef,
     backend::{FnRef, UntypedValue},
     tipe::{BF16, F8E4M3, F8E5M2, F8E8M0, F16, Ty},
     val::Val,
@@ -23,7 +24,7 @@ pub trait VecTy: Ty + Copy {
     fn splat(
         raw_val: Self::LLVal,
         size: u32,
-        ctx: ContextRef<'static>,
+        ctx: ContextRef,
         b: Builder<'static>,
     ) -> VectorValue<'static>;
 }
@@ -35,7 +36,7 @@ macro_rules! impl_multi_vec {
                 fn vectorize(raw_ty: Self::LLType, size: u32) -> VectorType<'static> {
                     raw_ty.vec_type(size)
                 }
-                fn splat(raw_val: Self::LLVal, size: u32, ctx: ContextRef<'static>, b: Builder<'static>) -> VectorValue<'static> {
+                fn splat(raw_val: Self::LLVal, size: u32, ctx: ContextRef, b: Builder<'static>) -> VectorValue<'static> {
                     let mut raw = Self::vectorize(raw_val.get_type(), size).const_zero();
                     for i in 0..size {
                         raw = b.build_insert_element(
@@ -63,7 +64,7 @@ where
     type LLType = VectorType<'static>;
     type LLVal = VectorValue<'static>;
 
-    fn raw_ty(ctx: ContextRef<'static>) -> Self::LLType {
+    fn raw_ty(ctx: ContextRef) -> Self::LLType {
         T::vectorize(T::raw_ty(ctx), N as u32)
     }
 

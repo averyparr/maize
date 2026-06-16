@@ -3,10 +3,10 @@ use crate::{
     func::implement_ptx_kernel,
     intrinsics::{
         Intrinsic,
-        cuda::{CUDA, cache},
+        cuda::{CUDA, cache, mbar::Mbar},
         impl_argless_intrinsics, impl_intrinsics,
     },
-    tipe::A,
+    tipe::{A, Ty},
     val::Val,
 };
 
@@ -15,6 +15,8 @@ impl_argless_intrinsics!(
 );
 
 impl_intrinsics!(
+    CpAsyncBulkWait: "llvm.nvvm.cp.async.bulk.wait.group"(u32) -> VoidType,
+    CpAsyncBulkWaitReads: "llvm.nvvm.cp.async.bulk.wait.group.read"(u32) -> VoidType,
     CpAsyncBulkG2C: "llvm.nvvm.cp.async.bulk.global.to.shared.cluster"(A<*mut u8, 7>, A<*mut u64, 3>, A<*const u8, 1>, u32, u16, u64, bool, bool) -> VoidType,
     CpAsyncBulkG2S: "llvm.nvvm.cp.async.bulk.global.to.shared.cta"(A<*mut u8, 3>, A<*mut u64, 3>, A<*const u8, 1>, u32, u64, bool) -> VoidType,
     CpAsyncBulkS2C: "llvm.nvvm.cp.async.bulk.shared.cta.to.cluster"(A<*mut u8, 7>, A<*mut u64, 3>, A<*const u8, 3>, u32) -> VoidType,
@@ -24,6 +26,15 @@ impl_intrinsics!(
 impl CUDA {
     pub fn cp_async_bulk_commit_group(&self) {
         CpAsyncBulkCommitGroup(self.0.clone()).call(())
+    }
+    pub fn cp_async_bulk_wait_group(&self, num_groups: u32) {
+        CpAsyncBulkWait.call((self.0.constant(num_groups),))
+    }
+    pub fn cp_async_bulk_wait_group_reads_only(&self, num_groups: u32) {
+        CpAsyncBulkWaitReads.call((self.0.constant(num_groups),))
+    }
+    pub fn cp_async_bulk_wait_all(&self) {
+        self.cp_async_bulk_wait_group(0)
     }
 }
 
@@ -53,21 +64,21 @@ pub fn cp_async_bulk_g2c(
     ))
 }
 
-pub fn cp_async_bulk_g2s(
-    shared_ptr: Val<A<*mut u8, 3>>,
-    mbar: Val<A<&mut u64, 3>>,
-    global_ptr: Val<A<*const u8, 1>>,
-    num_bytes: Val<u32>,
+pub fn cp_async_bulk_g2s<T: Ty>(
+    shared_ptr: Val<A<&mut T, 3>>,
+    mbar: Val<A<&mut Mbar, 3>>,
+    global_ptr: Val<A<&T, 1>>,
     cache_hint: Option<Val<u64>>,
 ) {
     let fn_ref = shared_ptr.fn_ref();
     let uses_cache_hint = fn_ref.constant(cache_hint.is_some());
     let cache_hint = cache_hint.unwrap_or(fn_ref.constant(0));
+    let num_bytes = shared_ptr.constant(T::size() as _);
 
     CpAsyncBulkG2S.call((
-        shared_ptr,
-        mbar.as_mut_ptr(),
-        global_ptr,
+        shared_ptr.as_mut_ptr().ptr_cast(),
+        mbar.as_mut_ptr().ptr_cast(),
+        global_ptr.reborrow().as_ptr().ptr_cast(),
         num_bytes,
         cache_hint,
         uses_cache_hint,
@@ -83,18 +94,18 @@ pub fn cp_async_bulk_s2c(
     CpAsyncBulkS2C.call((cluster_ptr, mbar.as_mut_ptr(), shared_ptr, num_bytes))
 }
 
-pub fn cp_async_bulk_s2g(
-    global_ptr: Val<A<*mut u8, 1>>,
-    shared_ptr: Val<A<*const u8, 3>>,
-    num_bytes: Val<u32>,
+pub fn cp_async_bulk_s2g<T: Ty>(
+    global_ptr: Val<A<&mut T, 1>>,
+    shared_ptr: Val<A<&T, 3>>,
     cache_hint: Option<Val<u64>>,
 ) {
     let fn_ref = global_ptr.fn_ref();
     let has_cache_hint = fn_ref.constant(cache_hint.is_some());
     let cache_hint = cache_hint.unwrap_or(fn_ref.constant(0));
+    let num_bytes = shared_ptr.constant(T::size() as _);
     CpAsyncBulkS2G.call((
-        global_ptr,
-        shared_ptr,
+        global_ptr.as_mut_ptr().ptr_cast(),
+        shared_ptr.as_ptr().ptr_cast(),
         num_bytes,
         cache_hint,
         has_cache_hint,

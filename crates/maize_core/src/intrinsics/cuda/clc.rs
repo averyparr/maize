@@ -1,6 +1,5 @@
-use inkwell::{context::ContextRef, types::StructType, values::StructValue};
-
 use crate::{
+    ContextRef, StructType, StructValue,
     backend::{FnRef, UntypedValue, VoidType},
     intrinsics::{Intrinsic, cuda::CUDA, impl_intrinsics},
     tipe::{A, Ty},
@@ -16,10 +15,10 @@ pub struct CanceledLaunch {
 }
 
 impl Ty for CanceledLaunch {
-    type LLType = StructType<'static>;
-    type LLVal = StructValue<'static>;
+    type LLType = StructType;
+    type LLVal = StructValue;
 
-    fn raw_ty(ctx: ContextRef<'static>) -> Self::LLType {
+    fn raw_ty(ctx: ContextRef) -> Self::LLType {
         let u32_ty = u32::raw_ty(ctx).into();
         ctx.struct_type(&[u32_ty, u32_ty, u32_ty, u32_ty], false)
     }

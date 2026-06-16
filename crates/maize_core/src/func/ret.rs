@@ -1,12 +1,12 @@
 use std::rc::Rc;
 
 use inkwell::{
-    context::ContextRef,
     types::{AnyType, AnyTypeEnum, BasicType},
     values::CallSiteValue,
 };
 
 use crate::{
+    ContextRef,
     backend::{ErasedFuncType, ErasedType, FnCtx, FnRef, UntypedValue, VoidType, llvm::LLVM},
     func::args::FnArgs,
     tipe::Ty,
@@ -14,15 +14,15 @@ use crate::{
 };
 
 pub trait FnRetTy {
-    fn erased_func_type(ctx: ContextRef<'static>, args: &[ErasedType]) -> ErasedFuncType;
+    fn erased_func_type(ctx: ContextRef, args: &[ErasedType]) -> ErasedFuncType;
     fn define_func<Args: FnArgs>(llvm: Rc<LLVM>, name: &str) -> FnCtx;
-    fn raw_inkwell_type(ctx: ContextRef<'static>) -> AnyTypeEnum<'static>;
+    fn raw_inkwell_type(ctx: ContextRef) -> AnyTypeEnum<'static>;
     type RetVal;
     unsafe fn extract_call_site_value(fn_ref: FnRef, csv: CallSiteValue<'static>) -> Self::RetVal;
 }
 
 impl<T: Ty> FnRetTy for T {
-    fn erased_func_type(ctx: ContextRef<'static>, args: &[ErasedType]) -> ErasedFuncType {
+    fn erased_func_type(ctx: ContextRef, args: &[ErasedType]) -> ErasedFuncType {
         ErasedType(T::raw_ty(ctx).as_basic_type_enum()).func_type(&args)
     }
     fn define_func<Args: FnArgs>(llvm: Rc<LLVM>, name: &str) -> FnCtx {
@@ -32,7 +32,7 @@ impl<T: Ty> FnRetTy for T {
         let func = llvm.insert_untyped_func(name, fn_type);
         FnCtx::new(llvm, func)
     }
-    fn raw_inkwell_type(ctx: ContextRef<'static>) -> AnyTypeEnum<'static> {
+    fn raw_inkwell_type(ctx: ContextRef) -> AnyTypeEnum<'static> {
         Self::raw_ty(ctx).as_any_type_enum()
     }
     type RetVal = Val<Self>;
@@ -50,7 +50,7 @@ impl<T: Ty> FnRetTy for T {
 }
 
 impl FnRetTy for VoidType {
-    fn erased_func_type(ctx: ContextRef<'static>, args: &[ErasedType]) -> ErasedFuncType {
+    fn erased_func_type(ctx: ContextRef, args: &[ErasedType]) -> ErasedFuncType {
         VoidType(ctx.void_type()).func_type(args)
     }
     fn define_func<Args: FnArgs>(llvm: Rc<LLVM>, name: &str) -> FnCtx {
@@ -60,7 +60,7 @@ impl FnRetTy for VoidType {
         let func = llvm.insert_untyped_func(name, fn_type);
         FnCtx::new(llvm, func)
     }
-    fn raw_inkwell_type(ctx: ContextRef<'static>) -> AnyTypeEnum<'static> {
+    fn raw_inkwell_type(ctx: ContextRef) -> AnyTypeEnum<'static> {
         ctx.void_type().into()
     }
     type RetVal = ();

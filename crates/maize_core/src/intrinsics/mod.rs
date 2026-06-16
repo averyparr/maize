@@ -4,6 +4,7 @@ pub mod llvm;
 use inkwell::types::FunctionType;
 
 use crate::{
+    backend::FnRef,
     func::{FnArgs, FnRetTy},
     val::Val,
 };
@@ -14,7 +15,8 @@ pub trait Intrinsic {
     fn call(self, args: <Self::Args as FnArgs>::ArgValues) -> <Self::Ret as FnRetTy>::RetVal;
 }
 
-pub trait IntrinsicsLibrary {
+pub trait IntrinsicsLibrary: std::fmt::Debug {
+    fn likely(&self, cond: Val<bool>) -> Val<bool>;
     unsafe fn assume(&self, cond: Val<bool>);
     fn assert(&self, cond: Val<bool>, message: &str, file: &str, line: u32, function: &str);
 }

@@ -2,11 +2,12 @@ use std::marker::PhantomData;
 
 use inkwell::{
     AddressSpace,
-    types::{BasicType, PointerType},
-    values::{BasicValue, InstructionValue, PointerValue},
+    types::BasicType,
+    values::{BasicValue, InstructionValue},
 };
 
 use crate::{
+    ContextRef, PointerType, PointerValue,
     backend::{FnCtx, UntypedValue},
     tipe::Ty,
     val::Val,
@@ -15,42 +16,22 @@ use crate::{
 #[derive(Clone, Copy, PartialEq)]
 pub struct A<Ptr, const ADDRSPACE: u16>(PhantomData<Ptr>);
 
+impl<Ptr: Ty<LLType = PointerType>> From<Val<Ptr>> for Val<A<Ptr, 0>> {
+    fn from(value: Val<Ptr>) -> Self {
+        let (fn_ref, value) = value.decompose();
+        unsafe { Val::new(fn_ref, value) }
+    }
+}
+
 impl<T: Ty> Ty for *const T
 where
     T: Sized,
 {
-    type LLType = PointerType<'static>;
-    type LLVal = PointerValue<'static>;
+    type LLType = PointerType;
+    type LLVal = PointerValue;
 
-    fn raw_ty(ctx: inkwell::context::ContextRef<'static>) -> Self::LLType {
+    fn raw_ty(ctx: ContextRef) -> Self::LLType {
         ctx.ptr_type(AddressSpace::default())
-    }
-
-    fn ty(cg: &crate::backend::FnCtx) -> crate::backend::ErasedType {
-        crate::backend::ErasedType(Self::raw_ty(cg.ctx()).as_basic_type_enum())
-    }
-
-    fn type_val(val: crate::backend::UntypedValue) -> Self::LLVal {
-        val.0.into_pointer_value()
-    }
-
-    fn const_val(self, _: crate::backend::FnRef) -> Val<Self>
-    where
-        Self: Copy,
-    {
-        panic!("Pointers should not be used for const values!")
-    }
-}
-
-impl<T: Ty, const ADDRSPACE: u16> Ty for A<*const T, ADDRSPACE>
-where
-    T: Sized,
-{
-    type LLType = PointerType<'static>;
-    type LLVal = PointerValue<'static>;
-
-    fn raw_ty(ctx: inkwell::context::ContextRef<'static>) -> Self::LLType {
-        ctx.ptr_type(AddressSpace::from(ADDRSPACE))
     }
 
     fn ty(cg: &crate::backend::FnCtx) -> crate::backend::ErasedType {
@@ -73,38 +54,11 @@ impl<T: Ty> Ty for *mut T
 where
     T: Sized,
 {
-    type LLType = PointerType<'static>;
-    type LLVal = PointerValue<'static>;
+    type LLType = PointerType;
+    type LLVal = PointerValue;
 
-    fn raw_ty(ctx: inkwell::context::ContextRef<'static>) -> Self::LLType {
+    fn raw_ty(ctx: ContextRef) -> Self::LLType {
         ctx.ptr_type(AddressSpace::default())
-    }
-
-    fn ty(cg: &crate::backend::FnCtx) -> crate::backend::ErasedType {
-        crate::backend::ErasedType(Self::raw_ty(cg.ctx()).as_basic_type_enum())
-    }
-
-    fn type_val(val: crate::backend::UntypedValue) -> Self::LLVal {
-        val.0.into_pointer_value()
-    }
-
-    fn const_val(self, _: crate::backend::FnRef) -> Val<Self>
-    where
-        Self: Copy,
-    {
-        panic!("Pointers should not be used for const values!")
-    }
-}
-
-impl<T: Ty, const ADDRSPACE: u16> Ty for A<*mut T, ADDRSPACE>
-where
-    T: Sized,
-{
-    type LLType = PointerType<'static>;
-    type LLVal = PointerValue<'static>;
-
-    fn raw_ty(ctx: inkwell::context::ContextRef<'static>) -> Self::LLType {
-        ctx.ptr_type(AddressSpace::from(ADDRSPACE))
     }
 
     fn ty(cg: &crate::backend::FnCtx) -> crate::backend::ErasedType {
@@ -124,10 +78,10 @@ where
 }
 
 impl<T: Ty> Ty for &'_ T {
-    type LLType = PointerType<'static>;
-    type LLVal = PointerValue<'static>;
+    type LLType = PointerType;
+    type LLVal = PointerValue;
 
-    fn raw_ty(ctx: inkwell::context::ContextRef<'static>) -> Self::LLType {
+    fn raw_ty(ctx: ContextRef) -> Self::LLType {
         ctx.ptr_type(AddressSpace::default())
     }
 
@@ -139,7 +93,8 @@ impl<T: Ty> Ty for &'_ T {
         val.0.into_pointer_value()
     }
 
-    fn type_metadata_on_function(func: &FnCtx, param: u32) {
+    fn type_metadata_on_function(func: &FnCtx, param: &mut impl Iterator<Item = u32>) {
+        let param = param.next().expect("Should be in-bounds");
         func.set_param_alignment(param, T::align());
         func.set_param_metadata(
             param,
@@ -161,42 +116,14 @@ impl<T: Ty> Ty for &'_ T {
     }
 }
 
-impl<T: Ty, const ADDRSPACE: u16> Ty for A<&'_ T, ADDRSPACE> {
-    type LLType = PointerType<'static>;
-    type LLVal = PointerValue<'static>;
-
-    fn raw_ty(ctx: inkwell::context::ContextRef<'static>) -> Self::LLType {
-        ctx.ptr_type(AddressSpace::from(ADDRSPACE))
-    }
-
-    fn ty(cg: &crate::backend::FnCtx) -> crate::backend::ErasedType {
-        crate::backend::ErasedType(Self::raw_ty(cg.ctx()).as_basic_type_enum())
-    }
-
-    fn type_val(val: crate::backend::UntypedValue) -> Self::LLVal {
-        val.0.into_pointer_value()
-    }
-
-    fn type_metadata_on_function(func: &FnCtx, param: u32) {
-        <&T>::type_metadata_on_function(func, param);
-    }
-
-    fn const_val(self, _: crate::backend::FnRef) -> Val<Self>
-    where
-        Self: Copy,
-    {
-        panic!("Pointers should not be used for const values!")
-    }
-}
-
 impl<T: Ty> Ty for &'_ mut T
 where
     T: Sized,
 {
-    type LLType = PointerType<'static>;
-    type LLVal = PointerValue<'static>;
+    type LLType = PointerType;
+    type LLVal = PointerValue;
 
-    fn raw_ty(ctx: inkwell::context::ContextRef<'static>) -> Self::LLType {
+    fn raw_ty(ctx: ContextRef) -> Self::LLType {
         ctx.ptr_type(AddressSpace::default())
     }
 
@@ -208,7 +135,8 @@ where
         val.0.into_pointer_value()
     }
 
-    fn type_metadata_on_function(func: &FnCtx, param: u32) {
+    fn type_metadata_on_function(func: &FnCtx, param: &mut impl Iterator<Item = u32>) {
+        let param = param.next().expect("Should be in-bounds");
         func.set_param_alignment(param, T::align());
         func.set_param_metadata(
             param,
@@ -229,38 +157,65 @@ where
     }
 }
 
-impl<T: Ty, const ADDRSPACE: u16> Ty for A<&'_ mut T, ADDRSPACE>
-where
-    T: Sized,
-{
-    type LLType = PointerType<'static>;
-    type LLVal = PointerValue<'static>;
+impl<Ptr: Ty<LLType = PointerType>, const ADDRSPACE: u16> Ty for A<Ptr, ADDRSPACE> {
+    type LLType = Ptr::LLType;
+    type LLVal = Ptr::LLVal;
 
-    fn raw_ty(ctx: inkwell::context::ContextRef<'static>) -> Self::LLType {
+    fn raw_ty(ctx: ContextRef) -> Self::LLType {
+        assert_eq!(
+            Ptr::raw_ty(ctx).as_basic_type_enum(),
+            ctx.ptr_type(AddressSpace::default()).as_basic_type_enum()
+        );
         ctx.ptr_type(AddressSpace::from(ADDRSPACE))
     }
 
-    fn ty(cg: &crate::backend::FnCtx) -> crate::backend::ErasedType {
-        crate::backend::ErasedType(Self::raw_ty(cg.ctx()).as_basic_type_enum())
+    fn type_val(val: UntypedValue) -> Self::LLVal {
+        Ptr::type_val(val)
     }
 
-    fn type_val(val: crate::backend::UntypedValue) -> Self::LLVal {
-        val.0.into_pointer_value()
-    }
-
-    fn type_metadata_on_function(func: &FnCtx, param: u32) {
-        <&mut T>::type_metadata_on_function(func, param);
-    }
-
-    fn const_val(self, _: crate::backend::FnRef) -> Val<Self>
+    fn const_val(self, fn_ref: crate::backend::FnRef) -> Val<Self>
     where
         Self: Sized,
     {
         panic!("Pointers should not be used for const values!")
     }
+    fn align() -> usize
+    where
+        Self: Sized,
+    {
+        Ptr::align()
+    }
+    fn size() -> usize
+    where
+        Self: Sized,
+    {
+        Ptr::size()
+    }
+    fn ty(cg: &FnCtx) -> crate::backend::ErasedType {
+        crate::backend::ErasedType(Self::raw_ty(cg.ctx()).into())
+    }
+    fn type_metadata(fn_ctx: &FnCtx, value: &mut UntypedValue) {
+        Ptr::type_metadata(fn_ctx, value);
+    }
+    fn type_metadata_on_function(fn_ctx: &FnCtx, idx: &mut impl Iterator<Item = u32>) {
+        Ptr::type_metadata_on_function(fn_ctx, idx);
+    }
+    fn undef_val(fn_ref: crate::backend::FnRef) -> Val<Self>
+    where
+        Self: Sized,
+    {
+        let raw = Self::raw_ty(fn_ref.ctx()).get_undef();
+        unsafe { Val::new(fn_ref, crate::backend::UntypedValue(raw.into())) }
+    }
 }
 
 impl<T: Ty> Val<*const T> {
+    pub fn ptr_cast<U: Ty>(self) -> Val<*const U> {
+        let (fn_ref, value) = self.decompose();
+        // Safety: *const T -> *const U is safe
+        unsafe { Val::new(fn_ref, value) }
+    }
+
     pub fn as_mut(self) -> Val<*mut T> {
         let (fn_ref, value) = self.decompose();
         // Safety: *const T -> *mut T is safe
@@ -307,6 +262,11 @@ impl<T: Ty> Val<*const T> {
 }
 
 impl<T: Ty> Val<*mut T> {
+    pub fn ptr_cast<U: Ty>(self) -> Val<*mut U> {
+        let (fn_ref, value) = self.decompose();
+        // Safety: *mut T -> *mut U is safe
+        unsafe { Val::new(fn_ref, value) }
+    }
     pub fn as_const(self) -> Val<*const T> {
         let (fn_ref, value) = self.decompose();
         // Safety: &T -> *const T is safe
@@ -359,18 +319,28 @@ impl<T: Ty> Val<*mut T> {
     }
 }
 
-impl<T: Ty> Val<&'_ T> {
+impl<'a, T: Ty> Val<&'a T> {
     pub fn as_ptr(self) -> Val<*const T> {
         let (fn_ref, value) = self.decompose();
         // Safety: &T -> *const T is safe
         unsafe { Val::new(fn_ref, value) }
     }
 
-    pub fn load(self) -> Val<T>
+    pub fn reborrow<'b>(&'b self) -> Val<&'b T>
+    where
+        'a: 'b,
+    {
+        let fn_ref = self.fn_ref().clone();
+        let value = self.raw();
+        // Safety: Shortening poitner life is OK
+        unsafe { Val::new(fn_ref, value) }
+    }
+
+    pub fn load(&self) -> Val<T>
     where
         T: Copy,
     {
-        let val = unsafe { self.as_ptr().read() };
+        let val = unsafe { self.reborrow().as_ptr().read() };
         if let Some(ins) = val.raw().0.as_instruction_value() {
             ins.set_alignment(T::align().try_into().expect("usize -> u32 overflow"))
                 .expect("Align setting should have worked");
@@ -380,6 +350,16 @@ impl<T: Ty> Val<&'_ T> {
 }
 
 impl<'a, T: Ty> Val<&'a mut T> {
+    pub fn reborrow<'b>(&'b mut self) -> Val<&'b mut T>
+    where
+        'a: 'b,
+    {
+        let fn_ref = self.fn_ref().clone();
+        let value = self.raw();
+        // Safety: Shortening poitner life is OK
+        unsafe { Val::new(fn_ref, value) }
+    }
+
     pub fn as_ptr(self) -> Val<*const T> {
         let (fn_ref, value) = self.decompose();
         // Safety: &mut T -> *const T is safe
@@ -402,11 +382,11 @@ impl<'a, T: Ty> Val<&'a mut T> {
         unsafe { Val::new(fn_ref, value) }
     }
 
-    pub fn load(self) -> Val<T>
+    pub fn load(&self) -> Val<T>
     where
         T: Copy,
     {
-        let val = unsafe { self.as_ptr().read() };
+        let val = unsafe { self.as_ref().as_ptr().read() };
         if let Some(ins) = val.raw().0.as_instruction_value() {
             ins.set_alignment(T::align().try_into().expect("usize -> u32 overflow"))
                 .expect("Align setting should have worked");
@@ -414,17 +394,22 @@ impl<'a, T: Ty> Val<&'a mut T> {
         val
     }
 
-    pub fn store(self, val: Val<T>)
+    pub fn store(&mut self, val: Val<T>)
     where
         T: Copy,
     {
-        let ins = unsafe { self.as_mut_ptr().write(val) };
+        let ins = unsafe { self.reborrow().as_mut_ptr().write(val) };
         ins.set_alignment(T::align().try_into().expect("usize -> u32 overflow"))
             .expect("Align setting should have worked");
     }
 }
 
 impl<T: Ty, const ADDRSPACE: u16> Val<A<*const T, ADDRSPACE>> {
+    pub fn ptr_cast<U: Ty>(self) -> Val<A<*const U, ADDRSPACE>> {
+        let (fn_ref, value) = self.decompose();
+        // Safety: *const T -> *const U is safe
+        unsafe { Val::new(fn_ref, value) }
+    }
     pub fn as_mut(self) -> Val<A<*mut T, ADDRSPACE>> {
         let (fn_ref, value) = self.decompose();
         // Safety: User promised!
@@ -467,6 +452,11 @@ impl<T: Ty, const ADDRSPACE: u16> Val<A<*const T, ADDRSPACE>> {
 }
 
 impl<T: Ty, const ADDRSPACE: u16> Val<A<*mut T, ADDRSPACE>> {
+    pub fn ptr_cast<U: Ty>(self) -> Val<A<*mut U, ADDRSPACE>> {
+        let (fn_ref, value) = self.decompose();
+        // Safety: *mut T -> *mut U is safe
+        unsafe { Val::new(fn_ref, value) }
+    }
     pub fn as_const(self) -> Val<A<*const T, ADDRSPACE>> {
         let (fn_ref, value) = self.decompose();
         // Safety: *mut T -> *const T is safe
